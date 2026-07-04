@@ -521,7 +521,7 @@
     // ===== Atualiza dados externos periodicamente =====
    async function updateExternalData() {
     try {
-        // CoinMetrics (usa CoinGecko)
+        // CoinMetrics (via CoinGecko)
         const coinMetrics = await dadosExternos.fetchCoinMetrics();
         if (coinMetrics) {
             assetsData['BTCUSDT'].mvrv = coinMetrics.price / coinMetrics.realized;
@@ -552,7 +552,7 @@
             if (el) el.textContent = hr.toFixed(2) + ' EH/s (live)';
         }
 
-        // ETF (usando cache/estático)
+        // ETF Flows (estático)
         const etf = await dadosExternos.fetchETFData();
         if (etf) {
             const btcEl = document.getElementById('etf-btc-live');
@@ -569,15 +569,6 @@
                 el.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
                 el.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
             }
-        }
-
-        // Fed Rate
-        const fed = await dadosExternos.fetchFedRate();
-        if (fed !== null) {
-            const el = document.getElementById('fed-rate');
-            if (el) el.textContent = fed.toFixed(2) + '% (live)';
-            const interpEl = document.getElementById('fed-interp');
-            if (interpEl) interpEl.textContent = fed > 4.5 ? '⚠️ Juros restritivos' : 'ℹ️ Juros moderados';
         }
 
         // Put/Call
@@ -598,18 +589,6 @@
             if (el) el.textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%';
         }
 
-        // Long/Short
-        const ls = await dadosExternos.fetchLSRatio();
-        if (ls) {
-            const el = document.getElementById('ls-ratio-pos');
-            if (el) el.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
-            const interpEl = document.getElementById('ls-ratio-pos-interp');
-            if (interpEl) {
-                interpEl.textContent = ls.long > ls.short ? '🟢 Maioria long' : '🔴 Maioria short';
-                interpEl.style.color = ls.long > ls.short ? 'var(--accent-green)' : 'var(--accent-red)';
-            }
-        }
-
         // DeFi
         const defi = await dadosExternos.fetchDeFiData();
         if (defi) {
@@ -621,36 +600,31 @@
             if (changeEl) changeEl.textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
         }
 
-        // Yahoo Macro
-        const macroSymbols = ['DX-Y.NYB', '^TNX', '^VIX', '^IXIC', '^GSPC'];
-        const macroIds = ['dxy-value', 'us10y-value', 'vix-value', 'nasdaq-value', 'sp500-value'];
-        const macroUpdateIds = ['dxy-update', 'us10y-update', 'vix-update', 'nasdaq-update', 'sp500-update'];
-        const macroInterps = ['dxy-interp', 'us10y-interp', 'vix-interp'];
-        for (let i = 0; i < macroSymbols.length; i++) {
-            const yahoo = await dadosExternos.fetchYahoo(macroSymbols[i]);
-            if (yahoo) {
-                const el = document.getElementById(macroIds[i]);
-                const updateEl = document.getElementById(macroUpdateIds[i]);
-                if (el) {
-                    if (i === 1) {
-                        el.textContent = (yahoo.price * 100).toFixed(2) + '%';
-                    } else if (i === 3 || i === 4) {
-                        el.textContent = (yahoo.change >= 0 ? '+' : '') + yahoo.change.toFixed(2) + '%';
-                        el.style.color = yahoo.change >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
-                    } else {
-                        el.textContent = yahoo.price.toFixed(2);
-                    }
-                }
-                if (updateEl) updateEl.textContent = 'atualizado ' + getCurrentTimestamp();
-                if (i < 3) {
-                    const interpEl = document.getElementById(macroInterps[i]);
-                    if (interpEl) {
-                        if (i === 0) interpEl.textContent = yahoo.price > 105 ? '🔴 USD Forte' : yahoo.price < 100 ? '🟢 USD Fraco' : 'ℹ️ USD Neutro';
-                        if (i === 1) interpEl.textContent = yahoo.price * 100 > 4.5 ? '⚠️ Yields elevados' : yahoo.price * 100 < 3.0 ? '✅ Yields baixos' : 'ℹ️ Yields moderados';
-                        if (i === 2) interpEl.textContent = yahoo.price > 25 ? '🔴 Estresse' : yahoo.price < 15 ? '🟢 Calmo' : 'ℹ️ Neutro';
-                    }
-                }
+        // Macro (dados estáticos)
+        const macro = await dadosExternos.fetchMacroStatic();
+        if (macro) {
+            const dxyEl = document.getElementById('dxy-value');
+            if (dxyEl) dxyEl.textContent = macro.dxy.toFixed(2);
+            const us10yEl = document.getElementById('us10y-value');
+            if (us10yEl) us10yEl.textContent = macro.us10y.toFixed(2) + '%';
+            const vixEl = document.getElementById('vix-value');
+            if (vixEl) vixEl.textContent = macro.vix.toFixed(2);
+            const nasdaqEl = document.getElementById('nasdaq-value');
+            if (nasdaqEl) {
+                nasdaqEl.textContent = (macro.nasdaqChange >= 0 ? '+' : '') + macro.nasdaqChange.toFixed(2) + '%';
+                nasdaqEl.style.color = macro.nasdaqChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
             }
+            const spEl = document.getElementById('sp500-value');
+            if (spEl) {
+                spEl.textContent = (macro.spChange >= 0 ? '+' : '') + macro.spChange.toFixed(2) + '%';
+                spEl.style.color = macro.spChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+            }
+            // Atualiza timestamps
+            const now = getCurrentTimestamp();
+            ['dxy-update', 'us10y-update', 'vix-update', 'nasdaq-update', 'sp500-update'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = 'atualizado ' + now;
+            });
         }
 
         // Fear & Greed
