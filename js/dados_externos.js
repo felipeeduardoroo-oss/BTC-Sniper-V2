@@ -4,23 +4,28 @@ import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
 // ===== Helpers =====
 export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RETRIES) {
+    // Tenta diretamente, depois usa proxy se falhar
     for (let i = 0; i < retries; i++) {
         try {
             const resp = await fetch(url, options);
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             return await resp.json();
         } catch(e) {
-            if (i === retries - 1) throw e;
+            if (i === retries - 1) {
+                // Última tentativa: tentar via proxy
+                try {
+                    const proxyUrl = CONFIG.PROXY_URL + encodeURIComponent(url);
+                    const respProxy = await fetch(proxyUrl);
+                    if (!respProxy.ok) throw new Error('Proxy HTTP ' + respProxy.status);
+                    return await respProxy.json();
+                } catch(proxyErr) {
+                    throw e; // lança o erro original se proxy falhar
+                }
+            }
             await new Promise(r => setTimeout(r, CONFIG.RETRY_DELAY_MS * (i + 1)));
         }
     }
-}
-
-export async function proxyFetch(url) {
-    const proxy = 'https://api.allorigins.win/raw?url=';
-    const resp = await fetch(proxy + encodeURIComponent(url));
-    if (!resp.ok) throw new Error('Proxy fetch failed');
-    return resp.json();
+    throw new Error('Fetch failed after retries');
 }
 
 export function getCachedData(key) {
@@ -95,7 +100,7 @@ export async function fetchLSRatio(symbol = 'BTCUSDT') {
     return null;
 }
 
-// ===== CoinMetrics =====
+// ===== CoinMetrics (via proxy) =====
 export async function fetchCoinMetrics() {
     try {
         const url = 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?metrics=PriceUSD,RealizedPriceUSD,Netflow,MinerOutflow&assets=BTC&limit=1';
@@ -156,7 +161,8 @@ export async function fetchHashrate() {
 // ===== Farside (ETF) via proxy =====
 export async function fetchETFData() {
     try {
-        const data = await proxyFetch('https://farside.co.uk/api/etf/flow/');
+        const url = 'https://farside.co.uk/api/etf/flow/';
+        const data = await fetchWithRetry(url); // já usa proxy internamente
         if (data.btc && data.btc.flow !== undefined) {
             return {
                 btcFlow: data.btc.flow / 1e6,
@@ -220,7 +226,7 @@ export async function fetchDeFiData() {
     return null;
 }
 
-// ===== Tether Premium (ExchangeRate + Mercado Bitcoin) =====
+// ===== Tether Premium =====
 export async function fetchTetherPremium() {
     try {
         const [usdbrlData, tickerData] = await Promise.all([
