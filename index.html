@@ -1,68 +1,136 @@
-<script type="module">
-    // Importa todos os módulos
-    import { CONFIG } from './js/config.js';
-    import * as indicadores from './js/indicadores.js';
-    import * as dadosExternos from './js/dados_externos.js';
-    import * as graficos from './js/graficos.js';
-    import * as telegram from './js/telegram.js';
-    import * as banco from './js/banco_de_dados.js';
-    import * as historico from './js/historicos_sinais.js';
-
-    // ===== Estado global =====
-    const assetsData = {};
-    CONFIG.ASSETS.forEach(symbol => {
-        assetsData[symbol] = {
-            price: 0, candles1H: [], candles4H: [], candles1D: [],
-            ema50_1H: 0, ema200_4H: 0, rsi_1H: 50, atr_1H: 0,
-            atrHistory: [],
-            swingHighs: [], swingLows: [], currentBOS: 'NEUTRAL', mtfTrend: 'NEUTRAL',
-            oiDelta: 0, volumeRel: 1.0, rsiState: { avgGain: 0, avgLoss: 0, rsi: 50 },
-            bbWidth: 0.1,
-            volumeAvg: 0,
-            currentVolume: 0,
-            fundingRate: 0,
-            trend4H: 'NEUTRAL',
-            trend1D: 'NEUTRAL',
-            mvrv: 1.2,
-            sopr: 0.95,
-            realizedPrice: 53600,
-            htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity },
-            mtfConfluence: null
-        };
-    });
-
-    let activePositions = {};
-    let alertCooldowns = {};
-    let liqMap = { 'BTCUSDT': { longs: 0, shorts: 0 }, 'ETHUSDT': { longs: 0, shorts: 0 }, 'SOLUSDT': { longs: 0, shorts: 0 } };
-    let liquidationLevels = { 'BTCUSDT': [], 'ETHUSDT': [], 'SOLUSDT': [] };
-    let scoreHistory = [];
-    let previousScores = { 'BTCUSDT': 50, 'ETHUSDT': 50, 'SOLUSDT': 50 };
-    let signalCooldown = {
-        lastSignalTime: {},
-        lastSignalPrice: {},
-        canSignal(symbol, currentPrice) {
-            const now = Date.now();
-            const lastTime = this.lastSignalTime[symbol] || 0;
-            const lastPrice = this.lastSignalPrice[symbol] || 0;
-            if (now - lastTime < CONFIG.SIGNAL_COOLDOWN_MS) {
-                const priceChange = Math.abs(currentPrice - lastPrice) / lastPrice;
-                if (priceChange < CONFIG.PRICE_THRESHOLD) return false;
-            }
-            return true;
-        },
-        recordSignal(symbol, price) {
-            this.lastSignalTime[symbol] = Date.now();
-            this.lastSignalPrice[symbol] = price;
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTC Sniper V2</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            background: #0f0f0f; 
+            color: #e6e8eb; 
+            margin: 0;
+            padding: 10px;
         }
-    };
+        .trade-item { 
+            padding: 10px; 
+            margin: 8px 0; 
+            background: #1e1e1e; 
+            border-radius: 8px; 
+        }
+    </style>
+</head>
+<body>
 
-    // ===== DOM references =====
-    const DOM = {};
-    function cacheDOM() {
-        const ids = ['btc-price', 'eth-price', 'sol-price', 'btc-change', 'eth-change', 'sol-change', 
-                     'score-value', 'score-bar', 'last-update', 'header-timestamp', 'status-badge', 'ws-status'];
-        ids.forEach(id => DOM[id] = document.getElementById(id));
-    }
+    <header>
+        <div id="header-timestamp">📅 Carregando...</div>
+    </header>
+
+    <main>
+        <div id="btc-price">$0</div>
+        <div id="eth-price">$0</div>
+        <div id="sol-price">$0</div>
+        
+        <div id="score-value">50</div>
+        <div id="score-bar" style="height:10px; background: var(--accent-yellow);"></div>
+        
+        <div id="last-update"></div>
+        <div id="live-update-time"></div>
+        <div id="status-badge">⏳ Iniciando...</div>
+        <div id="ws-status"></div>
+
+        <div id="score-trend"></div>
+        <div id="score-structure"></div>
+        <div id="score-momentum"></div>
+        <div id="score-volume"></div>
+        <div id="score-onchain"></div>
+        <div id="score-oi"></div>
+        <div id="block-reason"></div>
+
+        <div id="risk-score"></div>
+        <div id="risk-fill"></div>
+        <div id="confidence-score"></div>
+        <div id="confidence-fill"></div>
+        <div id="entry-score"></div>
+        <div id="entry-fill"></div>
+        <div id="exit-score"></div>
+        <div id="exit-fill"></div>
+        <div id="conviction-badge"></div>
+        <div id="onchain-cycle"></div>
+
+        <!-- Trades -->
+        <div id="trade-btcusdt" class="trade-item"></div>
+        <div id="trade-ethusdt" class="trade-item"></div>
+        <div id="trade-solusdt" class="trade-item"></div>
+    </main>
+
+    <button id="test-telegram-btn">Testar Telegram</button>
+    <span id="test-btn-label"></span>
+
+    <script type="module">
+        import { CONFIG } from './js/config.js';
+        import * as indicadores from './js/indicadores.js';
+        import * as dadosExternos from './js/dados_externos.js';
+        import * as graficos from './js/graficos.js';
+        import * as telegram from './js/telegram.js';
+        import * as banco from './js/banco_de_dados.js';
+        import * as historico from './js/historicos_sinais.js';
+
+        // ===== Estado global =====
+        const assetsData = {};
+        CONFIG.ASSETS.forEach(symbol => {
+            assetsData[symbol] = {
+                price: 0, candles1H: [], candles4H: [], candles1D: [],
+                ema50_1H: 0, ema200_4H: 0, rsi_1H: 50, atr_1H: 0,
+                atrHistory: [],
+                swingHighs: [], swingLows: [], currentBOS: 'NEUTRAL', mtfTrend: 'NEUTRAL',
+                oiDelta: 0, volumeRel: 1.0, rsiState: { avgGain: 0, avgLoss: 0, rsi: 50 },
+                bbWidth: 0.1,
+                volumeAvg: 0,
+                currentVolume: 0,
+                fundingRate: 0,
+                trend4H: 'NEUTRAL',
+                trend1D: 'NEUTRAL',
+                mvrv: 1.2,
+                sopr: 0.95,
+                realizedPrice: 53600,
+                htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity },
+                mtfConfluence: null
+            };
+        });
+
+        let activePositions = {};
+        let alertCooldowns = {};
+        let liqMap = { 'BTCUSDT': { longs: 0, shorts: 0 }, 'ETHUSDT': { longs: 0, shorts: 0 }, 'SOLUSDT': { longs: 0, shorts: 0 } };
+        let liquidationLevels = { 'BTCUSDT': [], 'ETHUSDT': [], 'SOLUSDT': [] };
+        let scoreHistory = [];
+        let previousScores = { 'BTCUSDT': 50, 'ETHUSDT': 50, 'SOLUSDT': 50 };
+        let signalCooldown = {
+            lastSignalTime: {},
+            lastSignalPrice: {},
+            canSignal(symbol, currentPrice) {
+                const now = Date.now();
+                const lastTime = this.lastSignalTime[symbol] || 0;
+                const lastPrice = this.lastSignalPrice[symbol] || 0;
+                if (now - lastTime < CONFIG.SIGNAL_COOLDOWN_MS) {
+                    const priceChange = Math.abs(currentPrice - lastPrice) / lastPrice;
+                    if (priceChange < CONFIG.PRICE_THRESHOLD) return false;
+                }
+                return true;
+            },
+            recordSignal(symbol, price) {
+                this.lastSignalTime[symbol] = Date.now();
+                this.lastSignalPrice[symbol] = price;
+            }
+        };
+
+        // ===== DOM references =====
+        const DOM = {};
+        function cacheDOM() {
+            const ids = ['btc-price', 'eth-price', 'sol-price', 'btc-change', 'eth-change', 'sol-change',
+                         'score-value', 'score-bar', 'last-update', 'header-timestamp', 'status-badge', 'ws-status'];
+            ids.forEach(id => DOM[id] = document.getElementById(id));
+        }
 
     // ===== Funções auxiliares =====
     function getCurrentTimestamp() {
@@ -686,58 +754,8 @@ async function updateExternalData() {
     }
 
     // ===== Início =====
-    init();
 
-    // Resize dos candles
-    window.addEventListener('resize', () => {
-        // Será implementado se necessário
-    });
-
-
-  <header>
-    <div id="header-timestamp"></div>
-  </header>
-
-  <main>
-    <div id="btc-price"></div>
-    <div id="eth-price"></div>
-    <div id="sol-price"></div>
-    <div id="score-value">50</div>
-    <div id="score-bar"></div>
-    <div id="last-update"></div>
-    <div id="live-update-time"></div>
-    <div id="status-badge"></div>
-    <div id="ws-status"></div>
-
-    <!-- Outros elementos que o script usa -->
-    <div id="score-trend"></div>
-    <div id="score-structure"></div>
-    <div id="score-momentum"></div>
-    <div id="score-volume"></div>
-    <div id="score-onchain"></div>
-    <div id="score-oi"></div>
-    <div id="block-reason"></div>
-
-    <div id="risk-score"></div>
-    <div id="risk-fill"></div>
-    <div id="confidence-score"></div>
-    <div id="confidence-fill"></div>
-    <div id="entry-score"></div>
-    <div id="entry-fill"></div>
-    <div id="exit-score"></div>
-    <div id="exit-fill"></div>
-    <div id="conviction-badge"></div>
-    <div id="onchain-cycle"></div>
-
-    <!-- Seções de trades -->
-    <div id="trade-btcusdt" class="trade-item"></div>
-    <div id="trade-ethusdt" class="trade-item"></div>
-    <div id="trade-solusdt" class="trade-item"></div>
-  </main>
-
-  <script type="module">
-    // ... seu script atual
-  </script>
+        init();
+    </script>
 </body>
-    
-
+</html>
