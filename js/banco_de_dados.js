@@ -41,7 +41,10 @@ export function setAlertLog(log) {
 }
 
 export function getTradeStats() {
-    return getData('tradeStats') || { wins: 0, losses: 0, totalPNL: 0 };
+    // maxAge=Infinity: estatísticas de trade são persistentes e não devem expirar
+    // como o cache de dados de API (CONFIG.CACHE_TTL_MS). Antes, herdava o TTL de
+    // 10 minutos e zerava wins/losses silenciosamente se não houvesse trade recente.
+    return getData('tradeStats', Infinity) || { wins: 0, losses: 0, totalPNL: 0 };
 }
 
 export function setTradeStats(stats) {
