@@ -1070,15 +1070,35 @@
                 }
 
                 // Long/Short
-           // Long/Short
+// Long/Short
 const ls = await dadosExternos.fetchLSRatio();
-if (ls) {
-    const el = document.getElementById('ls-ratio-pos');
-    if (el) el.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
-    const interpEl = document.getElementById('ls-ratio-pos-interp');
-    if (interpEl) {
-        interpEl.textContent = ls.long > ls.short ? '🟢 Maioria long' : '🔴 Maioria short';
-        interpEl.style.color = ls.long > ls.short ? 'var(--accent-green)' : 'var(--accent-red)';
+const el = document.getElementById('ls-ratio-pos');
+if (el) {
+    if (ls) {
+        el.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
+        const interpEl = document.getElementById('ls-ratio-pos-interp');
+        if (interpEl) {
+            interpEl.textContent = ls.long > ls.short ? '🟢 Maioria long' : '🔴 Maioria short';
+            interpEl.style.color = ls.long > ls.short ? 'var(--accent-green)' : 'var(--accent-red)';
+        }
+    } else {
+        // Fallback: estimar com base no funding rate
+        const fr = assetsData['BTCUSDT']?.fundingRate || 0;
+        if (fr > 0.0001) {
+            el.textContent = '~55% / 45% (estimado)';
+            const interpEl = document.getElementById('ls-ratio-pos-interp');
+            if (interpEl) {
+                interpEl.textContent = 'ℹ️ Baseado no funding rate';
+                interpEl.style.color = 'var(--text-muted)';
+            }
+        } else {
+            el.textContent = 'N/A';
+            const interpEl = document.getElementById('ls-ratio-pos-interp');
+            if (interpEl) {
+                interpEl.textContent = '⏳ Aguardando dados...';
+                interpEl.style.color = 'var(--text-muted)';
+            }
+        }
     }
 }
 
