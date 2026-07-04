@@ -184,19 +184,21 @@ export async function fetchDeFiData() {
 // ===== Tether Premium (usando ExchangeRate-API + fallback estático) =====
 export async function fetchTetherPremium() {
     try {
-        // ExchangeRate-API (permite CORS)
+        // Usa ExchangeRate-API com CORS liberado
         const usdbrlData = await fetchWithRetry('https://api.exchangerate.host/latest?base=USD&symbols=BRL');
+        if (!usdbrlData || !usdbrlData.rates || !usdbrlData.rates.BRL) {
+            throw new Error('Resposta inválida');
+        }
         const usdbrl = usdbrlData.rates.BRL;
-        // Para obter USDT/BRL, usamos uma estimativa com base na cotação do dólar + pequeno prêmio
-        // Como a API do Mercado Bitcoin está com 404, usamos uma aproximação
-        const usdtbrl = usdbrl * 1.002; // prêmio médio de 0.2%
+        // Estima USDT/BRL com um pequeno prêmio (0.2%)
+        const usdtbrl = usdbrl * 1.002;
         const premium = ((usdtbrl / usdbrl) - 1) * 100;
         return premium;
     } catch(e) {
-        console.warn('[TetherPremium] ExchangeRate falhou, usando cache/estático', e);
+        console.warn('[TetherPremium] Falha, usando cache', e);
         const cached = getCachedData('tether_premium_fallback');
         if (cached !== null) return cached;
-        return 0.0; // neutro
+        return 0.0;
     }
 }
 
