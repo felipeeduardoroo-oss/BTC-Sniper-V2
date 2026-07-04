@@ -1070,16 +1070,17 @@
                 }
 
                 // Long/Short
-                const ls = await dadosExternos.fetchLSRatio();
-                if (ls) {
-                    const el = document.getElementById('ls-ratio-pos');
-                    if (el) el.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
-                    const interpEl = document.getElementById('ls-ratio-pos-interp');
-                    if (interpEl) {
-                        interpEl.textContent = ls.long > ls.short ? '🟢 Maioria long' : '🔴 Maioria short';
-                        interpEl.style.color = ls.long > ls.short ? 'var(--accent-green)' : 'var(--accent-red)';
-                    }
-                }
+           // Long/Short
+const ls = await dadosExternos.fetchLSRatio();
+if (ls) {
+    const el = document.getElementById('ls-ratio-pos');
+    if (el) el.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
+    const interpEl = document.getElementById('ls-ratio-pos-interp');
+    if (interpEl) {
+        interpEl.textContent = ls.long > ls.short ? '🟢 Maioria long' : '🔴 Maioria short';
+        interpEl.style.color = ls.long > ls.short ? 'var(--accent-green)' : 'var(--accent-red)';
+    }
+}
 
                 // DeFi
                 const defi = await dadosExternos.fetchDeFiData();
