@@ -1,7 +1,6 @@
 // graficos.js
 import { COLORS } from './config.js';
 
-// Chart.js instances
 let scoreChart = null;
 let etfChart = null;
 let macroChart = null;
@@ -10,9 +9,7 @@ let allocationChart = null;
 let whaleChart = null;
 let candleCharts = {};
 
-// ===== Inicializar gráficos =====
 export function initCharts() {
-    // Score History
     const ctxScore = document.getElementById('chart_score_history')?.getContext('2d');
     if (ctxScore) {
         scoreChart = new Chart(ctxScore, {
@@ -29,7 +26,6 @@ export function initCharts() {
         });
     }
 
-    // ETF Flows
     const ctx1 = document.getElementById('chart_etf_flows')?.getContext('2d');
     if (ctx1) {
         etfChart = new Chart(ctx1, {
@@ -53,7 +49,6 @@ export function initCharts() {
         });
     }
 
-    // Macro Rates
     const ctx2 = document.getElementById('chart_macro_rates')?.getContext('2d');
     if (ctx2) {
         macroChart = new Chart(ctx2, {
@@ -78,7 +73,6 @@ export function initCharts() {
         });
     }
 
-    // Scenarios
     const ctx3 = document.getElementById('chart_scenarios')?.getContext('2d');
     if (ctx3) {
         scenariosChart = new Chart(ctx3, {
@@ -88,7 +82,6 @@ export function initCharts() {
         });
     }
 
-    // Allocation
     const ctx4 = document.getElementById('chart_allocation')?.getContext('2d');
     if (ctx4) {
         allocationChart = new Chart(ctx4, {
@@ -98,7 +91,6 @@ export function initCharts() {
         });
     }
 
-    // Whale Flow
     const ctxW = document.getElementById('chart_whale_flow')?.getContext('2d');
     if (ctxW) {
         whaleChart = new Chart(ctxW, {
@@ -125,7 +117,6 @@ export function initCharts() {
     return { scoreChart, etfChart, macroChart, scenariosChart, allocationChart, whaleChart };
 }
 
-// ===== Atualizar Score Chart =====
 export function updateScoreChart(history) {
     if (!scoreChart) return;
     const btcHist = history.filter(s => s.symbol === 'BTCUSDT').slice(-50);
@@ -134,7 +125,6 @@ export function updateScoreChart(history) {
     scoreChart.update('none');
 }
 
-// ===== Atualizar Cenários =====
 export function updateScenarios(score) {
     if (!scenariosChart) return;
     let bounce = 20, markdown = 20, reversal = 20;
@@ -145,7 +135,6 @@ export function updateScenarios(score) {
     scenariosChart.update();
 }
 
-// ===== Atualizar Alocação =====
 export function updateAllocation(atrPct) {
     if (!allocationChart) return;
     let btcAlloc = 25, ethAlloc = 10, stableAlloc = 65;
@@ -155,7 +144,6 @@ export function updateAllocation(atrPct) {
     allocationChart.update();
 }
 
-// ===== Lightweight Charts (candles) =====
 export function initCandleChart(containerId, color = '#00e896') {
     const container = document.getElementById(containerId);
     if (!container) return null;
@@ -197,8 +185,4 @@ export function resizeCandle(chartObj, containerId) {
         chartObj.chart.resize(container.clientWidth, 220);
         chartObj.chart.timeScale().fitContent();
     }
-}
-
-export function getChart(id) {
-    return Chart.getChart(id);
 }
