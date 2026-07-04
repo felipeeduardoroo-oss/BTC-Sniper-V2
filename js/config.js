@@ -8,6 +8,7 @@ export const CONFIG = {
     CACHE_TTL_MS: 600000, // 10 minutos
     MAX_RETRIES: 3,
     RETRY_DELAY_MS: 1000,
+    PROXY_URL: 'https://api.allorigins.win/raw?url=',
 };
 
 export const COLORS = {
