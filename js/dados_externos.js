@@ -29,7 +29,7 @@ export function setCachedData(key, data) {
     localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
 }
 
-// ===== Binance (CORS liberado para estes endpoints) =====
+// ===== Binance =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 200) {
     try {
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
@@ -78,13 +78,28 @@ export async function fetchBasis(symbol = 'BTCUSDT') {
     return null;
 }
 
-// ===== CoinGecko (CORS OK) =====
+// ===== Long/Short Ratio (Binance) =====
+export async function fetchLSRatio(symbol = 'BTCUSDT') {
+    try {
+        const url = `https://fapi.binance.com/fapi/v1/topLongShortPositionRatio?symbol=${symbol}&period=24h`;
+        const data = await fetchWithRetry(url);
+        if (data && data.length > 0) {
+            const latest = data[data.length-1];
+            return { long: parseFloat(latest.longRatio) * 100, short: parseFloat(latest.shortRatio) * 100 };
+        }
+    } catch(e) {
+        console.warn('[LSRatio]', e);
+        return null;
+    }
+}
+
+// ===== CoinMetrics (via CoinGecko + estimativa) =====
 export async function fetchCoinMetrics() {
     try {
         const gecko = await fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
         if (gecko && gecko.bitcoin) {
             const price = gecko.bitcoin.usd;
-            const realized = price * 0.72; // estimativa
+            const realized = price * 0.72; // estimativa conservadora
             const result = { price, realized, netflow: 0, minerOutflow: 0 };
             setCachedData('coinmetrics_fallback', result);
             return result;
@@ -94,11 +109,11 @@ export async function fetchCoinMetrics() {
         const cached = getCachedData('coinmetrics_fallback');
         if (cached) return cached;
     }
-    // Fallback estático (último valor conhecido)
+    // Fallback estático
     return { price: 60000, realized: 43200, netflow: 0, minerOutflow: 0 };
 }
 
-// ===== Blockchair (CORS OK) =====
+// ===== Blockchair =====
 export async function fetchBlockchairStats() {
     try {
         const [btcResp, ethResp] = await Promise.all([
@@ -113,7 +128,7 @@ export async function fetchBlockchairStats() {
     return null;
 }
 
-// ===== Mempool (CORS OK) =====
+// ===== Mempool =====
 export async function fetchHashrate() {
     try {
         const data = await fetchWithRetry('https://mempool.space/api/v1/mining/hashrate/1w');
@@ -124,7 +139,7 @@ export async function fetchHashrate() {
     return null;
 }
 
-// ===== ETF Flows (sem proxy, usa cache/estático) =====
+// ===== ETF Flows (estático + cache) =====
 export async function fetchETFData() {
     try {
         const cached = getCachedData('etf_fallback');
@@ -139,7 +154,7 @@ export async function fetchETFData() {
     }
 }
 
-// ===== Deribit (CORS OK) =====
+// ===== Deribit =====
 export async function fetchPutCallRatio() {
     try {
         const data = await fetchWithRetry('https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option');
@@ -155,7 +170,7 @@ export async function fetchPutCallRatio() {
     return null;
 }
 
-// ===== DefiLlama (CORS OK) =====
+// ===== DefiLlama =====
 export async function fetchDeFiData() {
     try {
         const [stableData, tvlData] = await Promise.all([
@@ -181,28 +196,38 @@ export async function fetchDeFiData() {
     }
 }
 
-// ===== Tether Premium (usando ExchangeRate-API + fallback estático) =====
+// ===== Tether Premium (CORRIGIDO) =====
 export async function fetchTetherPremium() {
     try {
-        // Usa ExchangeRate-API com CORS liberado
+        // Usa ExchangeRate-API (CORS OK)
         const usdbrlData = await fetchWithRetry('https://api.exchangerate.host/latest?base=USD&symbols=BRL');
-        if (!usdbrlData || !usdbrlData.rates || !usdbrlData.rates.BRL) {
+        // Verifica se a resposta é válida
+        if (!usdbrlData || !usdbrlData.rates || typeof usdbrlData.rates.BRL === 'undefined') {
             throw new Error('Resposta inválida');
         }
         const usdbrl = usdbrlData.rates.BRL;
-        // Estima USDT/BRL com um pequeno prêmio (0.2%)
-        const usdtbrl = usdbrl * 1.002;
+        // Obtém USDT/BRL do Mercado Bitcoin (pode ser bloqueado por CORS, então usamos fallback)
+        let usdtbrl;
+        try {
+            const tickerData = await fetchWithRetry('https://api.mercadobitcoin.net/api/v4/ticker/USDT');
+            usdtbrl = parseFloat(tickerData.last);
+        } catch(e) {
+            // Fallback: usar estimativa baseada no dólar + prêmio médio (0.2%)
+            usdtbrl = usdbrl * 1.002;
+        }
         const premium = ((usdtbrl / usdbrl) - 1) * 100;
+        // Guarda em cache
+        setCachedData('tether_premium_fallback', premium);
         return premium;
     } catch(e) {
         console.warn('[TetherPremium] Falha, usando cache', e);
         const cached = getCachedData('tether_premium_fallback');
         if (cached !== null) return cached;
-        return 0.0;
+        return 0.0; // neutro
     }
 }
 
-// ===== Fear & Greed (CORS OK) =====
+// ===== Fear & Greed =====
 export async function fetchFearGreed() {
     try {
         const data = await fetchWithRetry('https://api.alternative.me/fng/?limit=1');
@@ -210,6 +235,27 @@ export async function fetchFearGreed() {
         return { value: v, classification: data.data[0].value_classification };
     } catch(e) { console.warn('[FearGreed]', e); }
     return null;
+}
+
+// ===== MACRO (dados estáticos) =====
+export async function fetchMacroStatic() {
+    try {
+        const cached = getCachedData('macro_fallback');
+        if (cached) return cached;
+        // Valores de referência (últimos conhecidos)
+        const fallback = {
+            dxy: 101.37,
+            us10y: 4.28,
+            vix: 18.41,
+            nasdaqChange: -1.09,
+            spChange: -0.05
+        };
+        setCachedData('macro_fallback', fallback);
+        return fallback;
+    } catch(e) {
+        console.warn('[MacroStatic]', e);
+        return { dxy: 101.37, us10y: 4.28, vix: 18.41, nasdaqChange: -1.09, spChange: -0.05 };
+    }
 }
 
 // ===== MTF Confluence =====
@@ -243,19 +289,4 @@ export async function getMTFConfluence(symbol) {
         confluencia: Math.max(bulls, bears) === 3 ? 'FORTE' : Math.max(bulls, bears) === 2 ? 'MODERADA' : 'FRACA',
         alinhado: Math.max(bulls, bears) >= 2
     };
-}
-
-// ===== MACRO (dados estáticos, já que Yahoo Finance bloqueia CORS) =====
-export async function fetchMacroStatic() {
-    const cached = getCachedData('macro_fallback');
-    if (cached) return cached;
-    const fallback = {
-        dxy: 101.37,
-        us10y: 4.28,
-        vix: 18.41,
-        nasdaqChange: -1.09,
-        spChange: -0.05
-    };
-    setCachedData('macro_fallback', fallback);
-    return fallback;
 }
