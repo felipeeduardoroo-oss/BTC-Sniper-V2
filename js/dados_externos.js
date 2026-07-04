@@ -247,7 +247,6 @@ export async function getMTFConfluence(symbol) {
 
 // ===== MACRO (dados estáticos, já que Yahoo Finance bloqueia CORS) =====
 export async function fetchMacroStatic() {
-    // Usamos valores fixos (últimos conhecidos) ou podemos tentar via proxy
     const cached = getCachedData('macro_fallback');
     if (cached) return cached;
     const fallback = {
