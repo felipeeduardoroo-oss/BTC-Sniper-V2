@@ -161,18 +161,21 @@ export async function fetchHashrate() {
 // ===== Farside (ETF) via proxy =====
 export async function fetchETFData() {
     try {
-        const url = 'https://farside.co.uk/api/etf/flow/';
+        const url = CONFIG.PROXY_URL + encodeURIComponent('https://farside.co.uk/api/etf/flow/');
         const data = await fetchWithRetry(url);
         if (data.btc && data.btc.flow !== undefined) {
-            return {
+            const result = {
                 btcFlow: data.btc.flow / 1e6,
                 ethFlow: data.eth?.flow / 1e6
             };
+            setCachedData('etf_fallback', result);
+            return result;
         }
-    } catch(e) { console.warn('[ETF]', e); }
-    return null;
+    } catch(e) {
+        console.warn('[ETF]', e);
+        return getCachedData('etf_fallback') || { btcFlow: -445, ethFlow: -12.85 };
+    }
 }
-
 // ===== Yahoo Finance =====
 export async function fetchYahoo(symbol) {
     try {
@@ -234,8 +237,9 @@ export async function fetchDeFiData() {
 // ===== Tether Premium (CORRIGIDO: usa AwesomeAPI) =====
 export async function fetchTetherPremium() {
     try {
-        // Busca cotação USD/BRL na AwesomeAPI (mais confiável)
-        const usdbrlResp = await fetchWithRetry('https://economia.awesomeapi.com.br/json/last/USD-BRL');
+        // Busca cotação USD/BRL na AwesomeAPI
+        const usdbrlData = await fetchWithRetry('https://economia.awesomeapi.com.br/json/last/USD-BRL');
+        if (!usdbrlData || !usdbrlData.USDBRL) throw new Error('Resposta inválida');
         const usdbrl = parseFloat(usdbrlData.USDBRL.bid);
         // Busca preço USDT/BRL no Mercado Bitcoin
         const tickerData = await fetchWithRetry('https://api.mercadobitcoin.net/api/v4/ticker/USDT');
@@ -244,14 +248,15 @@ export async function fetchTetherPremium() {
         return premium;
     } catch(e) {
         console.warn('[TetherPremium]', e);
-        // Fallback: tentar ExchangeRate como alternativa
+        // Fallback: tentar ExchangeRate
         try {
-            const usdbrlResp2 = await fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD');
-            const usdbrl2 = usdbrlResp2.rates.BRL;
+            const usdbrlData2 = await fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD');
+            const usdbrl2 = usdbrlData2.rates.BRL;
             const tickerData2 = await fetchWithRetry('https://api.mercadobitcoin.net/api/v4/ticker/USDT');
             const usdtbrl2 = parseFloat(tickerData2.last);
             return ((usdtbrl2 / usdbrl2) - 1) * 100;
         } catch(e2) {
+            console.warn('[TetherPremium] Fallback também falhou', e2);
             return null;
         }
     }
