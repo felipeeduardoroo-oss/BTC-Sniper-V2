@@ -8,7 +8,13 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
         try {
             const resp = await fetch(url, options);
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            return await resp.json();
+            const text = await resp.text();
+            // Tenta parsear JSON, se falhar lança erro
+            try {
+                return JSON.parse(text);
+            } catch(e) {
+                throw new Error('Resposta não é JSON válido');
+            }
         } catch(e) {
             if (i === retries - 1) throw e;
             await new Promise(r => setTimeout(r, CONFIG.RETRY_DELAY_MS * (i + 1)));
@@ -29,7 +35,7 @@ export function setCachedData(key, data) {
     localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
 }
 
-// ===== Binance =====
+// ===== Binance (CORS liberado para estes endpoints) =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 200) {
     try {
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
@@ -78,19 +84,12 @@ export async function fetchBasis(symbol = 'BTCUSDT') {
     return null;
 }
 
-// ===== Long/Short Ratio (Binance) =====
+// ===== Long/Short Ratio (CORS bloqueado, retorna null) =====
 export async function fetchLSRatio(symbol = 'BTCUSDT') {
-    try {
-        const url = `https://fapi.binance.com/fapi/v1/topLongShortPositionRatio?symbol=${symbol}&period=24h`;
-        const data = await fetchWithRetry(url);
-        if (data && data.length > 0) {
-            const latest = data[data.length-1];
-            return { long: parseFloat(latest.longRatio) * 100, short: parseFloat(latest.shortRatio) * 100 };
-        }
-    } catch(e) {
-        console.warn('[LSRatio]', e);
-        return null;
-    }
+    // A API da Binance bloqueia CORS, então retornamos null
+    // Podemos tentar usar um proxy, mas é melhor desabilitar
+    console.warn('[LSRatio] CORS bloqueado, retornando null');
+    return null;
 }
 
 // ===== CoinMetrics (via CoinGecko + estimativa) =====
@@ -99,7 +98,7 @@ export async function fetchCoinMetrics() {
         const gecko = await fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
         if (gecko && gecko.bitcoin) {
             const price = gecko.bitcoin.usd;
-            const realized = price * 0.72; // estimativa conservadora
+            const realized = price * 0.72;
             const result = { price, realized, netflow: 0, minerOutflow: 0 };
             setCachedData('coinmetrics_fallback', result);
             return result;
@@ -109,7 +108,6 @@ export async function fetchCoinMetrics() {
         const cached = getCachedData('coinmetrics_fallback');
         if (cached) return cached;
     }
-    // Fallback estático
     return { price: 60000, realized: 43200, netflow: 0, minerOutflow: 0 };
 }
 
@@ -144,14 +142,11 @@ export async function fetchETFData() {
     try {
         const cached = getCachedData('etf_fallback');
         if (cached) return cached;
-        // Dados estáticos (últimos valores conhecidos)
         const fallback = { btcFlow: -445, ethFlow: -12.85 };
         setCachedData('etf_fallback', fallback);
         return fallback;
-    } catch(e) {
-        console.warn('[ETF] Usando fallback estático', e);
-        return { btcFlow: -445, ethFlow: -12.85 };
-    }
+    } catch(e) { console.warn('[ETF]', e); }
+    return { btcFlow: -445, ethFlow: -12.85 };
 }
 
 // ===== Deribit =====
@@ -196,34 +191,38 @@ export async function fetchDeFiData() {
     }
 }
 
-// ===== Tether Premium (CORRIGIDO) =====
+// ===== Tether Premium (CORRIGIDO com fallback) =====
 export async function fetchTetherPremium() {
     try {
-        // Usa ExchangeRate-API (CORS OK)
-        const usdbrlData = await fetchWithRetry('https://api.exchangerate.host/latest?base=USD&symbols=BRL');
-        // Verifica se a resposta é válida
-        if (!usdbrlData || !usdbrlData.rates || typeof usdbrlData.rates.BRL === 'undefined') {
-            throw new Error('Resposta inválida');
+        // Tentativa 1: ExchangeRate Host
+        let data = await fetchWithRetry('https://api.exchangerate.host/latest?base=USD&symbols=BRL');
+        if (data && data.rates && typeof data.rates.BRL !== 'undefined') {
+            const usdbrl = data.rates.BRL;
+            const usdtbrl = usdbrl * 1.002; // estimativa média
+            const premium = ((usdtbrl / usdbrl) - 1) * 100;
+            setCachedData('tether_premium_fallback', premium);
+            return premium;
         }
-        const usdbrl = usdbrlData.rates.BRL;
-        // Obtém USDT/BRL do Mercado Bitcoin (pode ser bloqueado por CORS, então usamos fallback)
-        let usdtbrl;
-        try {
-            const tickerData = await fetchWithRetry('https://api.mercadobitcoin.net/api/v4/ticker/USDT');
-            usdtbrl = parseFloat(tickerData.last);
-        } catch(e) {
-            // Fallback: usar estimativa baseada no dólar + prêmio médio (0.2%)
-            usdtbrl = usdbrl * 1.002;
-        }
-        const premium = ((usdtbrl / usdbrl) - 1) * 100;
-        // Guarda em cache
-        setCachedData('tether_premium_fallback', premium);
-        return premium;
+        throw new Error('Resposta inválida do exchangerate.host');
     } catch(e) {
-        console.warn('[TetherPremium] Falha, usando cache', e);
-        const cached = getCachedData('tether_premium_fallback');
-        if (cached !== null) return cached;
-        return 0.0; // neutro
+        console.warn('[TetherPremium] exchangerate.host falhou, tentando fallback...', e);
+        try {
+            // Tentativa 2: ExchangeRate API (mais estável)
+            const data2 = await fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD');
+            if (data2 && data2.rates && typeof data2.rates.BRL !== 'undefined') {
+                const usdbrl = data2.rates.BRL;
+                const usdtbrl = usdbrl * 1.002;
+                const premium = ((usdtbrl / usdbrl) - 1) * 100;
+                setCachedData('tether_premium_fallback', premium);
+                return premium;
+            }
+            throw new Error('Resposta inválida do exchangerate-api');
+        } catch(e2) {
+            console.warn('[TetherPremium] Fallback também falhou, usando cache', e2);
+            const cached = getCachedData('tether_premium_fallback');
+            if (cached !== null) return cached;
+            return 0.0; // neutro
+        }
     }
 }
 
@@ -239,23 +238,11 @@ export async function fetchFearGreed() {
 
 // ===== MACRO (dados estáticos) =====
 export async function fetchMacroStatic() {
-    try {
-        const cached = getCachedData('macro_fallback');
-        if (cached) return cached;
-        // Valores de referência (últimos conhecidos)
-        const fallback = {
-            dxy: 101.37,
-            us10y: 4.28,
-            vix: 18.41,
-            nasdaqChange: -1.09,
-            spChange: -0.05
-        };
-        setCachedData('macro_fallback', fallback);
-        return fallback;
-    } catch(e) {
-        console.warn('[MacroStatic]', e);
-        return { dxy: 101.37, us10y: 4.28, vix: 18.41, nasdaqChange: -1.09, spChange: -0.05 };
-    }
+    const cached = getCachedData('macro_fallback');
+    if (cached) return cached;
+    const fallback = { dxy: 101.37, us10y: 4.28, vix: 18.41, nasdaqChange: -1.09, spChange: -0.05 };
+    setCachedData('macro_fallback', fallback);
+    return fallback;
 }
 
 // ===== MTF Confluence =====
