@@ -554,22 +554,22 @@
 
         // ETF
         const etf = await dadosExternos.fetchETFData();
-        if (etf) {
-            const btcEl = document.getElementById('etf-btc-live');
-            if (btcEl) btcEl.innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + '$' + etf.btcFlow.toFixed(2) + 'M</strong>';
-            const ethEl = document.getElementById('etf-eth-live');
-            if (ethEl) ethEl.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
-        }
+if (etf) {
+    const btcEl = document.getElementById('etf-btc-live');
+    if (btcEl) btcEl.innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + '$' + etf.btcFlow.toFixed(2) + 'M</strong>';
+    const ethEl = document.getElementById('etf-eth-live');
+    if (ethEl) ethEl.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
+}
 
         // Tether Premium (já corrigido no dados_externos)
         const premium = await dadosExternos.fetchTetherPremium();
-        if (premium !== null) {
-            const el = document.getElementById('tether-premium');
-            if (el) {
-                el.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
-                el.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
-            }
-        }
+if (premium !== null) {
+    const el = document.getElementById('tether-premium');
+    if (el) {
+        el.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
+        el.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
+    }
+}
 
         // Fed Rate
         const fed = await dadosExternos.fetchFedRate();
