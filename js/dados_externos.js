@@ -9,7 +9,6 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
             const resp = await fetch(url, options);
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             const text = await resp.text();
-            // Tenta parsear JSON, se falhar lança erro
             try {
                 return JSON.parse(text);
             } catch(e) {
@@ -35,7 +34,7 @@ export function setCachedData(key, data) {
     localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
 }
 
-// ===== Binance (CORS liberado para estes endpoints) =====
+// ===== Binance =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 200) {
     try {
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
@@ -84,15 +83,13 @@ export async function fetchBasis(symbol = 'BTCUSDT') {
     return null;
 }
 
-// ===== Long/Short Ratio (CORS bloqueado, retorna null) =====
+// ===== Long/Short (CORS bloqueado) =====
 export async function fetchLSRatio(symbol = 'BTCUSDT') {
-    // A API da Binance bloqueia CORS, então retornamos null
-    // Podemos tentar usar um proxy, mas é melhor desabilitar
     console.warn('[LSRatio] CORS bloqueado, retornando null');
     return null;
 }
 
-// ===== CoinMetrics (via CoinGecko + estimativa) =====
+// ===== CoinMetrics (via CoinGecko) =====
 export async function fetchCoinMetrics() {
     try {
         const gecko = await fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
@@ -137,7 +134,7 @@ export async function fetchHashrate() {
     return null;
 }
 
-// ===== ETF Flows (estático + cache) =====
+// ===== ETF Flows =====
 export async function fetchETFData() {
     try {
         const cached = getCachedData('etf_fallback');
@@ -191,14 +188,14 @@ export async function fetchDeFiData() {
     }
 }
 
-// ===== Tether Premium (CORRIGIDO com fallback) =====
+// ===== Tether Premium (CORRIGIDO com fallback e cache) =====
 export async function fetchTetherPremium() {
     try {
         // Tentativa 1: ExchangeRate Host
-        let data = await fetchWithRetry('https://api.exchangerate.host/latest?base=USD&symbols=BRL');
+        const data = await fetchWithRetry('https://api.exchangerate.host/latest?base=USD&symbols=BRL');
         if (data && data.rates && typeof data.rates.BRL !== 'undefined') {
             const usdbrl = data.rates.BRL;
-            const usdtbrl = usdbrl * 1.002; // estimativa média
+            const usdtbrl = usdbrl * 1.002; // estimativa
             const premium = ((usdtbrl / usdbrl) - 1) * 100;
             setCachedData('tether_premium_fallback', premium);
             return premium;
@@ -207,7 +204,7 @@ export async function fetchTetherPremium() {
     } catch(e) {
         console.warn('[TetherPremium] exchangerate.host falhou, tentando fallback...', e);
         try {
-            // Tentativa 2: ExchangeRate API (mais estável)
+            // Tentativa 2: ExchangeRate API
             const data2 = await fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD');
             if (data2 && data2.rates && typeof data2.rates.BRL !== 'undefined') {
                 const usdbrl = data2.rates.BRL;
@@ -218,10 +215,10 @@ export async function fetchTetherPremium() {
             }
             throw new Error('Resposta inválida do exchangerate-api');
         } catch(e2) {
-            console.warn('[TetherPremium] Fallback também falhou, usando cache', e2);
+            console.warn('[TetherPremium] Fallback também falhou, usando cache ou 0.0', e2);
             const cached = getCachedData('tether_premium_fallback');
             if (cached !== null) return cached;
-            return 0.0; // neutro
+            return 0.0;
         }
     }
 }
@@ -236,7 +233,7 @@ export async function fetchFearGreed() {
     return null;
 }
 
-// ===== MACRO (dados estáticos) =====
+// ===== MACRO =====
 export async function fetchMacroStatic() {
     const cached = getCachedData('macro_fallback');
     if (cached) return cached;
