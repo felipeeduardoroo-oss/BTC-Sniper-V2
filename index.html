@@ -996,162 +996,149 @@
         }
 
         // ===== Atualiza dados externos periodicamente =====
-        async function updateExternalData() {
-            try {
-                // CoinMetrics (via CoinGecko)
-                const coinMetrics = await dadosExternos.fetchCoinMetrics();
-                if (coinMetrics) {
-                    assetsData['BTCUSDT'].mvrv = coinMetrics.price / coinMetrics.realized;
-                    assetsData['BTCUSDT'].realizedPrice = coinMetrics.realized;
-                    const mvrvEl = document.getElementById('mvrv');
-                    if (mvrvEl) mvrvEl.textContent = (coinMetrics.price / coinMetrics.realized).toFixed(2) + ' (live)';
-                    const realizedEl = document.getElementById('realized-price');
-                    if (realizedEl) realizedEl.textContent = '$' + coinMetrics.realized.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' (live)';
-                    const netflowEl = document.getElementById('exchange-netflow');
-                    if (netflowEl) netflowEl.textContent = (coinMetrics.netflow >= 0 ? '+' : '') + (coinMetrics.netflow / 1e6).toFixed(2) + ' BTC (live)';
-                    const minerEl = document.getElementById('miner-outflow');
-                    if (minerEl) minerEl.textContent = (coinMetrics.minerOutflow / 1e6).toFixed(2) + ' BTC (live)';
-                }
-
-                // Blockchair
-                const blockchair = await dadosExternos.fetchBlockchairStats();
-                if (blockchair) {
-                    const addrEl = document.getElementById('active-addresses');
-                    if (addrEl) addrEl.textContent = blockchair.activeAddresses.toLocaleString() + ' (live)';
-                    const gasEl = document.getElementById('eth-gas');
-                    if (gasEl) gasEl.textContent = blockchair.ethGas.toFixed(2) + ' Gwei (live)';
-                }
-
-                // Hashrate
-                const hr = await dadosExternos.fetchHashrate();
-                if (hr !== null) {
-                    const el = document.getElementById('btc-hashrate');
-                    if (el) el.textContent = hr.toFixed(2) + ' EH/s (live)';
-                }
-
-                // ETF Flows (estático)
-                const etf = await dadosExternos.fetchETFData();
-                if (etf) {
-                    const btcEl = document.getElementById('etf-btc-live');
-                    if (btcEl) btcEl.innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + '$' + etf.btcFlow.toFixed(2) + 'M</strong>';
-                    const ethEl = document.getElementById('etf-eth-live');
-                    if (ethEl) ethEl.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
-                }
-
-                // Tether Premium
-                const premium = await dadosExternos.fetchTetherPremium();
-                const el = document.getElementById('tether-premium');
-                if (el) {
-                    if (premium !== null) {
-                        el.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
-                        el.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
-                    } else {
-                        el.textContent = '0.00%';
-                        el.className = 'value';
-                    }
-                }
-
-                // Put/Call
-                const pcr = await dadosExternos.fetchPutCallRatio();
-                if (pcr !== null) {
-                    const el = document.getElementById('put-call-ratio');
-                    if (el) el.textContent = pcr.toFixed(3);
-                    const interpEl = document.getElementById('put-call-interp');
-                    if (interpEl) {
-                        interpEl.textContent = pcr > 1.2 ? '🟢 Proteção alta' : pcr < 0.6 ? '⚠️ Proteção baixa' : 'ℹ️ Neutro';
-                    }
-                }
-
-                // Basis
-                const basis = await dadosExternos.fetchBasis();
-                if (basis !== null) {
-                    const el = document.getElementById('basis');
-                    if (el) el.textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%';
-                }
-
-                // Long/Short
-// Long/Short
-const ls = await dadosExternos.fetchLSRatio();
-const el = document.getElementById('ls-ratio-pos');
-if (el) {
-    if (ls) {
-        el.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
-        const interpEl = document.getElementById('ls-ratio-pos-interp');
-        if (interpEl) {
-            interpEl.textContent = ls.long > ls.short ? '🟢 Maioria long' : '🔴 Maioria short';
-            interpEl.style.color = ls.long > ls.short ? 'var(--accent-green)' : 'var(--accent-red)';
+       async function updateExternalData() {
+    try {
+        // CoinMetrics (via CoinGecko)
+        const coinMetrics = await dadosExternos.fetchCoinMetrics();
+        if (coinMetrics) {
+            assetsData['BTCUSDT'].mvrv = coinMetrics.price / coinMetrics.realized;
+            assetsData['BTCUSDT'].realizedPrice = coinMetrics.realized;
+            const mvrvEl = document.getElementById('mvrv');
+            if (mvrvEl) mvrvEl.textContent = (coinMetrics.price / coinMetrics.realized).toFixed(2) + ' (live)';
+            const realizedEl = document.getElementById('realized-price');
+            if (realizedEl) realizedEl.textContent = '$' + coinMetrics.realized.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' (live)';
+            const netflowEl = document.getElementById('exchange-netflow');
+            if (netflowEl) netflowEl.textContent = (coinMetrics.netflow >= 0 ? '+' : '') + (coinMetrics.netflow / 1e6).toFixed(2) + ' BTC (live)';
+            const minerEl = document.getElementById('miner-outflow');
+            if (minerEl) minerEl.textContent = (coinMetrics.minerOutflow / 1e6).toFixed(2) + ' BTC (live)';
         }
-    } else {
-        // Fallback: estimar com base no funding rate
-        const fr = assetsData['BTCUSDT']?.fundingRate || 0;
-        if (fr > 0.0001) {
-            el.textContent = '~55% / 45% (estimado)';
-            const interpEl = document.getElementById('ls-ratio-pos-interp');
-            if (interpEl) {
-                interpEl.textContent = 'ℹ️ Baseado no funding rate';
-                interpEl.style.color = 'var(--text-muted)';
-            }
-        } else {
-            el.textContent = 'N/A';
-            const interpEl = document.getElementById('ls-ratio-pos-interp');
-            if (interpEl) {
-                interpEl.textContent = '⏳ Aguardando dados...';
-                interpEl.style.color = 'var(--text-muted)';
+
+        // Blockchair
+        const blockchair = await dadosExternos.fetchBlockchairStats();
+        if (blockchair) {
+            const addrEl = document.getElementById('active-addresses');
+            if (addrEl) addrEl.textContent = blockchair.activeAddresses.toLocaleString() + ' (live)';
+            const gasEl = document.getElementById('eth-gas');
+            if (gasEl) gasEl.textContent = blockchair.ethGas.toFixed(2) + ' Gwei (live)';
+        }
+
+        // Hashrate
+        const hr = await dadosExternos.fetchHashrate();
+        if (hr !== null) {
+            const hashrateEl = document.getElementById('btc-hashrate');
+            if (hashrateEl) hashrateEl.textContent = hr.toFixed(2) + ' EH/s (live)';
+        }
+
+        // ETF Flows
+        const etf = await dadosExternos.fetchETFData();
+        if (etf) {
+            const btcEl = document.getElementById('etf-btc-live');
+            if (btcEl) btcEl.innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + '$' + etf.btcFlow.toFixed(2) + 'M</strong>';
+            const ethEl = document.getElementById('etf-eth-live');
+            if (ethEl) ethEl.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
+        }
+
+        // Tether Premium
+        const premium = await dadosExternos.fetchTetherPremium();
+        const tetherEl = document.getElementById('tether-premium');
+        if (tetherEl) {
+            if (premium !== null) {
+                tetherEl.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
+                tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
+            } else {
+                tetherEl.textContent = '0.00%';
+                tetherEl.className = 'value';
             }
         }
+
+        // Put/Call
+        const pcr = await dadosExternos.fetchPutCallRatio();
+        if (pcr !== null) {
+            const pcrEl = document.getElementById('put-call-ratio');
+            if (pcrEl) pcrEl.textContent = pcr.toFixed(3);
+            const pcrInterpEl = document.getElementById('put-call-interp');
+            if (pcrInterpEl) {
+                pcrInterpEl.textContent = pcr > 1.2 ? '🟢 Proteção alta' : pcr < 0.6 ? '⚠️ Proteção baixa' : 'ℹ️ Neutro';
+            }
+        }
+
+        // Basis
+        const basis = await dadosExternos.fetchBasis();
+        if (basis !== null) {
+            const basisEl = document.getElementById('basis');
+            if (basisEl) basisEl.textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%';
+        }
+
+        // Long/Short
+        const ls = await dadosExternos.fetchLSRatio();
+        const lsEl = document.getElementById('ls-ratio-pos');
+        if (lsEl) {
+            if (ls) {
+                lsEl.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
+                const interpEl = document.getElementById('ls-ratio-pos-interp');
+                if (interpEl) {
+                    interpEl.textContent = ls.long > ls.short ? '🟢 Maioria long' : '🔴 Maioria short';
+                    interpEl.style.color = ls.long > ls.short ? 'var(--accent-green)' : 'var(--accent-red)';
+                }
+            } else {
+                lsEl.textContent = 'N/A';
+                const interpEl = document.getElementById('ls-ratio-pos-interp');
+                if (interpEl) {
+                    interpEl.textContent = '⏳ Indisponível';
+                    interpEl.style.color = 'var(--text-muted)';
+                }
+            }
+        }
+
+        // DeFi
+        const defi = await dadosExternos.fetchDeFiData();
+        if (defi) {
+            const stableEl = document.getElementById('stablecoin-supply');
+            if (stableEl) stableEl.textContent = '$' + defi.totalStable.toFixed(0) + 'B (live)';
+            const tvlEl = document.getElementById('defi-tvl');
+            if (tvlEl) tvlEl.textContent = '$' + defi.tvl.toFixed(1) + 'B (live)';
+            const changeEl = document.getElementById('defi-tvl-change');
+            if (changeEl) changeEl.textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
+        }
+
+        // Macro
+        const macro = await dadosExternos.fetchMacroStatic();
+        if (macro) {
+            const dxyEl = document.getElementById('dxy-value');
+            if (dxyEl) dxyEl.textContent = macro.dxy.toFixed(2);
+            const us10yEl = document.getElementById('us10y-value');
+            if (us10yEl) us10yEl.textContent = macro.us10y.toFixed(2) + '%';
+            const vixEl = document.getElementById('vix-value');
+            if (vixEl) vixEl.textContent = macro.vix.toFixed(2);
+            const nasdaqEl = document.getElementById('nasdaq-value');
+            if (nasdaqEl) {
+                nasdaqEl.textContent = (macro.nasdaqChange >= 0 ? '+' : '') + macro.nasdaqChange.toFixed(2) + '%';
+                nasdaqEl.style.color = macro.nasdaqChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+            }
+            const spEl = document.getElementById('sp500-value');
+            if (spEl) {
+                spEl.textContent = (macro.spChange >= 0 ? '+' : '') + macro.spChange.toFixed(2) + '%';
+                spEl.style.color = macro.spChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+            }
+            const now = getCurrentTimestamp();
+            ['dxy-update', 'us10y-update', 'vix-update', 'nasdaq-update', 'sp500-update'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = 'atualizado ' + now;
+            });
+        }
+
+        // Fear & Greed
+        const fg = await dadosExternos.fetchFearGreed();
+        if (fg) {
+            const headerFng = document.getElementById('header-fng');
+            if (headerFng) headerFng.innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
+            const headerSent = document.getElementById('header-sentiment');
+            if (headerSent) headerSent.textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
+        }
+    } catch(e) {
+        console.warn('Erro ao atualizar dados externos:', e);
     }
 }
-
-                // DeFi
-                const defi = await dadosExternos.fetchDeFiData();
-                if (defi) {
-                    const stableEl = document.getElementById('stablecoin-supply');
-                    if (stableEl) stableEl.textContent = '$' + defi.totalStable.toFixed(0) + 'B (live)';
-                    const tvlEl = document.getElementById('defi-tvl');
-                    if (tvlEl) tvlEl.textContent = '$' + defi.tvl.toFixed(1) + 'B (live)';
-                    const changeEl = document.getElementById('defi-tvl-change');
-                    if (changeEl) changeEl.textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
-                }
-
-                // Macro (dados estáticos)
-                const macro = await dadosExternos.fetchMacroStatic();
-                if (macro) {
-                    const dxyEl = document.getElementById('dxy-value');
-                    if (dxyEl) dxyEl.textContent = macro.dxy.toFixed(2);
-                    const us10yEl = document.getElementById('us10y-value');
-                    if (us10yEl) us10yEl.textContent = macro.us10y.toFixed(2) + '%';
-                    const vixEl = document.getElementById('vix-value');
-                    if (vixEl) vixEl.textContent = macro.vix.toFixed(2);
-                    const nasdaqEl = document.getElementById('nasdaq-value');
-                    if (nasdaqEl) {
-                        nasdaqEl.textContent = (macro.nasdaqChange >= 0 ? '+' : '') + macro.nasdaqChange.toFixed(2) + '%';
-                        nasdaqEl.style.color = macro.nasdaqChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
-                    }
-                    const spEl = document.getElementById('sp500-value');
-                    if (spEl) {
-                        spEl.textContent = (macro.spChange >= 0 ? '+' : '') + macro.spChange.toFixed(2) + '%';
-                        spEl.style.color = macro.spChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
-                    }
-                    // Atualiza timestamps
-                    const now = getCurrentTimestamp();
-                    ['dxy-update', 'us10y-update', 'vix-update', 'nasdaq-update', 'sp500-update'].forEach(id => {
-                        const el = document.getElementById(id);
-                        if (el) el.textContent = 'atualizado ' + now;
-                    });
-                }
-
-                // Fear & Greed
-                const fg = await dadosExternos.fetchFearGreed();
-                if (fg) {
-                    const headerFng = document.getElementById('header-fng');
-                    if (headerFng) headerFng.innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
-                    const headerSent = document.getElementById('header-sentiment');
-                    if (headerSent) headerSent.textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
-                }
-            } catch(e) {
-                console.warn('Erro ao atualizar dados externos:', e);
-            }
-        }
 
         // ===== Inicialização =====
         async function init() {
