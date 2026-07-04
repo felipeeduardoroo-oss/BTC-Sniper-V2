@@ -519,9 +519,9 @@
     }
 
     // ===== Atualiza dados externos periodicamente =====
- async function updateExternalData() {
+  async function updateExternalData() {
     try {
-        // CoinMetrics (agora com fallback)
+        // CoinMetrics (agora usa Blockchair)
         const coinMetrics = await dadosExternos.fetchCoinMetrics();
         if (coinMetrics) {
             assetsData['BTCUSDT'].mvrv = coinMetrics.price / coinMetrics.realized;
@@ -561,7 +561,7 @@
             if (ethEl) ethEl.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
         }
 
-        // Tether Premium
+        // Tether Premium (já corrigido no dados_externos)
         const premium = await dadosExternos.fetchTetherPremium();
         if (premium !== null) {
             const el = document.getElementById('tether-premium');
@@ -605,7 +605,7 @@
             if (el) el.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
         }
 
-        // DeFi (com cache)
+        // DeFi
         const defi = await dadosExternos.fetchDeFiData();
         if (defi) {
             const stableEl = document.getElementById('stablecoin-supply');
