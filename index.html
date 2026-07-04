@@ -321,6 +321,14 @@
                 const conf = await dadosExternos.getMTFConfluence(symbol);
                 if (assetsData[symbol]) assetsData[symbol].mtfConfluence = conf;
             } catch(e) { /* ignore */ }
+            try {
+                const fr = await dadosExternos.fetchFundingRate(symbol);
+                if (fr && assetsData[symbol]) assetsData[symbol].fundingRate = fr.rate;
+            } catch(e) { /* ignore */ }
+            try {
+                const oi = await dadosExternos.fetchOpenInterest(symbol);
+                if (oi && assetsData[symbol]) assetsData[symbol].oiDelta = oi.delta;
+            } catch(e) { /* ignore */ }
         }
 
         CONFIG.ASSETS.forEach(symbol => {
