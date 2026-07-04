@@ -146,6 +146,20 @@ export function computeChoppiness(data) {
     return clamp(chop, 0, 100);
 }
 
+// ===== Bollinger Bands =====
+export function calculateBB(data, period = 20, multiplier = 2) {
+    const candles = data.candles1H;
+    if (candles.length < period) return { bbWidth: 0.1, upper: 0, lower: 0 };
+    const closes = candles.slice(-period).map(c => c.close);
+    const sma = closes.reduce((a,b)=>a+b,0)/period;
+    const variance = closes.reduce((a,b)=>a+Math.pow(b-sma,2),0)/period;
+    const std = Math.sqrt(variance);
+    const upper = sma + multiplier*std;
+    const lower = sma - multiplier*std;
+    const bbWidth = (upper - lower) / sma;
+    return { bbWidth, upper, lower };
+}
+
 // ===== SMC helpers =====
 export function detectHTFStructure(data, htfCandles) {
     if (!htfCandles || htfCandles.length < 20) return { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity };
@@ -284,7 +298,7 @@ export function checkDerivativesFilter(data, direction) {
     const fr = data.fundingRate || 0;
     const oiDelta = data.oiDelta || 0;
     const frThreshold = 0.0001;
-    const oiThreshold = 3; // percentual
+    const oiThreshold = 3;
     if (fr > frThreshold && oiDelta > oiThreshold) {
         return { allow: false, reason: `Funding alto (${(fr*100).toFixed(3)}%) e OI subindo (${oiDelta.toFixed(1)}%) - superaquecido` };
     }
