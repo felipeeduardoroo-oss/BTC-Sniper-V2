@@ -996,7 +996,7 @@
         }
 
         // ===== Atualiza dados externos periodicamente =====
-       async function updateExternalData() {
+      async function updateExternalData() {
     try {
         // CoinMetrics (via CoinGecko)
         const coinMetrics = await dadosExternos.fetchCoinMetrics();
@@ -1032,10 +1032,10 @@
         // ETF Flows
         const etf = await dadosExternos.fetchETFData();
         if (etf) {
-            const btcEl = document.getElementById('etf-btc-live');
-            if (btcEl) btcEl.innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + '$' + etf.btcFlow.toFixed(2) + 'M</strong>';
-            const ethEl = document.getElementById('etf-eth-live');
-            if (ethEl) ethEl.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
+            const btcEtfEl = document.getElementById('etf-btc-live');
+            if (btcEtfEl) btcEtfEl.innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + '$' + etf.btcFlow.toFixed(2) + 'M</strong>';
+            const ethEtfEl = document.getElementById('etf-eth-live');
+            if (ethEtfEl) ethEtfEl.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
         }
 
         // Tether Premium
@@ -1075,17 +1075,17 @@
         if (lsEl) {
             if (ls) {
                 lsEl.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
-                const interpEl = document.getElementById('ls-ratio-pos-interp');
-                if (interpEl) {
-                    interpEl.textContent = ls.long > ls.short ? '🟢 Maioria long' : '🔴 Maioria short';
-                    interpEl.style.color = ls.long > ls.short ? 'var(--accent-green)' : 'var(--accent-red)';
+                const lsInterpEl = document.getElementById('ls-ratio-pos-interp');
+                if (lsInterpEl) {
+                    lsInterpEl.textContent = ls.long > ls.short ? '🟢 Maioria long' : '🔴 Maioria short';
+                    lsInterpEl.style.color = ls.long > ls.short ? 'var(--accent-green)' : 'var(--accent-red)';
                 }
             } else {
                 lsEl.textContent = 'N/A';
-                const interpEl = document.getElementById('ls-ratio-pos-interp');
-                if (interpEl) {
-                    interpEl.textContent = '⏳ Indisponível';
-                    interpEl.style.color = 'var(--text-muted)';
+                const lsInterpEl = document.getElementById('ls-ratio-pos-interp');
+                if (lsInterpEl) {
+                    lsInterpEl.textContent = '⏳ Indisponível';
+                    lsInterpEl.style.color = 'var(--text-muted)';
                 }
             }
         }
@@ -1122,8 +1122,8 @@
             }
             const now = getCurrentTimestamp();
             ['dxy-update', 'us10y-update', 'vix-update', 'nasdaq-update', 'sp500-update'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.textContent = 'atualizado ' + now;
+                const updateEl = document.getElementById(id);
+                if (updateEl) updateEl.textContent = 'atualizado ' + now;
             });
         }
 
