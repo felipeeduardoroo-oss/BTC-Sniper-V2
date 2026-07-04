@@ -562,15 +562,18 @@
         }
 
         // Tether Premium
-        const premium = await dadosExternos.fetchTetherPremium();
-        if (premium !== null) {
-            const el = document.getElementById('tether-premium');
-            if (el) {
-                el.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
-                el.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
-            }
-        }
-
+        // Tether Premium
+const premium = await dadosExternos.fetchTetherPremium();
+const el = document.getElementById('tether-premium');
+if (el) {
+    if (premium !== null) {
+        el.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
+        el.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
+    } else {
+        el.textContent = '0.00%';
+        el.className = 'value';
+    }
+}
         // Put/Call
         const pcr = await dadosExternos.fetchPutCallRatio();
         if (pcr !== null) {
