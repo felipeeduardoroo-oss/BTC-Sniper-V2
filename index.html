@@ -996,96 +996,96 @@
         }
 
         // ===== Atualiza dados externos periodicamente =====
-      async function updateExternalData() {
+    async function updateExternalData() {
     try {
         // CoinMetrics (via CoinGecko)
         const coinMetrics = await dadosExternos.fetchCoinMetrics();
         if (coinMetrics) {
             assetsData['BTCUSDT'].mvrv = coinMetrics.price / coinMetrics.realized;
             assetsData['BTCUSDT'].realizedPrice = coinMetrics.realized;
-            const mvrvEl = document.getElementById('mvrv');
-            if (mvrvEl) mvrvEl.textContent = (coinMetrics.price / coinMetrics.realized).toFixed(2) + ' (live)';
-            const realizedEl = document.getElementById('realized-price');
-            if (realizedEl) realizedEl.textContent = '$' + coinMetrics.realized.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' (live)';
-            const netflowEl = document.getElementById('exchange-netflow');
-            if (netflowEl) netflowEl.textContent = (coinMetrics.netflow >= 0 ? '+' : '') + (coinMetrics.netflow / 1e6).toFixed(2) + ' BTC (live)';
-            const minerEl = document.getElementById('miner-outflow');
-            if (minerEl) minerEl.textContent = (coinMetrics.minerOutflow / 1e6).toFixed(2) + ' BTC (live)';
+            const mvrvElem = document.getElementById('mvrv');
+            if (mvrvElem) mvrvElem.textContent = (coinMetrics.price / coinMetrics.realized).toFixed(2) + ' (live)';
+            const realizedElem = document.getElementById('realized-price');
+            if (realizedElem) realizedElem.textContent = '$' + coinMetrics.realized.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' (live)';
+            const netflowElem = document.getElementById('exchange-netflow');
+            if (netflowElem) netflowElem.textContent = (coinMetrics.netflow >= 0 ? '+' : '') + (coinMetrics.netflow / 1e6).toFixed(2) + ' BTC (live)';
+            const minerElem = document.getElementById('miner-outflow');
+            if (minerElem) minerElem.textContent = (coinMetrics.minerOutflow / 1e6).toFixed(2) + ' BTC (live)';
         }
 
         // Blockchair
         const blockchair = await dadosExternos.fetchBlockchairStats();
         if (blockchair) {
-            const addrEl = document.getElementById('active-addresses');
-            if (addrEl) addrEl.textContent = blockchair.activeAddresses.toLocaleString() + ' (live)';
-            const gasEl = document.getElementById('eth-gas');
-            if (gasEl) gasEl.textContent = blockchair.ethGas.toFixed(2) + ' Gwei (live)';
+            const addrElem = document.getElementById('active-addresses');
+            if (addrElem) addrElem.textContent = blockchair.activeAddresses.toLocaleString() + ' (live)';
+            const gasElem = document.getElementById('eth-gas');
+            if (gasElem) gasElem.textContent = blockchair.ethGas.toFixed(2) + ' Gwei (live)';
         }
 
         // Hashrate
         const hr = await dadosExternos.fetchHashrate();
         if (hr !== null) {
-            const hashrateEl = document.getElementById('btc-hashrate');
-            if (hashrateEl) hashrateEl.textContent = hr.toFixed(2) + ' EH/s (live)';
+            const hashrateElem = document.getElementById('btc-hashrate');
+            if (hashrateElem) hashrateElem.textContent = hr.toFixed(2) + ' EH/s (live)';
         }
 
         // ETF Flows
         const etf = await dadosExternos.fetchETFData();
         if (etf) {
-            const btcEtfEl = document.getElementById('etf-btc-live');
-            if (btcEtfEl) btcEtfEl.innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + '$' + etf.btcFlow.toFixed(2) + 'M</strong>';
-            const ethEtfEl = document.getElementById('etf-eth-live');
-            if (ethEtfEl) ethEtfEl.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
+            const btcEtfElem = document.getElementById('etf-btc-live');
+            if (btcEtfElem) btcEtfElem.innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + '$' + etf.btcFlow.toFixed(2) + 'M</strong>';
+            const ethEtfElem = document.getElementById('etf-eth-live');
+            if (ethEtfElem) ethEtfElem.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
         }
 
         // Tether Premium
         const premium = await dadosExternos.fetchTetherPremium();
-        const tetherEl = document.getElementById('tether-premium');
-        if (tetherEl) {
+        const tetherElem = document.getElementById('tether-premium');
+        if (tetherElem) {
             if (premium !== null) {
-                tetherEl.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
-                tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
+                tetherElem.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
+                tetherElem.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
             } else {
-                tetherEl.textContent = '0.00%';
-                tetherEl.className = 'value';
+                tetherElem.textContent = '0.00%';
+                tetherElem.className = 'value';
             }
         }
 
         // Put/Call
         const pcr = await dadosExternos.fetchPutCallRatio();
         if (pcr !== null) {
-            const pcrEl = document.getElementById('put-call-ratio');
-            if (pcrEl) pcrEl.textContent = pcr.toFixed(3);
-            const pcrInterpEl = document.getElementById('put-call-interp');
-            if (pcrInterpEl) {
-                pcrInterpEl.textContent = pcr > 1.2 ? '🟢 Proteção alta' : pcr < 0.6 ? '⚠️ Proteção baixa' : 'ℹ️ Neutro';
+            const pcrElem = document.getElementById('put-call-ratio');
+            if (pcrElem) pcrElem.textContent = pcr.toFixed(3);
+            const pcrInterpElem = document.getElementById('put-call-interp');
+            if (pcrInterpElem) {
+                pcrInterpElem.textContent = pcr > 1.2 ? '🟢 Proteção alta' : pcr < 0.6 ? '⚠️ Proteção baixa' : 'ℹ️ Neutro';
             }
         }
 
         // Basis
         const basis = await dadosExternos.fetchBasis();
         if (basis !== null) {
-            const basisEl = document.getElementById('basis');
-            if (basisEl) basisEl.textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%';
+            const basisElem = document.getElementById('basis');
+            if (basisElem) basisElem.textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%';
         }
 
         // Long/Short
         const ls = await dadosExternos.fetchLSRatio();
-        const lsEl = document.getElementById('ls-ratio-pos');
-        if (lsEl) {
+        const lsElem = document.getElementById('ls-ratio-pos');
+        if (lsElem) {
             if (ls) {
-                lsEl.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
-                const lsInterpEl = document.getElementById('ls-ratio-pos-interp');
-                if (lsInterpEl) {
-                    lsInterpEl.textContent = ls.long > ls.short ? '🟢 Maioria long' : '🔴 Maioria short';
-                    lsInterpEl.style.color = ls.long > ls.short ? 'var(--accent-green)' : 'var(--accent-red)';
+                lsElem.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
+                const lsInterpElem = document.getElementById('ls-ratio-pos-interp');
+                if (lsInterpElem) {
+                    lsInterpElem.textContent = ls.long > ls.short ? '🟢 Maioria long' : '🔴 Maioria short';
+                    lsInterpElem.style.color = ls.long > ls.short ? 'var(--accent-green)' : 'var(--accent-red)';
                 }
             } else {
-                lsEl.textContent = 'N/A';
-                const lsInterpEl = document.getElementById('ls-ratio-pos-interp');
-                if (lsInterpEl) {
-                    lsInterpEl.textContent = '⏳ Indisponível';
-                    lsInterpEl.style.color = 'var(--text-muted)';
+                lsElem.textContent = 'N/A';
+                const lsInterpElem = document.getElementById('ls-ratio-pos-interp');
+                if (lsInterpElem) {
+                    lsInterpElem.textContent = '⏳ Indisponível';
+                    lsInterpElem.style.color = 'var(--text-muted)';
                 }
             }
         }
@@ -1093,37 +1093,37 @@
         // DeFi
         const defi = await dadosExternos.fetchDeFiData();
         if (defi) {
-            const stableEl = document.getElementById('stablecoin-supply');
-            if (stableEl) stableEl.textContent = '$' + defi.totalStable.toFixed(0) + 'B (live)';
-            const tvlEl = document.getElementById('defi-tvl');
-            if (tvlEl) tvlEl.textContent = '$' + defi.tvl.toFixed(1) + 'B (live)';
-            const changeEl = document.getElementById('defi-tvl-change');
-            if (changeEl) changeEl.textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
+            const stableElem = document.getElementById('stablecoin-supply');
+            if (stableElem) stableElem.textContent = '$' + defi.totalStable.toFixed(0) + 'B (live)';
+            const tvlElem = document.getElementById('defi-tvl');
+            if (tvlElem) tvlElem.textContent = '$' + defi.tvl.toFixed(1) + 'B (live)';
+            const changeElem = document.getElementById('defi-tvl-change');
+            if (changeElem) changeElem.textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
         }
 
         // Macro
         const macro = await dadosExternos.fetchMacroStatic();
         if (macro) {
-            const dxyEl = document.getElementById('dxy-value');
-            if (dxyEl) dxyEl.textContent = macro.dxy.toFixed(2);
-            const us10yEl = document.getElementById('us10y-value');
-            if (us10yEl) us10yEl.textContent = macro.us10y.toFixed(2) + '%';
-            const vixEl = document.getElementById('vix-value');
-            if (vixEl) vixEl.textContent = macro.vix.toFixed(2);
-            const nasdaqEl = document.getElementById('nasdaq-value');
-            if (nasdaqEl) {
-                nasdaqEl.textContent = (macro.nasdaqChange >= 0 ? '+' : '') + macro.nasdaqChange.toFixed(2) + '%';
-                nasdaqEl.style.color = macro.nasdaqChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+            const dxyElem = document.getElementById('dxy-value');
+            if (dxyElem) dxyElem.textContent = macro.dxy.toFixed(2);
+            const us10yElem = document.getElementById('us10y-value');
+            if (us10yElem) us10yElem.textContent = macro.us10y.toFixed(2) + '%';
+            const vixElem = document.getElementById('vix-value');
+            if (vixElem) vixElem.textContent = macro.vix.toFixed(2);
+            const nasdaqElem = document.getElementById('nasdaq-value');
+            if (nasdaqElem) {
+                nasdaqElem.textContent = (macro.nasdaqChange >= 0 ? '+' : '') + macro.nasdaqChange.toFixed(2) + '%';
+                nasdaqElem.style.color = macro.nasdaqChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
             }
-            const spEl = document.getElementById('sp500-value');
-            if (spEl) {
-                spEl.textContent = (macro.spChange >= 0 ? '+' : '') + macro.spChange.toFixed(2) + '%';
-                spEl.style.color = macro.spChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+            const spElem = document.getElementById('sp500-value');
+            if (spElem) {
+                spElem.textContent = (macro.spChange >= 0 ? '+' : '') + macro.spChange.toFixed(2) + '%';
+                spElem.style.color = macro.spChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
             }
             const now = getCurrentTimestamp();
             ['dxy-update', 'us10y-update', 'vix-update', 'nasdaq-update', 'sp500-update'].forEach(id => {
-                const updateEl = document.getElementById(id);
-                if (updateEl) updateEl.textContent = 'atualizado ' + now;
+                const updateElem = document.getElementById(id);
+                if (updateElem) updateElem.textContent = 'atualizado ' + now;
             });
         }
 
@@ -1139,7 +1139,6 @@
         console.warn('Erro ao atualizar dados externos:', e);
     }
 }
-
         // ===== Inicialização =====
         async function init() {
             cacheDOM();
