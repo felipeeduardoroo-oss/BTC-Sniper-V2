@@ -135,12 +135,16 @@ export async function fetchBlockchairStats() {
 
 export async function fetchWhaleTxs() {
     try {
-        const data = await fetchWithRetry('https://api.blockchair.com/bitcoin/transactions?limit=3&order_by=size_desc');
+        const [data, priceResp] = await Promise.all([
+            fetchWithRetry('https://api.blockchair.com/bitcoin/transactions?limit=3&order_by=size_desc'),
+            fetchWithRetry('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT')
+        ]);
+        const btcPrice = parseFloat(priceResp?.price) || 0;
         if (data && data.data) {
             return data.data.slice(0, 3).map(tx => ({
                 hash: tx.hash,
                 valueBTC: (tx.output_total || 0) / 1e8,
-                valueUSD: ((tx.output_total || 0) / 1e8) * 60000 // preço aproximado
+                valueUSD: ((tx.output_total || 0) / 1e8) * btcPrice // preço BTC ao vivo (Binance)
             }));
         }
     } catch(e) { console.warn('[WhaleTxs]', e); }
@@ -237,6 +241,21 @@ export async function fetchTetherPremium() {
         const usdtbrl = parseFloat(tickerData.last);
         return ((usdtbrl / usdbrl) - 1) * 100;
     } catch(e) { console.warn('[TetherPremium]', e); }
+    return null;
+}
+
+// ===== FED Funds Rate (FRED, sem API key) =====
+export async function fetchFedRate() {
+    try {
+        const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS';
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const csv = await resp.text();
+        const lines = csv.trim().split('\n');
+        const lastLine = lines[lines.length - 1];
+        const value = parseFloat(lastLine.split(',')[1]);
+        return isNaN(value) ? null : value;
+    } catch(e) { console.warn('[FedRate]', e); }
     return null;
 }
 
