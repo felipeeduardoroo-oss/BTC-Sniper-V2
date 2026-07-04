@@ -519,85 +519,101 @@
     }
 
     // ===== Atualiza dados externos periodicamente =====
-async function updateExternalData() {
+ async function updateExternalData() {
     try {
-        // CoinMetrics
+        // CoinMetrics (agora com fallback)
         const coinMetrics = await dadosExternos.fetchCoinMetrics();
         if (coinMetrics) {
             assetsData['BTCUSDT'].mvrv = coinMetrics.price / coinMetrics.realized;
             assetsData['BTCUSDT'].realizedPrice = coinMetrics.realized;
-            document.getElementById('mvrv').textContent = (coinMetrics.price / coinMetrics.realized).toFixed(2) + ' (live)';
-            document.getElementById('realized-price').textContent = '$' + coinMetrics.realized.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' (live)';
-            document.getElementById('exchange-netflow').textContent = (coinMetrics.netflow >= 0 ? '+' : '') + (coinMetrics.netflow / 1e6).toFixed(2) + ' BTC (live)';
-            document.getElementById('miner-outflow').textContent = (coinMetrics.minerOutflow / 1e6).toFixed(2) + ' BTC (live)';
+            const mvrvEl = document.getElementById('mvrv');
+            if (mvrvEl) mvrvEl.textContent = (coinMetrics.price / coinMetrics.realized).toFixed(2) + ' (live)';
+            const realizedEl = document.getElementById('realized-price');
+            if (realizedEl) realizedEl.textContent = '$' + coinMetrics.realized.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' (live)';
+            const netflowEl = document.getElementById('exchange-netflow');
+            if (netflowEl) netflowEl.textContent = (coinMetrics.netflow >= 0 ? '+' : '') + (coinMetrics.netflow / 1e6).toFixed(2) + ' BTC (live)';
+            const minerEl = document.getElementById('miner-outflow');
+            if (minerEl) minerEl.textContent = (coinMetrics.minerOutflow / 1e6).toFixed(2) + ' BTC (live)';
         }
 
         // Blockchair
         const blockchair = await dadosExternos.fetchBlockchairStats();
         if (blockchair) {
-            document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString() + ' (live)';
-            document.getElementById('eth-gas').textContent = blockchair.ethGas.toFixed(2) + ' Gwei (live)';
+            const addrEl = document.getElementById('active-addresses');
+            if (addrEl) addrEl.textContent = blockchair.activeAddresses.toLocaleString() + ' (live)';
+            const gasEl = document.getElementById('eth-gas');
+            if (gasEl) gasEl.textContent = blockchair.ethGas.toFixed(2) + ' Gwei (live)';
         }
 
         // Hashrate
         const hr = await dadosExternos.fetchHashrate();
-        if (hr !== null) document.getElementById('btc-hashrate').textContent = hr.toFixed(2) + ' EH/s (live)';
+        if (hr !== null) {
+            const el = document.getElementById('btc-hashrate');
+            if (el) el.textContent = hr.toFixed(2) + ' EH/s (live)';
+        }
 
         // ETF
         const etf = await dadosExternos.fetchETFData();
         if (etf) {
-            document.getElementById('etf-btc-live').innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + '$' + etf.btcFlow.toFixed(2) + 'M</strong>';
-            document.getElementById('etf-eth-live').innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
+            const btcEl = document.getElementById('etf-btc-live');
+            if (btcEl) btcEl.innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + '$' + etf.btcFlow.toFixed(2) + 'M</strong>';
+            const ethEl = document.getElementById('etf-eth-live');
+            if (ethEl) ethEl.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
         }
 
-        // Tether Premium (CORRIGIDO)
+        // Tether Premium
         const premium = await dadosExternos.fetchTetherPremium();
         if (premium !== null) {
             const el = document.getElementById('tether-premium');
-            el.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
-            el.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
+            if (el) {
+                el.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
+                el.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
+            }
         }
 
-        // Fed Rate (CORRIGIDO)
+        // Fed Rate
         const fed = await dadosExternos.fetchFedRate();
         if (fed !== null) {
-            document.getElementById('fed-rate').textContent = fed.toFixed(2) + '% (live)';
-            document.getElementById('fed-interp').textContent = fed > 4.5 ? '⚠️ Juros restritivos' : 'ℹ️ Juros moderados';
+            const el = document.getElementById('fed-rate');
+            if (el) el.textContent = fed.toFixed(2) + '% (live)';
+            const interpEl = document.getElementById('fed-interp');
+            if (interpEl) interpEl.textContent = fed > 4.5 ? '⚠️ Juros restritivos' : 'ℹ️ Juros moderados';
         }
 
         // Put/Call
         const pcr = await dadosExternos.fetchPutCallRatio();
         if (pcr !== null) {
-            document.getElementById('put-call-ratio').textContent = pcr.toFixed(3);
-            document.getElementById('put-call-interp').textContent = pcr > 1.2 ? '🟢 Proteção alta' : pcr < 0.6 ? '⚠️ Proteção baixa' : 'ℹ️ Neutro';
+            const el = document.getElementById('put-call-ratio');
+            if (el) el.textContent = pcr.toFixed(3);
+            const interpEl = document.getElementById('put-call-interp');
+            if (interpEl) {
+                interpEl.textContent = pcr > 1.2 ? '🟢 Proteção alta' : pcr < 0.6 ? '⚠️ Proteção baixa' : 'ℹ️ Neutro';
+            }
         }
 
         // Basis
         const basis = await dadosExternos.fetchBasis();
-        if (basis !== null) document.getElementById('basis').textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%';
+        if (basis !== null) {
+            const el = document.getElementById('basis');
+            if (el) el.textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%';
+        }
 
         // Long/Short
         const ls = await dadosExternos.fetchLSRatio();
         if (ls) {
-            document.getElementById('ls-ratio-pos').textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
+            const el = document.getElementById('ls-ratio-pos');
+            if (el) el.textContent = ls.long.toFixed(1) + '% / ' + ls.short.toFixed(1) + '%';
         }
 
-        // DeFi (CORRIGIDO com fallback cache)
+        // DeFi (com cache)
         const defi = await dadosExternos.fetchDeFiData();
         if (defi) {
-            document.getElementById('stablecoin-supply').textContent = '$' + defi.totalStable.toFixed(0) + 'B (live)';
-            document.getElementById('defi-tvl').textContent = '$' + defi.tvl.toFixed(1) + 'B (live)';
-            document.getElementById('defi-tvl-change').textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
-            // Guarda em cache
-            dadosExternos.setCachedData('defi_fallback', defi);
-        } else {
-            // Tenta usar cache
-            const cachedDefi = dadosExternos.getCachedData('defi_fallback');
-            if (cachedDefi) {
-                document.getElementById('stablecoin-supply').textContent = '$' + cachedDefi.totalStable.toFixed(0) + 'B (cached)';
-                document.getElementById('defi-tvl').textContent = '$' + cachedDefi.tvl.toFixed(1) + 'B (cached)';
-                document.getElementById('defi-tvl-change').textContent = (cachedDefi.tvlChange >= 0 ? '+' : '') + cachedDefi.tvlChange.toFixed(2) + '%';
-            }
+            const stableEl = document.getElementById('stablecoin-supply');
+            if (stableEl) stableEl.textContent = '$' + defi.totalStable.toFixed(0) + 'B (live)';
+            const tvlEl = document.getElementById('defi-tvl');
+            if (tvlEl) tvlEl.textContent = '$' + defi.tvl.toFixed(1) + 'B (live)';
+            const changeEl = document.getElementById('defi-tvl-change');
+            if (changeEl) changeEl.textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
         }
 
         // Yahoo Macro
@@ -611,9 +627,9 @@ async function updateExternalData() {
                 const el = document.getElementById(macroIds[i]);
                 const updateEl = document.getElementById(macroUpdateIds[i]);
                 if (el) {
-                    if (i === 1) { // US10Y
+                    if (i === 1) {
                         el.textContent = (yahoo.price * 100).toFixed(2) + '%';
-                    } else if (i === 3 || i === 4) { // NASDAQ/SP500
+                    } else if (i === 3 || i === 4) {
                         el.textContent = (yahoo.change >= 0 ? '+' : '') + yahoo.change.toFixed(2) + '%';
                         el.style.color = yahoo.change >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
                     } else {
@@ -635,8 +651,10 @@ async function updateExternalData() {
         // Fear & Greed
         const fg = await dadosExternos.fetchFearGreed();
         if (fg) {
-            document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
-            document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
+            const headerFng = document.getElementById('header-fng');
+            if (headerFng) headerFng.innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
+            const headerSent = document.getElementById('header-sentiment');
+            if (headerSent) headerSent.textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
         }
     } catch(e) {
         console.warn('Erro ao atualizar dados externos:', e);
