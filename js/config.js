@@ -9,6 +9,8 @@ export const CONFIG = {
     MAX_RETRIES: 3,
     RETRY_DELAY_MS: 1000,
     PROXY_URL: 'https://api.allorigins.win/raw?url=',
+    // Se tiver chave do FRED, coloque aqui:
+    FRED_API_KEY: '', // opcional
 };
 
 export const COLORS = {
