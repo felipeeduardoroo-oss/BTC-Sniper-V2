@@ -402,6 +402,100 @@
                     <span style="color:#888;">Trailing Ativa:</span><span style="color:#ffc107;">$${params.trailingActivation.toFixed(2)}</span>
                     <span style="color:#888;">Trailing Dist:</span><span style="color:#ffc107;">$${params.trailingDistance.toFixed(2)}</span>
                     <span style="color:#888;">ATR:</span><span style="color:#aaa;">$${params.atr.toFixed(2)}</span>
+                </div><script type="module">
+        import { CONFIG } from './js/config.js';
+        import * as indicadores from './js/indicadores.js';
+        import * as dadosExternos from './js/dados_externos.js';
+        import * as graficos from './js/graficos.js';
+        import * as telegram from './js/telegram.js';
+        import * as banco from './js/banco_de_dados.js';
+        import * as historico from './js/historicos_sinais.js';
+
+        const {
+            calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
+            generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
+            calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
+            computeChoppiness, calculateBB, detectHTFStructure, updateSwingPoints,
+            findSMCSetup, getSMCZones, checkLateralMarket, checkHTFAlignment,
+            checkOnChainFilter, checkVolumeAndOrderflow, checkDerivativesFilter,
+            checkPortfolioExposure, checkMTFAlignment, computeScore, isSafeToTrade,
+            KellyPositionSize
+        } = indicadores;
+
+        const {
+            fetchHistoricalCandles, fetchFundingRate, fetchOpenInterest, fetchBasis,
+            fetchBlockchairStats, fetchMempoolStats, fetchETFData, fetchFedRate,
+            fetchPutCallRatio, fetchDeFiData, fetchTetherPremium, fetchFearGreed,
+            fetchMacroStatic, getMTFConfluence, fetchOrderBook
+        } = dadosExternos;
+
+        // ============================================================
+        //  STATE
+        // ============================================================
+        const assetsData = {};
+        CONFIG.ASSETS.forEach(symbol => {
+            assetsData[symbol] = {
+                price: 0, candles1H: [], candles4H: [], candles1D: [],
+                ema50_1H: 0, ema200_4H: 0, rsi_1H: 50, atr_1H: 0, atrHistory: [],
+                swingHighs: [], swingLows: [], currentBOS: 'NEUTRAL', mtfTrend: 'NEUTRAL',
+                oiDelta: 0, volumeRel: 1.0, rsiState: { avgGain: 0, avgLoss: 0, rsi: 50 }, bbWidth: 0.1,
+                volumeAvg: 0, currentVolume: 0, fundingRate: 0, trend4H: 'NEUTRAL', trend1D: 'NEUTRAL',
+                htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity }, mtfConfluence: null
+            };
+        });
+
+        let activePositions = {};
+        let liqMap = { 'BTCUSDT': { longs: 0, shorts: 0 }, 'ETHUSDT': { longs: 0, shorts: 0 }, 'SOLUSDT': { longs: 0, shorts: 0 } };
+        let liquidationLevels = { 'BTCUSDT': [], 'ETHUSDT': [], 'SOLUSDT': [] };
+        let scoreHistory = [];
+        let previousScores = { 'BTCUSDT': 50, 'ETHUSDT': 50, 'SOLUSDT': 50 };
+        let whaleTrades = { 'BTCUSDT': { buys: 0, sells: 0, lastTx: null }, 'ETHUSDT': { buys: 0, sells: 0, lastTx: null }, 'SOLUSDT': { buys: 0, sells: 0, lastTx: null } };
+        let alertCooldowns = {};
+
+        const DOM = {};
+        function cacheDOM() {
+            const ids = ['btc-price', 'eth-price', 'sol-price', 'score-value', 'score-bar', 'last-update', 'header-timestamp', 'status-badge', 'ws-status'];
+            ids.forEach(id => DOM[id] = document.getElementById(id));
+        }
+
+        function getCurrentTimestamp() {
+            return new Date().toLocaleString('pt-BR', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Sao_Paulo' });
+        }
+
+        function formatCurrency(value) { return '$' + Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+        // ============================================================
+        //  UI HELPERS DO COMITÊ
+        // ============================================================
+        function renderMiniOrderBook(obData) {
+            if (!obData) return '<span style="color:#8b949e;">N/A</span>';
+            const maxQty = Math.max(...obData.bids.map(b=>b.qty), ...obData.asks.map(a=>a.qty));
+            const bar = (qty) => (qty/maxQty*100).toFixed(0);
+            let html = '<div class="orderbook-mini">';
+            for (let i = obData.asks.length - 1; i >= 0; i--) {
+                const a = obData.asks[i];
+                html += `<div style="display:flex;justify-content:space-between;align-items:center;"><span class="ask">${a.price.toFixed(2)}</span><span style="color:#8b949e;">${a.qty.toFixed(4)}</span><div class="bar-bg"><div class="bar-fill" style="width:${bar(a.qty)}%;background:#ff5252;"></div></div></div>`;
+            }
+            const spread = ((obData.asks[0].price - obData.bids[0].price) / obData.bids[0].price * 100).toFixed(3);
+            html += `<div class="spread">Spread: ${spread}%</div>`;
+            for (const b of obData.bids) {
+                html += `<div style="display:flex;justify-content:space-between;align-items:center;"><span class="bid">${b.price.toFixed(2)}</span><span style="color:#8b949e;">${b.qty.toFixed(4)}</span><div class="bar-bg"><div class="bar-fill" style="width:${bar(b.qty)}%;background:#00e676;"></div></div></div>`;
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function formatTrailingHTML(params, direction) {
+            const color = direction === 'LONG' ? '#00e676' : '#ff1744';
+            return `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;text-align:left;">
+                    <span style="color:#888;">Stop Loss:</span><span style="color:#ff5252;font-weight:700;">$${params.stopLoss.toFixed(2)}</span>
+                    <span style="color:#888;">TP1 (50%):</span><span style="color:${color};font-weight:600;">$${params.tp1.toFixed(2)}</span>
+                    <span style="color:#888;">TP2 (30%):</span><span style="color:${color};font-weight:600;">$${params.tp2.toFixed(2)}</span>
+                    <span style="color:#888;">TP3 (20%):</span><span style="color:${color};font-weight:600;">$${params.tp3.toFixed(2)}</span>
+                    <span style="color:#888;">Trailing Ativa:</span><span style="color:#ffc107;">$${params.trailingActivation.toFixed(2)}</span>
+                    <span style="color:#888;">Trailing Dist:</span><span style="color:#ffc107;">$${params.trailingDistance.toFixed(2)}</span>
+                    <span style="color:#888;">ATR:</span><span style="color:#aaa;">$${params.atr.toFixed(2)}</span>
                 </div>
             `;
         }
@@ -467,13 +561,16 @@
         }
 
         // ============================================================
-        //  MOTOR COMITÊ
+        //  MOTOR COMITÊ (com agendamento recursivo)
         // ============================================================
+        let signalEngineRunning = false;
         async function runSignalEngine() {
-            const symbol = 'BTCUSDT';
+            if (signalEngineRunning) return;
+            signalEngineRunning = true;
             try {
+                const symbol = 'BTCUSDT';
                 const candles = await fetchHistoricalCandles(symbol, '15m', 100);
-                if (!candles.length) return;
+                if (!candles.length) { signalEngineRunning = false; return; }
                 
                 const [mtfData, fundingData, obData, fgData] = await Promise.all([
                     getMTFConfluence(symbol),
@@ -562,7 +659,7 @@
                     }
                 }
                 
-                // Atualiza também o score principal (backward compatibility)
+                // Atualiza o score principal
                 const scoreEl = DOM['score-value'] || document.getElementById('score-value');
                 const barEl = DOM['score-bar'] || document.getElementById('score-bar');
                 if (scoreEl) {
@@ -577,63 +674,82 @@
                 
             } catch(e) {
                 console.error('Signal engine error:', e);
+            } finally {
+                signalEngineRunning = false;
+                // Auto-agendamento: executa novamente após 15 segundos
+                setTimeout(runSignalEngine, 15000);
             }
         }
 
         // ============================================================
-        //  FUNÇÕES LEGADO (WebSocket, avaliação, atualizações)
+        //  FUNÇÕES LEGADO
         // ============================================================
 
-        // ---- WebSocket ----
+        // ---- WebSocket com reconexão limitada ----
+        let wsRetryCount = 0;
+        const WS_MAX_RETRIES = 5;
         function initWebSockets() {
             const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
             const streams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
             const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+            
             ws.onopen = () => {
+                wsRetryCount = 0;
                 if(wsStatusEl) { wsStatusEl.textContent = '🔄 WEBSOCKET LIVE'; wsStatusEl.style.color = 'var(--accent-green)'; wsStatusEl.style.animation = 'pulse-dot 1.5s infinite'; }
             };
             ws.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                const symbol = msg.data.s;
-                const price = parseFloat(msg.data.p);
-                if (assetsData[symbol]) {
-                    const prevPrice = assetsData[symbol].price;
-                    assetsData[symbol].price = price;
-                    if (prevPrice > 0) {
-                        assetsData[symbol].ema50_1H = updateStatefulEMA(assetsData[symbol].ema50_1H, price, 50);
-                        assetsData[symbol].ema200_4H = updateStatefulEMA(assetsData[symbol].ema200_4H, price, 200);
-                        assetsData[symbol].rsiState = updateStatefulRSI(assetsData[symbol].rsiState, price, prevPrice);
-                        assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+                try {
+                    const msg = JSON.parse(event.data);
+                    const symbol = msg.data.s;
+                    const price = parseFloat(msg.data.p);
+                    if (assetsData[symbol]) {
+                        const prevPrice = assetsData[symbol].price;
+                        assetsData[symbol].price = price;
+                        if (prevPrice > 0) {
+                            assetsData[symbol].ema50_1H = updateStatefulEMA(assetsData[symbol].ema50_1H, price, 50);
+                            assetsData[symbol].ema200_4H = updateStatefulEMA(assetsData[symbol].ema200_4H, price, 200);
+                            assetsData[symbol].rsiState = updateStatefulRSI(assetsData[symbol].rsiState, price, prevPrice);
+                            assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+                        }
+                        checkPositionManagement(symbol, price);
+                        updateLivePriceUI(symbol, price);
                     }
-                    checkPositionManagement(symbol, price);
-                    updateLivePriceUI(symbol, price);
-                }
+                } catch(e) { /* ignora mensagens malformadas */ }
             };
             ws.onerror = (e) => {
-                console.error("WS Error", e);
+                console.warn("WS Error", e);
                 if(wsStatusEl) { wsStatusEl.textContent = '❌ WS OFFLINE'; wsStatusEl.style.color = 'var(--accent-red)'; wsStatusEl.style.animation = 'none'; }
             };
-            ws.onclose = () => { 
+            ws.onclose = () => {
                 if(wsStatusEl) { wsStatusEl.textContent = '🔄 RECONNECTING...'; wsStatusEl.style.color = 'var(--accent-yellow)'; wsStatusEl.style.animation = 'none'; }
-                setTimeout(initWebSockets, 3000); 
+                wsRetryCount++;
+                const delay = Math.min(3000 * Math.pow(1.5, wsRetryCount), 30000);
+                if (wsRetryCount <= WS_MAX_RETRIES) {
+                    setTimeout(initWebSockets, delay);
+                } else {
+                    if(wsStatusEl) { wsStatusEl.textContent = '⛔ WS FALHOU (limite)'; wsStatusEl.style.color = 'var(--accent-red)'; }
+                }
             };
+
             // Liquidações
             const wsLiq = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
             wsLiq.onmessage = (event) => {
-                const orders = JSON.parse(event.data);
-                orders.forEach(o => {
-                    const symbol = o.order.symbol;
-                    if (liqMap[symbol]) {
-                        const side = o.order.side;
-                        const price = parseFloat(o.order.price);
-                        const qty = parseFloat(o.order.origQty) * price;
-                        if (side === 'BUY') liqMap[symbol].longs += qty; 
-                        else liqMap[symbol].shorts += qty;
-                        if (!liquidationLevels[symbol]) liquidationLevels[symbol] = [];
-                        liquidationLevels[symbol].push(price);
-                        if (liquidationLevels[symbol].length > 100) liquidationLevels[symbol].shift();
-                    }
-                });
+                try {
+                    const orders = JSON.parse(event.data);
+                    orders.forEach(o => {
+                        const symbol = o.order.symbol;
+                        if (liqMap[symbol]) {
+                            const side = o.order.side;
+                            const price = parseFloat(o.order.price);
+                            const qty = parseFloat(o.order.origQty) * price;
+                            if (side === 'BUY') liqMap[symbol].longs += qty; 
+                            else liqMap[symbol].shorts += qty;
+                            if (!liquidationLevels[symbol]) liquidationLevels[symbol] = [];
+                            liquidationLevels[symbol].push(price);
+                            if (liquidationLevels[symbol].length > 100) liquidationLevels[symbol].shift();
+                        }
+                    });
+                } catch(e) { /* ignora */ }
             };
             wsLiq.onclose = () => setTimeout(initWebSockets, 5000);
             setInterval(() => { Object.keys(liqMap).forEach(k => liqMap[k] = { longs: 0, shorts: 0 }); }, 4 * 60 * 60 * 1000);
@@ -848,8 +964,11 @@
             graficos.updateScoreChart(scoreHistory);
         }
 
-        // ---- Atualização de dados externos ----
+        // ---- Atualização de dados externos (com agendamento recursivo) ----
+        let externalUpdating = false;
         async function updateExternalData() {
+            if (externalUpdating) return;
+            externalUpdating = true;
             try {
                 const blockchair = await fetchBlockchairStats();
                 if (blockchair) {
@@ -903,7 +1022,11 @@
 
                 const fg = await fetchFearGreed();
                 if (fg) { document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')'; document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH'; }
-            } catch(e) { console.warn('Erro ao atualizar dados externos:', e); }
+            } catch(e) { console.warn('Erro ao atualizar dados externos:', e); } finally {
+                externalUpdating = false;
+                // Auto-agendamento: executa novamente após 2 minutos
+                setTimeout(updateExternalData, 120000);
+            }
         }
 
         // ============================================================
@@ -946,13 +1069,14 @@
                 }
             }
 
-            initWebSockets(); // <-- AGORA DEFINIDA ANTES
-            await updateExternalData();
+            initWebSockets();
+            await updateExternalData(); // inicia o loop recursivo
             await evaluateMarkets();
 
-            setInterval(updateExternalData, 120000);
-            
-            // Ciclo de 5 min para atualizar velas e rodar ambos os motores
+            // Inicia o motor de sinais (loop recursivo)
+            setTimeout(runSignalEngine, 1000);
+
+            // Ciclo de 5 min para atualizar velas e rodar o motor legado
             setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
                     const c1H = await fetchHistoricalCandles(symbol, '1h', 10);
@@ -979,13 +1103,8 @@
                         assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
                     }
                 }
-                await evaluateMarkets();
-                await runSignalEngine(); // Motor Comitê
+                evaluateMarkets();
             }, 300000);
-
-            // Execução rápida do Comitê
-            setInterval(runSignalEngine, 15000);
-            setTimeout(runSignalEngine, 1000);
 
             // Botão de teste Telegram
             document.getElementById('test-telegram-btn').addEventListener('click', async function(e) {
@@ -995,9 +1114,20 @@
                 document.getElementById('test-btn-label').textContent = ok ? '✅ Enviado!' : '❌ Falha';
                 setTimeout(() => { document.getElementById('test-btn-label').textContent = '📨 Testar Alerta'; this.disabled = false; }, 3000);
             });
+
+            // Atualiza timestamp a cada segundo
+            setInterval(() => {
+                const ts = getCurrentTimestamp();
+                const headerEl = DOM['header-timestamp'] || document.getElementById('header-timestamp');
+                if (headerEl) headerEl.textContent = '📅 ' + ts;
+                const lastEl = DOM['last-update'] || document.getElementById('last-update');
+                if (lastEl) lastEl.textContent = ts;
+                document.getElementById('live-update-time').textContent = ts;
+                const badge = document.getElementById('status-badge');
+                if (badge) { badge.textContent = '✅ LIVE'; badge.className = 'status-badge live'; }
+            }, 1000);
         }
 
-        // Iniciar
         init();
     </script>
     </body>
