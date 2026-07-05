@@ -188,14 +188,13 @@ export async function fetchDeFiData() {
     }
 }
 
-// ===== Tether Premium (CORRIGIDO com fallback e cache) =====
+// ===== Tether Premium (com fallback) =====
 export async function fetchTetherPremium() {
     try {
-        // Tentativa 1: ExchangeRate Host
         const data = await fetchWithRetry('https://api.exchangerate.host/latest?base=USD&symbols=BRL');
         if (data && data.rates && typeof data.rates.BRL !== 'undefined') {
             const usdbrl = data.rates.BRL;
-            const usdtbrl = usdbrl * 1.002; // estimativa
+            const usdtbrl = usdbrl * 1.002;
             const premium = ((usdtbrl / usdbrl) - 1) * 100;
             setCachedData('tether_premium_fallback', premium);
             return premium;
@@ -204,7 +203,6 @@ export async function fetchTetherPremium() {
     } catch(e) {
         console.warn('[TetherPremium] exchangerate.host falhou, tentando fallback...', e);
         try {
-            // Tentativa 2: ExchangeRate API
             const data2 = await fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD');
             if (data2 && data2.rates && typeof data2.rates.BRL !== 'undefined') {
                 const usdbrl = data2.rates.BRL;
