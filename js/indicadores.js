@@ -71,6 +71,7 @@ export function calculateADX(candles, period = 14) {
     return { adx: adx[last], plusDI: plusDI[last], minusDI: minusDI[last] };
 }
 
+// ===== FILTRO ADX (NOVO) =====
 export function adxFilter(candles) {
     const { adx, plusDI, minusDI } = calculateADX(candles);
     if (adx < 20) return { pass: false, reason: 'MERCADO LATERAL (ADX < 20)', adx };
@@ -127,6 +128,122 @@ export function calculateATR(candles, period = 14) {
         ));
     }
     return trs.slice(-period).reduce((a,b) => a+b, 0) / period;
+}
+
+// ===== FILTRO FUNDING (NOVO) =====
+export function fundingFilter(fundingData, signalDirection) {
+    if (!fundingData || fundingData.rate === undefined) return { pass: true };
+    const r = fundingData.rate;
+    if (signalDirection === 'LONG' && r > 0.05) return { pass: false, reason: 'Funding muito alto para LONG' };
+    if (signalDirection === 'SHORT' && r < -0.05) return { pass: false, reason: 'Funding muito negativo para SHORT' };
+    if (signalDirection === 'SHORT' && r > 0.03) return { pass: true, bonus: 'Contrarian: longs sobre-apostados' };
+    if (signalDirection === 'LONG' && r < -0.03) return { pass: true, bonus: 'Contrarian: shorts sobre-apostados' };
+    return { pass: true };
+}
+
+// ===== FILTRO ORDER BOOK (NOVO) =====
+export function orderBookFilter(obData, signalDirection) {
+    if (!obData) return { pass: true, reason: 'Sem dados orderbook' };
+    const imbalance = obData.imbalance;
+    if (signalDirection === 'LONG') {
+        if (imbalance < -15) return { pass: false, reason: `OrderBook contra LONG (imbalance: ${imbalance.toFixed(2)}%)` };
+        if (imbalance > 10) return { pass: true, bonus: `OrderBook favorável LONG (imbalance: ${imbalance.toFixed(2)}%)` };
+    }
+    if (signalDirection === 'SHORT') {
+        if (imbalance > 15) return { pass: false, reason: `OrderBook contra SHORT (imbalance: ${imbalance.toFixed(2)}%)` };
+        if (imbalance < -10) return { pass: true, bonus: `OrderBook favorável SHORT (imbalance: ${imbalance.toFixed(2)}%)` };
+    }
+    return { pass: true, reason: `OrderBook neutro (imbalance: ${imbalance.toFixed(2)}%)` };
+}
+
+// ===== FILTRO FEAR & GREED (NOVO) =====
+export function fearGreedFilter(fgData, signalDirection) {
+    if (!fgData) return { pass: true, multiplier: 1 };
+    const v = fgData.value;
+    let multiplier = 1;
+    let reason = '';
+    if (v < 20 && signalDirection === 'LONG') { multiplier = 1.3; reason = 'Extreme Fear — oportunidade contrarian LONG'; }
+    else if (v > 80 && signalDirection === 'SHORT') { multiplier = 1.3; reason = 'Extreme Greed — oportunidade contrarian SHORT'; }
+    else if (v >= 40 && v <= 60) { multiplier = 1; reason = 'Sentimento neutro — sem ajuste'; }
+    else if (v < 15 && signalDirection === 'SHORT') { multiplier = 0.5; reason = 'Extreme Fear — reduzir SHORT'; }
+    else if (v > 85 && signalDirection === 'LONG') { multiplier = 0.5; reason = 'Extreme Greed — reduzir LONG'; }
+    return { pass: true, multiplier, reason, value: v, classification: fgData.classification };
+}
+
+// ===== GERADOR DE TRAILING STOP (NOVO) =====
+export function generateTrailingStopParams(candles, entryPrice, direction) {
+    const atr = calculateATR(candles);
+    if (direction === 'LONG') {
+        return {
+            stopLoss: entryPrice - (atr * 1.5),
+            tp1: entryPrice + (atr * 2),
+            tp2: entryPrice + (atr * 3.5),
+            tp3: entryPrice + (atr * 5.5),
+            trailingActivation: entryPrice + (atr * 3),
+            trailingDistance: atr * 1.2,
+            atr: atr
+        };
+    } else {
+        return {
+            stopLoss: entryPrice + (atr * 1.5),
+            tp1: entryPrice - (atr * 2),
+            tp2: entryPrice - (atr * 3.5),
+            tp3: entryPrice - (atr * 5.5),
+            trailingActivation: entryPrice - (atr * 3),
+            trailingDistance: atr * 1.2,
+            atr: atr
+        };
+    }
+}
+
+// ===== CALCULADORA DE SCORE DO SINAL (NOVO) =====
+export function calculateSignalScore(indicators) {
+    let score = 50;
+    let reasons = [];
+    
+    if (indicators.ema20 > indicators.ema50 && indicators.close > indicators.ema20) {
+        score += 15; reasons.push('EMA Alinhado Alta');
+    } else if (indicators.ema20 < indicators.ema50 && indicators.close < indicators.ema20) {
+        score -= 15; reasons.push('EMA Alinhado Baixa');
+    }
+    
+    if (indicators.rsi > 40 && indicators.rsi < 60) { score += 10; reasons.push('RSI Neutro-Favorável'); }
+    if (indicators.rsi < 30) { score += 5; reasons.push('RSI Sobrevenda'); }
+    if (indicators.rsi > 70) { score -= 5; reasons.push('RSI Sobrecompra'); }
+    
+    if (indicators.adx > 25 && indicators.adx < 50) { score += 12; reasons.push('ADX Tendência Forte'); }
+    if (indicators.adx < 20) { score -= 12; reasons.push('ADX Sem Tendência'); }
+    
+    if (indicators.volumeRatio > 1.5) { score += 10; reasons.push('Volume Alto'); }
+    else if (indicators.volumeRatio < 0.7) { score -= 10; reasons.push('Volume Baixo'); }
+    
+    if (indicators.divergence === 'BULLISH_DIVERGENCE') { score += 15; reasons.push('Divergência Bullish'); }
+    if (indicators.divergence === 'BEARISH_DIVERGENCE') { score -= 15; reasons.push('Divergência Bearish'); }
+    
+    if (indicators.mtfScore >= 2) { score += 12; reasons.push('MTF Confluência Forte'); }
+    else if (indicators.mtfScore >= 1) { score += 6; reasons.push('MTF Confluência Moderada'); }
+    else if (indicators.mtfScore <= -2) { score -= 12; reasons.push('MTF Contra Tendência'); }
+    
+    if (indicators.fundingRate !== undefined) {
+        if (indicators.fundingRate < -0.01 && score > 50) { score += 8; reasons.push('Funding Favorável Long'); }
+        if (indicators.fundingRate > 0.01 && score < 50) { score += 8; reasons.push('Funding Favorável Short'); }
+        if (indicators.fundingRate > 0.05 && score > 50) { score -= 8; reasons.push('Funding Perigoso Long'); }
+    }
+    
+    if (indicators.macdHist > 0 && indicators.macdHist > indicators.macdHistPrev) { score += 8; reasons.push('MACD Momentum Alta'); }
+    if (indicators.macdHist < 0 && indicators.macdHist < indicators.macdHistPrev) { score -= 8; reasons.push('MACD Momentum Baixa'); }
+    
+    score = Math.max(0, Math.min(100, score));
+    
+    let label = 'NEUTRO';
+    if (score >= 80) label = 'MUITO FORTE';
+    else if (score >= 65) label = 'FORTE';
+    else if (score >= 55) label = 'MODERADO';
+    else if (score <= 20) label = 'MUITO FORTE CONTRA';
+    else if (score <= 35) label = 'FORTE CONTRA';
+    else if (score <= 45) label = 'MODERADO CONTRA';
+    
+    return { score, label, reasons, direction: score >= 50 ? 'LONG' : 'SHORT' };
 }
 
 // ===== Choppiness =====
@@ -191,11 +308,8 @@ export function updateSwingPoints(data) {
     data.swingLows = recentLows.slice(-3);
     const lastCandle = c1H[c1H.length - 1];
     if (!lastCandle) return;
-    
-    // CORREÇÃO: Tratar arrays vazios para evitar Infinity
     const lastHigh = data.swingHighs.length > 0 ? Math.max(...data.swingHighs) : null;
     const lastLow = data.swingLows.length > 0 ? Math.min(...data.swingLows) : null;
-    
     if (lastHigh !== null && lastCandle.close > lastHigh) data.currentBOS = 'BULLISH';
     else if (lastLow !== null && lastCandle.close < lastLow) data.currentBOS = 'BEARISH';
     else data.currentBOS = 'NEUTRAL';
@@ -205,7 +319,6 @@ export function findSMCSetup(data, direction) {
     const recent = data.candles1H.slice(-3);
     const lastClose = data.candles1H.length > 0 ? data.candles1H[data.candles1H.length - 1].close : 0;
     if (!lastClose || data.swingLows.length === 0 || data.swingHighs.length === 0) return false;
-    
     if (direction === 'LONG' && data.currentBOS === 'BULLISH') {
         const swingLow = Math.min(...data.swingLows);
         const sweep = recent.some(c => c.low < swingLow) && lastClose > swingLow;
@@ -226,7 +339,7 @@ export function getSMCZones(data) {
     return zones;
 }
 
-// ===== Filtros =====
+// ===== Filtros (mantidos do legado) =====
 export function checkLateralMarket(data, currentPrice) {
     const atr = data.atr_1H || 0;
     const atrPercent = atr / currentPrice;
@@ -252,7 +365,6 @@ export function checkOnChainFilter(data, symbol) {
         const mvrv = data.mvrv; 
         const sopr = data.sopr; 
         const realizedPrice = data.realizedPrice; 
-        
         if (mvrv && mvrv > 3.5) return { allow: false, reason: `MVRV extremo (${mvrv.toFixed(2)}) - zona de distribuição` };
         if (sopr && sopr < 0.75) return { allow: false, reason: `SOPR < 0.75 (${sopr.toFixed(2)}) - capitulação extrema` };
         if (mvrv && sopr && mvrv < 1.0 && sopr < 1) return { allow: true, bonus: 15, reason: 'MVRV/SOPR indicam capitulação' };
@@ -290,7 +402,6 @@ export function checkVolumeAndOrderflow(data, direction) {
         if (direction === 'LONG' && c1.low > c2.high && c3.close > c2.high) fvgConfluence = true;
         if (direction === 'SHORT' && c1.high < c2.low && c3.close < c2.low) fvgConfluence = true;
     }
-    
     if (!fvgConfluence) {
         return { volumeConfirmed: volumeSpike, orderflowConfirmed: cvdSpike, fvgConfluence: false, bonus: 0, blocked: false };
     }
@@ -337,7 +448,7 @@ export function checkMTFAlignment(data, direction) {
     return { passed: true, alignedCount: aligned };
 }
 
-// ===== Score principal =====
+// ===== Score principal (legado) =====
 export function computeScore(symbol, assetsData, liqMap) {
     const data = assetsData[symbol];
     if (!data || data.price === 0) return { score: 50, components: {}, blockReason: null };
@@ -374,7 +485,7 @@ export function computeScore(symbol, assetsData, liqMap) {
     else if (primaryDirection === 'LONG' && liq.longs > 50000) ofScore = 20;
     else if (primaryDirection === 'SHORT' && liq.longs > 50000) ofScore = 80;
     else if (primaryDirection === 'SHORT' && liq.shorts > 50000) ofScore = 20;
-    const macroSafe = isSafeToTrade(assetsData) ? 100 : 0;
+    const macroSafe = isSafeToTrade() ? 100 : 0;
     let oiScore = clamp(50 + (data.oiDelta * 2), 0, 100);
     const lateralCheck = checkLateralMarket(data, data.price);
     if (lateralCheck.blocked) blockReason = lateralCheck.reason;
@@ -423,7 +534,7 @@ export function computeScore(symbol, assetsData, liqMap) {
 }
 
 // ===== Safe to Trade (horários) =====
-export function isSafeToTrade(assetsData) {
+export function isSafeToTrade() {
     const now = new Date();
     const hourUTC = now.getUTCHours();
     const minUTC = now.getUTCMinutes();
