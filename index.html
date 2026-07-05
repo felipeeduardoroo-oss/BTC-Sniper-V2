@@ -414,8 +414,8 @@
                 <div class="summary-card"><h3>Bitcoin</h3><div class="value negative" id="btc-price">$60.000</div><div class="subtext" id="btc-change">↓ 5,94%</div><span class="source-with-time" id="btc-source">CoinGecko • WS</span></div>
                 <div class="summary-card"><h3>Ethereum</h3><div class="value negative" id="eth-price">$1.573,53</div><div class="subtext" id="eth-change">↓ 0,15%</div><span class="source-with-time" id="eth-source">CoinGecko • WS</span></div>
                 <div class="summary-card"><h3>Solana</h3><div class="value negative" id="sol-price">$170,00</div><div class="subtext" id="sol-change">↓ 2,30%</div><span class="source-with-time" id="sol-source">CoinGecko • WS</span></div>
-                <div class="summary-card"><h3>Sentiment Macro</h3><div class="value negative" id="macro-summary">DXY 101,37 | US10Y 4,28%</div><div class="subtext" id="macro-status">Referência</div><span class="source-with-time" id="macro-source">Estático</span></div>
-                <div class="summary-card"><h3>Tether Premium</h3><div class="value negative" id="tether-premium">Carregando...</div><div class="subtext">USDT/BRL vs USD/BRL</div><span class="source-with-time" id="tether-source">Estimado</span></div>
+                <div class="summary-card"><h3>Sentiment Macro</h3><div class="value negative" id="macro-summary">DXY 101,37 | US10Y 4,28%</div><div class="subtext" id="macro-status">Referência</div><span class="source-with-time" id="macro-source">Yahoo Finance</span></div>
+                <div class="summary-card"><h3>Tether Premium</h3><div class="value negative" id="tether-premium">Carregando...</div><div class="subtext">USDT/BRL vs USD/BRL</div><span class="source-with-time" id="tether-source">CoinGecko & ExchangeRate</span></div>
             </div>
             <div id="update-info" style="margin-top:10px; font-size:0.85em; color:var(--text-muted); text-align:right;">Última atualização geral: <span id="last-update">--</span></div>
         </section>
@@ -440,8 +440,8 @@
                         <tr><td><strong>SOPR</strong></td><td id="sopr">Carregando...</td><td id="sopr-interp">--</td><td><span class="data-source" id="sopr-source">Estimado</span></td></tr>
                         <tr><td><strong>aSOPR 7D</strong></td><td id="asopr">Carregando...</td><td id="asopr-interp">--</td><td><span class="data-source" id="asopr-source">Estimado</span></td></tr>
                         <tr><td><strong>Realized Price (BTC)</strong></td><td id="realized-price">Carregando...</td><td>ℹ️ Preço médio</td><td><span class="data-source" id="realized-price-source">Estimado</span></td></tr>
-                        <tr><td><strong>ETF Flows (BTC)</strong></td><td id="etf-btc-live"><strong>Carregando...</strong></td><td id="etf-btc-interp">--</td><td><span class="data-source" id="etf-btc-source">Estático</span></td></tr>
-                        <tr><td><strong>ETF Flows (ETH)</strong></td><td id="etf-eth-live"><strong>Carregando...</strong></td><td id="etf-eth-interp">--</td><td><span class="data-source" id="etf-eth-source">Estático</span></td></tr>
+                        <tr><td><strong>ETF Flows (BTC)</strong></td><td id="etf-btc-live"><strong>Carregando...</strong></td><td id="etf-btc-interp">--</td><td><span class="data-source" id="etf-btc-source">Yahoo Finance</span></td></tr>
+                        <tr><td><strong>ETF Flows (ETH)</strong></td><td id="etf-eth-live"><strong>Carregando...</strong></td><td id="etf-eth-interp">--</td><td><span class="data-source" id="etf-eth-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>Exchange Netflow</strong></td><td id="exchange-netflow">Carregando...</td><td id="exchange-netflow-interp">--</td><td><span class="data-source" id="exchange-netflow-source">Estimado</span></td></tr>
                         <tr><td><strong>Funding Rate (atual)</strong></td><td id="funding-rate">Carregando...</td><td id="funding-rate-interp">ℹ️ Neutro</td><td><span class="data-source" id="funding-rate-source">Binance</span></td></tr>
                         <tr><td><strong>Open Interest</strong></td><td id="open-interest">$20,69B</td><td id="open-interest-interp">ℹ️ Moderado</td><td><span class="data-source" id="open-interest-source">Binance</span></td></tr>
@@ -479,12 +479,12 @@
                 <table>
                     <thead><tr><th>Indicador</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
                     <tbody>
-                        <tr><td><strong>DXY</strong></td><td id="dxy-value">Carregando...</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source" id="dxy-source">Estático</span></td></tr>
+                        <tr><td><strong>DXY</strong></td><td id="dxy-value">Carregando...</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source" id="dxy-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">Carregando...</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source" id="fed-source">Estático</span></td></tr>
-                        <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">Carregando...</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source" id="us10y-source">Estático</span></td></tr>
-                        <tr><td><strong>VIX</strong></td><td id="vix-value">Carregando...</td><td id="vix-interp">ℹ️ Estresse</td><td><span class="data-source" id="vix-source">Estático</span></td></tr>
-                        <tr><td><strong>NASDAQ % (24h)</strong></td><td id="nasdaq-value">Carregando...</td><td>🔴 Tech</td><td><span class="data-source" id="nasdaq-source">Estático</span></td></tr>
-                        <tr><td><strong>S&amp;P 500 % (24h)</strong></td><td id="sp500-value">Carregando...</td><td>ℹ️ Broad market</td><td><span class="data-source" id="sp500-source">Estático</span></td></tr>
+                        <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">Carregando...</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source" id="us10y-source">Yahoo Finance</span></td></tr>
+                        <tr><td><strong>VIX</strong></td><td id="vix-value">Carregando...</td><td id="vix-interp">ℹ️ Estresse</td><td><span class="data-source" id="vix-source">Yahoo Finance</span></td></tr>
+                        <tr><td><strong>NASDAQ % (24h)</strong></td><td id="nasdaq-value">Carregando...</td><td>🔴 Tech</td><td><span class="data-source" id="nasdaq-source">Yahoo Finance</span></td></tr>
+                        <tr><td><strong>S&amp;P 500 % (24h)</strong></td><td id="sp500-value">Carregando...</td><td>ℹ️ Broad market</td><td><span class="data-source" id="sp500-source">Yahoo Finance</span></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -998,12 +998,20 @@
             try {
                 const coinMetrics = await dadosExternos.fetchCoinMetrics();
                 if (coinMetrics) {
-                    assetsData['BTCUSDT'].mvrv = coinMetrics.price / coinMetrics.realized;
-                    assetsData['BTCUSDT'].realizedPrice = coinMetrics.realized;
-                    const mvrvEl = document.getElementById('mvrv');
-                    if (mvrvEl) mvrvEl.textContent = (coinMetrics.price / coinMetrics.realized).toFixed(2) + ' (live)';
-                    const realizedEl = document.getElementById('realized-price');
-                    if (realizedEl) realizedEl.textContent = '$' + coinMetrics.realized.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' (live)';
+                    const realized = coinMetrics.realized;
+                    if (realized) {
+                        assetsData['BTCUSDT'].mvrv = coinMetrics.price / realized;
+                        assetsData['BTCUSDT'].realizedPrice = realized;
+                        const mvrvEl = document.getElementById('mvrv');
+                        if (mvrvEl) mvrvEl.textContent = (coinMetrics.price / realized).toFixed(2) + ' (live)';
+                        const realizedEl = document.getElementById('realized-price');
+                        if (realizedEl) realizedEl.textContent = '$' + realized.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' (live)';
+                    } else {
+                        const mvrvEl = document.getElementById('mvrv');
+                        if (mvrvEl) mvrvEl.textContent = 'N/A';
+                        const realizedEl = document.getElementById('realized-price');
+                        if (realizedEl) realizedEl.textContent = 'N/A';
+                    }
                     const netflowEl = document.getElementById('exchange-netflow');
                     if (netflowEl) netflowEl.textContent = (coinMetrics.netflow >= 0 ? '+' : '') + (coinMetrics.netflow / 1e6).toFixed(2) + ' BTC (live)';
                     const minerEl = document.getElementById('miner-outflow');
@@ -1027,9 +1035,10 @@
                 const etf = await dadosExternos.fetchETFData();
                 if (etf) {
                     const btcEtfEl = document.getElementById('etf-btc-live');
-                    if (btcEtfEl) btcEtfEl.innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + '$' + etf.btcFlow.toFixed(2) + 'M</strong>';
+                    if (btcEtfEl) btcEtfEl.innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + etf.btcFlow.toFixed(2) + '%</strong>';
                     const ethEtfEl = document.getElementById('etf-eth-live');
-                    if (ethEtfEl) ethEtfEl.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + '$' + etf.ethFlow.toFixed(2) + 'M</strong>';
+                    if (ethEtfEl) ethEtfEl.innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + etf.ethFlow.toFixed(2) + '%</strong>';
+                    graficos.updateETFChart(etf);
                 }
 
                 const premium = await dadosExternos.fetchTetherPremium();
@@ -1039,7 +1048,7 @@
                         tetherEl.textContent = (premium >= 0 ? '+' : '') + premium.toFixed(2) + '%';
                         tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
                     } else {
-                        tetherEl.textContent = '0.00%';
+                        tetherEl.textContent = 'N/A';
                         tetherEl.className = 'value';
                     }
                 }
@@ -1081,7 +1090,7 @@
                     if (changeEl) changeEl.textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
                 }
 
-                // MACRO (dados estáticos – SEM YAHOO)
+                // MACRO (agora via Yahoo Finance)
                 const macro = await dadosExternos.fetchMacroStatic();
                 if (macro) {
                     const dxyEl = document.getElementById('dxy-value');
@@ -1100,6 +1109,7 @@
                         spEl.textContent = (macro.spChange >= 0 ? '+' : '') + macro.spChange.toFixed(2) + '%';
                         spEl.style.color = macro.spChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
                     }
+                    graficos.updateMacroChart(macro);
                     const now = getCurrentTimestamp();
                     ['dxy-update', 'us10y-update', 'vix-update', 'nasdaq-update', 'sp500-update'].forEach(id => {
                         const updateEl = document.getElementById(id);
@@ -1143,7 +1153,7 @@
                     const closes = c1H.map(c => c.close);
                     const highs = c1H.map(c => c.high);
                     const lows = c1H.map(c => c.low);
-                    assetsData[symbol].price = closes.at(-1);
+                    assetsData[symbol].price = closes[closes.length - 1];
                     assetsData[symbol].ema50_1H = closes.slice(-50).reduce((a,b)=>a+b,0) / 50;
                     assetsData[symbol].ema200_4H = closes.slice(-200).reduce((a,b)=>a+b,0) / 200;
                     assetsData[symbol].atr_1H = indicadores.calculateATR(c1H, 14);
@@ -1160,17 +1170,17 @@
                     assetsData[symbol].bbWidth = bb.bbWidth;
                     const vols = c1H.map(c => c.volume);
                     assetsData[symbol].volumeAvg = vols.slice(-20).reduce((a,b)=>a+b,0)/20;
-                    assetsData[symbol].currentVolume = vols.at(-1) || 0;
+                    assetsData[symbol].currentVolume = vols[vols.length - 1] || 0;
                     if (c4H.length > 0) {
                         const closes4H = c4H.map(c => c.close);
                         const ema200_4H = closes4H.slice(-200).reduce((a,b)=>a+b,0)/200;
-                        assetsData[symbol].trend4H = closes4H.at(-1) > ema200_4H ? 'LONG' : 'SHORT';
+                        assetsData[symbol].trend4H = closes4H[closes4H.length - 1] > ema200_4H ? 'LONG' : 'SHORT';
                         assetsData[symbol].htfStructure = indicadores.detectHTFStructure(assetsData[symbol], c4H);
                     }
                     if (c1D.length > 0) {
                         const closes1D = c1D.map(c => c.close);
                         const ema200_1D = closes1D.slice(-200).reduce((a,b)=>a+b,0)/200;
-                        assetsData[symbol].trend1D = closes1D.at(-1) > ema200_1D ? 'LONG' : 'SHORT';
+                        assetsData[symbol].trend1D = closes1D[closes1D.length - 1] > ema200_1D ? 'LONG' : 'SHORT';
                     }
                 }
             }
@@ -1203,13 +1213,13 @@
                             atrHist.push(indicadores.calculateATR(slice, 14));
                         }
                         assetsData[symbol].atrHistory = atrHist.slice(-50);
-                        assetsData[symbol].atr_1H = atrHist.at(-1) || 0;
-                        assetsData[symbol].currentVolume = c1H.at(-1).volume;
+                        assetsData[symbol].atr_1H = atrHist[atrHist.length - 1] || 0;
+                        assetsData[symbol].currentVolume = c1H[c1H.length - 1].volume;
                         const bb = indicadores.calculateBB(assetsData[symbol], 20, 2);
                         assetsData[symbol].bbWidth = bb.bbWidth;
                     }
                     if (assetsData[symbol].candles1H.length > 0 && candleCharts[symbol]) {
-                        const lastCandle = assetsData[symbol].candles1H.at(-1);
+                        const lastCandle = assetsData[symbol].candles1H[assetsData[symbol].candles1H.length - 1];
                         if (lastCandle) {
                             graficos.updateCandle(candleCharts[symbol], lastCandle);
                         }
