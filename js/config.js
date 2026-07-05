@@ -8,9 +8,8 @@ export const CONFIG = {
     CACHE_TTL_MS: 600000, // 10 minutos
     MAX_RETRIES: 3,
     RETRY_DELAY_MS: 1000,
-    PROXY_URL: 'https://api.allorigins.win/raw?url=',
-    // Se tiver chave do FRED, coloque aqui:
-    FRED_API_KEY: '', // opcional
+    PROXY_URL: 'https://corsproxy.io/?url=', // Proxy mais estável
+    FRED_API_KEY: '', 
 };
 
 export const COLORS = {
