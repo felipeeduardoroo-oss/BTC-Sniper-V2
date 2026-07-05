@@ -705,136 +705,117 @@ async function runSignalEngine() {
         let wsRetryCount = 0;
         const WS_MAX_RETRIES = 5;
 
-        function initWebSockets() {
-            const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
-            const streams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
-            const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+     function initWebSockets() {
+    const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
+    const streams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
+    const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
 
-            ws.onopen = () => {
-                wsRetryCount = 0;
-                if (wsStatusEl) {
-                    wsStatusEl.textContent = '🔄 WEBSOCKET LIVE';
-                    wsStatusEl.style.color = 'var(--accent-green)';
-                    wsStatusEl.style.animation = 'pulse-dot 1.5s infinite';
-                }
-            };
-         ws.onmessage = (event) => {
-    try {
-        const msg = JSON.parse(event.data);
-        const symbol = msg.data.s;
-        const price = parseFloat(msg.data.p);
-        const qty = parseFloat(msg.data.q);
-        const isBuy = !msg.data.m; // true = compra, false = venda
-
-        setCurrentPrice(symbol, price);
-
-        // ---- WHALE TRACKER ----
-        const tradeValue = price * qty;
-        if (tradeValue > 100000) {
-            if (isBuy) whaleTrades[symbol].buys += tradeValue;
-            else whaleTrades[symbol].sells += tradeValue;
-            whaleTrades[symbol].lastTx = {
-                price,
-                value: tradeValue,
-                time: Date.now(),
-                side: isBuy ? 'BUY' : 'SELL'
-            };
-            updateWhaleUI();
+    ws.onopen = () => {
+        wsRetryCount = 0;
+        if (wsStatusEl) {
+            wsStatusEl.textContent = '🔄 WEBSOCKET LIVE';
+            wsStatusEl.style.color = 'var(--accent-green)';
+            wsStatusEl.style.animation = 'pulse-dot 1.5s infinite';
         }
+    };
 
-        if (assetsData[symbol]) {
-            const prevPrice = assetsData[symbol].price;
-            assetsData[symbol].price = price;
-            if (prevPrice > 0) {
-                assetsData[symbol].ema50_1H = updateStatefulEMA(assetsData[symbol].ema50_1H, price, 50);
-                assetsData[symbol].ema200_4H = updateStatefulEMA(assetsData[symbol].ema200_4H, price, 200);
-                assetsData[symbol].rsiState = updateStatefulRSI(assetsData[symbol].rsiState, price, prevPrice);
-                assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+    ws.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+            const symbol = msg.data.s;
+            const price = parseFloat(msg.data.p);
+            const qty = parseFloat(msg.data.q);
+            const isBuy = !msg.data.m;
+
+            setCurrentPrice(symbol, price);
+
+            // ---- WHALE TRACKER ----
+            const tradeValue = price * qty;
+            if (tradeValue > 100000) {
+                if (isBuy) whaleTrades[symbol].buys += tradeValue;
+                else whaleTrades[symbol].sells += tradeValue;
+                whaleTrades[symbol].lastTx = {
+                    price,
+                    value: tradeValue,
+                    time: Date.now(),
+                    side: isBuy ? 'BUY' : 'SELL'
+                };
+                updateWhaleUI();
             }
-            checkPositionManagement(symbol, price);
-            updateLivePriceUI(symbol, price);
+
+            if (assetsData[symbol]) {
+                const prevPrice = assetsData[symbol].price;
+                assetsData[symbol].price = price;
+                if (prevPrice > 0) {
+                    assetsData[symbol].ema50_1H = updateStatefulEMA(assetsData[symbol].ema50_1H, price, 50);
+                    assetsData[symbol].ema200_4H = updateStatefulEMA(assetsData[symbol].ema200_4H, price, 200);
+                    assetsData[symbol].rsiState = updateStatefulRSI(assetsData[symbol].rsiState, price, prevPrice);
+                    assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+                }
+                checkPositionManagement(symbol, price);
+                updateLivePriceUI(symbol, price);
+            }
+        } catch (e) {
+            // ignora mensagens malformadas
         }
-    } catch (e) {
-        // ignora mensagens malformadas
-    }
-};
-            // Após atualizar o preço
-const tradeValue = price * qty;
-if (tradeValue > 100000) {
-    if (isBuy) whaleTrades[symbol].buys += tradeValue;
-    else whaleTrades[symbol].sells += tradeValue;
-    whaleTrades[symbol].lastTx = { price, value: tradeValue, time: Date.now(), side: isBuy ? 'BUY' : 'SELL' };
-    updateWhaleUI();
+    };
+
+    ws.onerror = (e) => {
+        console.warn('WS Error', e);
+        if (wsStatusEl) {
+            wsStatusEl.textContent = '❌ WS OFFLINE';
+            wsStatusEl.style.color = 'var(--accent-red)';
+            wsStatusEl.style.animation = 'none';
+        }
+    };
+
+    ws.onclose = () => {
+        if (wsStatusEl) {
+            wsStatusEl.textContent = '🔄 RECONNECTING...';
+            wsStatusEl.style.color = 'var(--accent-yellow)';
+            wsStatusEl.style.animation = 'none';
+        }
+        wsRetryCount++;
+        const delay = Math.min(3000 * Math.pow(1.5, wsRetryCount), 30000);
+        if (wsRetryCount <= WS_MAX_RETRIES) {
+            setTimeout(initWebSockets, delay);
+        } else {
+            if (wsStatusEl) {
+                wsStatusEl.textContent = '⛔ WS FALHOU (limite)';
+                wsStatusEl.style.color = 'var(--accent-red)';
+            }
+        }
+    };
+
+    // Liquidações
+    const wsLiq = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
+    wsLiq.onmessage = (event) => {
+        try {
+            const orders = JSON.parse(event.data);
+            orders.forEach(o => {
+                const symbol = o.order.symbol;
+                if (liqMap[symbol]) {
+                    const side = o.order.side;
+                    const price = parseFloat(o.order.price);
+                    const qty = parseFloat(o.order.origQty) * price;
+                    if (side === 'BUY') liqMap[symbol].longs += qty;
+                    else liqMap[symbol].shorts += qty;
+                    if (!liquidationLevels[symbol]) liquidationLevels[symbol] = [];
+                    liquidationLevels[symbol].push(price);
+                    if (liquidationLevels[symbol].length > 100) liquidationLevels[symbol].shift();
+                }
+            });
+        } catch (e) {
+            // ignora
+        }
+    };
+    wsLiq.onclose = () => setTimeout(initWebSockets, 5000);
+
+    // Reseta liquidações a cada 4 horas
+    setInterval(() => {
+        Object.keys(liqMap).forEach(k => liqMap[k] = { longs: 0, shorts: 0 });
+    }, 4 * 60 * 60 * 1000);
 }
-            ws.onerror = (e) => {
-                console.warn('WS Error', e);
-                if (wsStatusEl) {
-                    wsStatusEl.textContent = '❌ WS OFFLINE';
-                    wsStatusEl.style.color = 'var(--accent-red)';
-                    wsStatusEl.style.animation = 'none';
-                }
-            };
-            ws.onclose = () => {
-                if (wsStatusEl) {
-                    wsStatusEl.textContent = '🔄 RECONNECTING...';
-                    wsStatusEl.style.color = 'var(--accent-yellow)';
-                    wsStatusEl.style.animation = 'none';
-                }
-                wsRetryCount++;
-                const delay = Math.min(3000 * Math.pow(1.5, wsRetryCount), 30000);
-                if (wsRetryCount <= WS_MAX_RETRIES) {
-                    setTimeout(initWebSockets, delay);
-                } else {
-                    if (wsStatusEl) {
-                        wsStatusEl.textContent = '⛔ WS FALHOU (limite)';
-                        wsStatusEl.style.color = 'var(--accent-red)';
-                    }
-                }
-            };
-
-            // Liquidações
-            const wsLiq = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
-            wsLiq.onmessage = (event) => {
-                try {
-                    const orders = JSON.parse(event.data);
-                    orders.forEach(o => {
-                        const symbol = o.order.symbol;
-                        if (liqMap[symbol]) {
-                            const side = o.order.side;
-                            const price = parseFloat(o.order.price);
-                            const qty = parseFloat(o.order.origQty) * price;
-                            if (side === 'BUY') liqMap[symbol].longs += qty;
-                            else liqMap[symbol].shorts += qty;
-                            if (!liquidationLevels[symbol]) liquidationLevels[symbol] = [];
-                            liquidationLevels[symbol].push(price);
-                            if (liquidationLevels[symbol].length > 100) liquidationLevels[symbol].shift();
-                        }
-                    });
-                } catch (e) { /* ignora */ }
-            };
-            wsLiq.onclose = () => setTimeout(initWebSockets, 5000);
-            setInterval(() => {
-                Object.keys(liqMap).forEach(k => liqMap[k] = { longs: 0, shorts: 0 });
-            }, 4 * 60 * 60 * 1000);
-        }
-
-        // ===== UI UPDATES =====
-        function updateLivePriceUI(symbol, price) {
-            const prefix = symbol.replace('USDT', '').toLowerCase();
-            const el = DOM[`${prefix}-price`] || document.getElementById(`${prefix}-price`);
-            if (el) {
-                const oldPrice = parseFloat(el.textContent.replace(/[^0-9.-]/g, ''));
-                el.textContent = formatCurrency(price);
-                if (!isNaN(oldPrice) && price !== oldPrice) {
-                    el.style.transition = 'color 0.3s, background 0.3s';
-                    const color = price > oldPrice ? 'var(--accent-green)' : 'var(--accent-red)';
-                    el.style.color = color;
-                    el.style.background = price > oldPrice ? 'rgba(0, 232, 150, 0.1)' : 'rgba(255, 77, 109, 0.1)';
-                    setTimeout(() => { el.style.color = ''; el.style.background = ''; }, 300);
-                }
-            }
-        }
-
         function updateMainScoreUI(scoreData, blockReason) {
             const s = scoreData.score;
             const c = scoreData.components;
