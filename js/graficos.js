@@ -31,16 +31,16 @@ export function initCharts() {
         etfChart = new Chart(ctx1, {
             type: 'bar',
             data: {
-                labels: ['22 JUN', '23 JUN', '24 JUN', '25 JUN', '26 JUN', '27 JUN', '28 JUN'],
+                labels: [],
                 datasets: [
-                    { label: 'BTC ETF Flow (ref)', data: [-120, -85, -155, -92, -138, -165, -445], backgroundColor: 'rgba(233,69,96,0.6)', borderColor: 'rgb(233,69,96)', borderWidth: 2 },
-                    { label: 'ETH ETF Flow (ref)', data: [-8, -12, -15, -10, -18, -20, -12.85], backgroundColor: 'rgba(0,180,216,0.4)', borderColor: 'rgb(0,180,216)', borderWidth: 2 }
+                    { label: 'BTC ETF (IBIT)', data: [], backgroundColor: 'rgba(233,69,96,0.6)', borderColor: 'rgb(233,69,96)', borderWidth: 2 },
+                    { label: 'ETH ETF (ETHA)', data: [], backgroundColor: 'rgba(0,180,216,0.4)', borderColor: 'rgb(0,180,216)', borderWidth: 2 }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { labels: { color: COLORS.textLight } }, title: { display: true, text: 'ETF Flows (referência)', color: COLORS.textLight } },
+                plugins: { legend: { labels: { color: COLORS.textLight } }, title: { display: true, text: 'ETF Performance (Var % Diária)', color: COLORS.textLight } },
                 scales: {
                     y: { ticks: { color: COLORS.textMuted }, grid: { color: 'rgba(255,255,255,0.06)' } },
                     x: { ticks: { color: COLORS.textMuted }, grid: { color: 'rgba(255,255,255,0.06)' } }
@@ -54,16 +54,16 @@ export function initCharts() {
         macroChart = new Chart(ctx2, {
             type: 'line',
             data: {
-                labels: ['17 JUN', '19 JUN', '21 JUN', '23 JUN', '25 JUN', '27 JUN', '28 JUN'],
+                labels: [],
                 datasets: [
-                    { label: 'DXY (ref)', data: [100.8, 100.95, 101.15, 101.28, 101.32, 101.35, 101.37], borderColor: 'rgb(233,69,96)', borderWidth: 2, tension: 0.4, yAxisID: 'y' },
-                    { label: 'US10Y (ref)', data: [4.32, 4.30, 4.29, 4.28, 4.27, 4.28, 4.28], borderColor: 'rgb(255,214,10)', borderWidth: 2, tension: 0.4, yAxisID: 'y1' }
+                    { label: 'DXY', data: [], borderColor: 'rgb(233,69,96)', borderWidth: 2, tension: 0.4, yAxisID: 'y' },
+                    { label: 'US10Y', data: [], borderColor: 'rgb(255,214,10)', borderWidth: 2, tension: 0.4, yAxisID: 'y1' }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { labels: { color: COLORS.textLight } }, title: { display: true, text: 'Macro (referência)', color: COLORS.textLight } },
+                plugins: { legend: { labels: { color: COLORS.textLight } }, title: { display: true, text: 'Macro (Dados Reais)', color: COLORS.textLight } },
                 scales: {
                     y: { position: 'left', ticks: { color: COLORS.textMuted }, grid: { color: 'rgba(255,255,255,0.06)' } },
                     y1: { position: 'right', ticks: { color: COLORS.textMuted }, grid: { drawOnChartArea: false } },
@@ -98,14 +98,14 @@ export function initCharts() {
             data: {
                 labels: ['BTC', 'ETH'],
                 datasets: [
-                    { label: 'Acumulação (ref)', data: [700, 0], backgroundColor: 'rgba(0,217,142,0.7)', borderColor: 'rgb(0,217,142)', borderWidth: 2 },
-                    { label: 'Distribuição (ref)', data: [0, 27.4], backgroundColor: 'rgba(233,69,96,0.7)', borderColor: 'rgb(233,69,96)', borderWidth: 2 }
+                    { label: 'Acumulação', data: [0, 0], backgroundColor: 'rgba(0,217,142,0.7)', borderColor: 'rgb(0,217,142)', borderWidth: 2 },
+                    { label: 'Distribuição', data: [0, 0], backgroundColor: 'rgba(233,69,96,0.7)', borderColor: 'rgb(233,69,96)', borderWidth: 2 }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { labels: { color: COLORS.textLight } }, title: { display: true, text: 'Fluxo de Baleias (referência)', color: COLORS.textLight } },
+                plugins: { legend: { labels: { color: COLORS.textLight } }, title: { display: true, text: 'Fluxo de Baleias', color: COLORS.textLight } },
                 scales: {
                     y: { ticks: { color: COLORS.textMuted }, grid: { color: 'rgba(255,255,255,0.06)' }, title: { display: true, text: 'Volume (USD M)', color: COLORS.textLight } },
                     x: { ticks: { color: COLORS.textMuted }, grid: { color: 'rgba(255,255,255,0.06)' } }
@@ -123,6 +123,22 @@ export function updateScoreChart(history) {
     scoreChart.data.labels = btcHist.map(s => s.time);
     scoreChart.data.datasets[0].data = btcHist.map(s => s.score);
     scoreChart.update('none');
+}
+
+export function updateETFChart(data) {
+    if (!etfChart || !data) return;
+    etfChart.data.labels = ['Hoje'];
+    etfChart.data.datasets[0].data = [data.btcFlow];
+    etfChart.data.datasets[1].data = [data.ethFlow];
+    etfChart.update();
+}
+
+export function updateMacroChart(data) {
+    if (!macroChart || !data) return;
+    macroChart.data.labels = ['Atual'];
+    macroChart.data.datasets[0].data = [data.dxy];
+    macroChart.data.datasets[1].data = [data.us10y];
+    macroChart.update();
 }
 
 export function updateScenarios(score) {
