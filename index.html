@@ -307,102 +307,7 @@
 
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
- <script type="module">
-        import { CONFIG } from './js/config.js';
-        import * as indicadores from './js/indicadores.js';
-        import * as dadosExternos from './js/dados_externos.js';
-        import * as graficos from './js/graficos.js';
-        import * as telegram from './js/telegram.js';
-        import * as banco from './js/banco_de_dados.js';
-        import * as historico from './js/historicos_sinais.js';
-
-        // ===== IMPORTAÇÕES DO COMITÊ =====
-        const {
-            calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
-            generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
-            calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
-            computeChoppiness, calculateBB, detectHTFStructure, updateSwingPoints,
-            findSMCSetup, getSMCZones, checkLateralMarket, checkHTFAlignment,
-            checkOnChainFilter, checkVolumeAndOrderflow, checkDerivativesFilter,
-            checkPortfolioExposure, checkMTFAlignment, computeScore, isSafeToTrade,
-            KellyPositionSize
-        } = indicadores;
-
-        const {
-            fetchHistoricalCandles, fetchFundingRate, fetchOpenInterest, fetchBasis,
-            fetchBlockchairStats, fetchMempoolStats, fetchETFData, fetchFedRate,
-            fetchPutCallRatio, fetchDeFiData, fetchTetherPremium, fetchFearGreed,
-            fetchMacroStatic, getMTFConfluence, fetchOrderBook
-        } = dadosExternos;
-
-        // ============================================================
-        //  STATE
-        // ============================================================
-        const assetsData = {};
-        CONFIG.ASSETS.forEach(symbol => {
-            assetsData[symbol] = {
-                price: 0, candles1H: [], candles4H: [], candles1D: [],
-                ema50_1H: 0, ema200_4H: 0, rsi_1H: 50, atr_1H: 0, atrHistory: [],
-                swingHighs: [], swingLows: [], currentBOS: 'NEUTRAL', mtfTrend: 'NEUTRAL',
-                oiDelta: 0, volumeRel: 1.0, rsiState: { avgGain: 0, avgLoss: 0, rsi: 50 }, bbWidth: 0.1,
-                volumeAvg: 0, currentVolume: 0, fundingRate: 0, trend4H: 'NEUTRAL', trend1D: 'NEUTRAL',
-                htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity }, mtfConfluence: null
-            };
-        });
-
-        let activePositions = {};
-        let liqMap = { 'BTCUSDT': { longs: 0, shorts: 0 }, 'ETHUSDT': { longs: 0, shorts: 0 }, 'SOLUSDT': { longs: 0, shorts: 0 } };
-        let liquidationLevels = { 'BTCUSDT': [], 'ETHUSDT': [], 'SOLUSDT': [] };
-        let scoreHistory = [];
-        let previousScores = { 'BTCUSDT': 50, 'ETHUSDT': 50, 'SOLUSDT': 50 };
-        let whaleTrades = { 'BTCUSDT': { buys: 0, sells: 0, lastTx: null }, 'ETHUSDT': { buys: 0, sells: 0, lastTx: null }, 'SOLUSDT': { buys: 0, sells: 0, lastTx: null } };
-        let alertCooldowns = {};
-
-        const DOM = {};
-        function cacheDOM() {
-            const ids = ['btc-price', 'eth-price', 'sol-price', 'score-value', 'score-bar', 'last-update', 'header-timestamp', 'status-badge', 'ws-status'];
-            ids.forEach(id => DOM[id] = document.getElementById(id));
-        }
-
-        function getCurrentTimestamp() {
-            return new Date().toLocaleString('pt-BR', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Sao_Paulo' });
-        }
-
-        function formatCurrency(value) { return '$' + Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-
-        // ============================================================
-        //  UI HELPERS DO COMITÊ
-        // ============================================================
-        function renderMiniOrderBook(obData) {
-            if (!obData) return '<span style="color:#8b949e;">N/A</span>';
-            const maxQty = Math.max(...obData.bids.map(b=>b.qty), ...obData.asks.map(a=>a.qty));
-            const bar = (qty) => (qty/maxQty*100).toFixed(0);
-            let html = '<div class="orderbook-mini">';
-            for (let i = obData.asks.length - 1; i >= 0; i--) {
-                const a = obData.asks[i];
-                html += `<div style="display:flex;justify-content:space-between;align-items:center;"><span class="ask">${a.price.toFixed(2)}</span><span style="color:#8b949e;">${a.qty.toFixed(4)}</span><div class="bar-bg"><div class="bar-fill" style="width:${bar(a.qty)}%;background:#ff5252;"></div></div></div>`;
-            }
-            const spread = ((obData.asks[0].price - obData.bids[0].price) / obData.bids[0].price * 100).toFixed(3);
-            html += `<div class="spread">Spread: ${spread}%</div>`;
-            for (const b of obData.bids) {
-                html += `<div style="display:flex;justify-content:space-between;align-items:center;"><span class="bid">${b.price.toFixed(2)}</span><span style="color:#8b949e;">${b.qty.toFixed(4)}</span><div class="bar-bg"><div class="bar-fill" style="width:${bar(b.qty)}%;background:#00e676;"></div></div></div>`;
-            }
-            html += '</div>';
-            return html;
-        }
-
-        function formatTrailingHTML(params, direction) {
-            const color = direction === 'LONG' ? '#00e676' : '#ff1744';
-            return `
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;text-align:left;">
-                    <span style="color:#888;">Stop Loss:</span><span style="color:#ff5252;font-weight:700;">$${params.stopLoss.toFixed(2)}</span>
-                    <span style="color:#888;">TP1 (50%):</span><span style="color:${color};font-weight:600;">$${params.tp1.toFixed(2)}</span>
-                    <span style="color:#888;">TP2 (30%):</span><span style="color:${color};font-weight:600;">$${params.tp2.toFixed(2)}</span>
-                    <span style="color:#888;">TP3 (20%):</span><span style="color:${color};font-weight:600;">$${params.tp3.toFixed(2)}</span>
-                    <span style="color:#888;">Trailing Ativa:</span><span style="color:#ffc107;">$${params.trailingActivation.toFixed(2)}</span>
-                    <span style="color:#888;">Trailing Dist:</span><span style="color:#ffc107;">$${params.trailingDistance.toFixed(2)}</span>
-                    <span style="color:#888;">ATR:</span><span style="color:#aaa;">$${params.atr.toFixed(2)}</span>
-                </div><script type="module">
+<script type="module">
         import { CONFIG } from './js/config.js';
         import * as indicadores from './js/indicadores.js';
         import * as dadosExternos from './js/dados_externos.js';
@@ -429,27 +334,51 @@
             fetchMacroStatic, getMTFConfluence, fetchOrderBook
         } = dadosExternos;
 
-        // ============================================================
-        //  STATE
-        // ============================================================
+        // ===== STATE =====
         const assetsData = {};
         CONFIG.ASSETS.forEach(symbol => {
             assetsData[symbol] = {
-                price: 0, candles1H: [], candles4H: [], candles1D: [],
-                ema50_1H: 0, ema200_4H: 0, rsi_1H: 50, atr_1H: 0, atrHistory: [],
-                swingHighs: [], swingLows: [], currentBOS: 'NEUTRAL', mtfTrend: 'NEUTRAL',
-                oiDelta: 0, volumeRel: 1.0, rsiState: { avgGain: 0, avgLoss: 0, rsi: 50 }, bbWidth: 0.1,
-                volumeAvg: 0, currentVolume: 0, fundingRate: 0, trend4H: 'NEUTRAL', trend1D: 'NEUTRAL',
-                htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity }, mtfConfluence: null
+                price: 0,
+                candles1H: [],
+                candles4H: [],
+                candles1D: [],
+                ema50_1H: 0,
+                ema200_4H: 0,
+                rsi_1H: 50,
+                atr_1H: 0,
+                atrHistory: [],
+                swingHighs: [],
+                swingLows: [],
+                currentBOS: 'NEUTRAL',
+                mtfTrend: 'NEUTRAL',
+                oiDelta: 0,
+                volumeRel: 1.0,
+                rsiState: { avgGain: 0, avgLoss: 0, rsi: 50 },
+                bbWidth: 0.1,
+                volumeAvg: 0,
+                currentVolume: 0,
+                fundingRate: 0,
+                trend4H: 'NEUTRAL',
+                trend1D: 'NEUTRAL',
+                htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity },
+                mtfConfluence: null
             };
         });
 
         let activePositions = {};
-        let liqMap = { 'BTCUSDT': { longs: 0, shorts: 0 }, 'ETHUSDT': { longs: 0, shorts: 0 }, 'SOLUSDT': { longs: 0, shorts: 0 } };
+        let liqMap = {
+            'BTCUSDT': { longs: 0, shorts: 0 },
+            'ETHUSDT': { longs: 0, shorts: 0 },
+            'SOLUSDT': { longs: 0, shorts: 0 }
+        };
         let liquidationLevels = { 'BTCUSDT': [], 'ETHUSDT': [], 'SOLUSDT': [] };
         let scoreHistory = [];
         let previousScores = { 'BTCUSDT': 50, 'ETHUSDT': 50, 'SOLUSDT': 50 };
-        let whaleTrades = { 'BTCUSDT': { buys: 0, sells: 0, lastTx: null }, 'ETHUSDT': { buys: 0, sells: 0, lastTx: null }, 'SOLUSDT': { buys: 0, sells: 0, lastTx: null } };
+        let whaleTrades = {
+            'BTCUSDT': { buys: 0, sells: 0, lastTx: null },
+            'ETHUSDT': { buys: 0, sells: 0, lastTx: null },
+            'SOLUSDT': { buys: 0, sells: 0, lastTx: null }
+        };
         let alertCooldowns = {};
 
         const DOM = {};
@@ -459,27 +388,43 @@
         }
 
         function getCurrentTimestamp() {
-            return new Date().toLocaleString('pt-BR', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Sao_Paulo' });
+            return new Date().toLocaleString('pt-BR', {
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                timeZone: 'America/Sao_Paulo'
+            });
         }
 
-        function formatCurrency(value) { return '$' + Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+        function formatCurrency(value) {
+            return '$' + Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
 
-        // ============================================================
-        //  UI HELPERS DO COMITÊ
-        // ============================================================
+        // ===== UI HELPERS DO COMITÊ =====
         function renderMiniOrderBook(obData) {
             if (!obData) return '<span style="color:#8b949e;">N/A</span>';
-            const maxQty = Math.max(...obData.bids.map(b=>b.qty), ...obData.asks.map(a=>a.qty));
-            const bar = (qty) => (qty/maxQty*100).toFixed(0);
+            const maxQty = Math.max(...obData.bids.map(b => b.qty), ...obData.asks.map(a => a.qty));
+            const bar = (qty) => (qty / maxQty * 100).toFixed(0);
             let html = '<div class="orderbook-mini">';
             for (let i = obData.asks.length - 1; i >= 0; i--) {
                 const a = obData.asks[i];
-                html += `<div style="display:flex;justify-content:space-between;align-items:center;"><span class="ask">${a.price.toFixed(2)}</span><span style="color:#8b949e;">${a.qty.toFixed(4)}</span><div class="bar-bg"><div class="bar-fill" style="width:${bar(a.qty)}%;background:#ff5252;"></div></div></div>`;
+                html += `<div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span class="ask">${a.price.toFixed(2)}</span>
+                    <span style="color:#8b949e;">${a.qty.toFixed(4)}</span>
+                    <div class="bar-bg"><div class="bar-fill" style="width:${bar(a.qty)}%;background:#ff5252;"></div></div>
+                </div>`;
             }
             const spread = ((obData.asks[0].price - obData.bids[0].price) / obData.bids[0].price * 100).toFixed(3);
             html += `<div class="spread">Spread: ${spread}%</div>`;
             for (const b of obData.bids) {
-                html += `<div style="display:flex;justify-content:space-between;align-items:center;"><span class="bid">${b.price.toFixed(2)}</span><span style="color:#8b949e;">${b.qty.toFixed(4)}</span><div class="bar-bg"><div class="bar-fill" style="width:${bar(b.qty)}%;background:#00e676;"></div></div></div>`;
+                html += `<div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span class="bid">${b.price.toFixed(2)}</span>
+                    <span style="color:#8b949e;">${b.qty.toFixed(4)}</span>
+                    <div class="bar-bg"><div class="bar-fill" style="width:${bar(b.qty)}%;background:#00e676;"></div></div>
+                </div>`;
             }
             html += '</div>';
             return html;
@@ -504,10 +449,10 @@
             const bar = document.getElementById('scoreBar');
             const val = document.getElementById('scoreValue');
             const label = document.getElementById('scoreLabel');
-            
+
             if (bar) bar.style.width = scoreData.score + '%';
             if (val) val.textContent = scoreData.score;
-            
+
             const colors = {
                 'MUITO FORTE': { bg: 'rgba(0,230,118,0.2)', color: '#00e676', border: '#00e676' },
                 'FORTE': { bg: 'rgba(0,200,83,0.15)', color: '#00c853', border: '#00c853' },
@@ -517,7 +462,7 @@
                 'FORTE CONTRA': { bg: 'rgba(255,82,82,0.15)', color: '#ff5252', border: '#ff5252' },
                 'MUITO FORTE CONTRA': { bg: 'rgba(255,23,68,0.2)', color: '#ff1744', border: '#ff1744' }
             };
-            
+
             const c = colors[scoreData.label] || colors['NEUTRO'];
             if (label) {
                 label.style.background = c.bg;
@@ -525,7 +470,7 @@
                 label.style.border = `1px solid ${c.border}`;
                 label.textContent = scoreData.label;
             }
-            
+
             const mtfContainer = document.getElementById('mtfBadges');
             if (mtfContainer && mtfData && mtfData.directions) {
                 mtfContainer.innerHTML = mtfData.directions.map(d => {
@@ -533,7 +478,7 @@
                     return `<span class="mtf-badge ${cls}">${d.tf} ${d.dir}</span>`;
                 }).join('');
             }
-            
+
             const reasonsContainer = document.getElementById('scoreReasons');
             if (reasonsContainer) {
                 reasonsContainer.innerHTML = scoreData.reasons.map(r => {
@@ -541,28 +486,26 @@
                     return `<span class="reason-tag ${cls}">${r}</span>`;
                 }).join('');
             }
-            
+
             const fundEl = document.getElementById('fundingDisplay');
             if (fundEl && fundingData && fundingData.rate !== undefined) {
                 const fColor = fundingData.rate > 0.01 ? '#ff5252' : fundingData.rate < -0.01 ? '#00e676' : '#ffc107';
                 fundEl.style.color = fColor;
                 fundEl.textContent = `${(fundingData.rate * 100).toFixed(4)}% — ${fundingData.interpretacao || 'EQUILIBRADO'}`;
             }
-            
+
             const adxEl = document.getElementById('adxDisplay');
             if (adxEl && adxData) {
                 const aColor = adxData.adx < 20 ? '#ff5252' : adxData.adx > 50 ? '#ff9800' : '#00e676';
                 adxEl.style.color = aColor;
                 adxEl.textContent = `${adxData.adx.toFixed(1)} ${adxData.adx < 20 ? '(Sem tendência)' : adxData.trend || '(Tendência)'}`;
             }
-            
+
             const obContainer = document.getElementById('orderbookMini');
             if (obContainer) obContainer.innerHTML = renderMiniOrderBook(obData);
         }
 
-        // ============================================================
-        //  MOTOR COMITÊ (com agendamento recursivo)
-        // ============================================================
+        // ===== MOTOR COMITÊ =====
         let signalEngineRunning = false;
         async function runSignalEngine() {
             if (signalEngineRunning) return;
@@ -571,44 +514,43 @@
                 const symbol = 'BTCUSDT';
                 const candles = await fetchHistoricalCandles(symbol, '15m', 100);
                 if (!candles.length) { signalEngineRunning = false; return; }
-                
+
                 const [mtfData, fundingData, obData, fgData] = await Promise.all([
                     getMTFConfluence(symbol),
                     fetchFundingRate(symbol),
                     fetchOrderBook(symbol, 10),
                     fetchFearGreed()
                 ]);
-                
+
                 const closes = candles.map(c => c.close);
                 const ema20 = calcEMA(closes, 20);
                 const ema50 = calcEMA(closes, 50);
-                
+
                 let rsiValues = [];
                 let avgGain = 0, avgLoss = 0;
                 for (let i = 1; i < closes.length; i++) {
-                    const diff = closes[i] - closes[i-1];
+                    const diff = closes[i] - closes[i - 1];
                     const gain = diff > 0 ? diff : 0;
                     const loss = diff < 0 ? Math.abs(diff) : 0;
-                    if (i === 1) { avgGain = gain; avgLoss = loss; }
-                    else {
+                    if (i === 1) { avgGain = gain; avgLoss = loss; } else {
                         avgGain = (avgGain * 13 + gain) / 14;
                         avgLoss = (avgLoss * 13 + loss) / 14;
                     }
                     const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
                     rsiValues.push(rsi);
                 }
-                const currentRSI = rsiValues.length ? rsiValues[rsiValues.length-1] : 50;
-                
+                const currentRSI = rsiValues.length ? rsiValues[rsiValues.length - 1] : 50;
+
                 const adxData = calculateADX(candles);
                 const divergence = detectRSIDivergence(candles, rsiValues);
-                
-                const volumeMA = candles.slice(-20).reduce((s,c) => s + c.volume, 0) / 20;
-                const currentVol = candles[candles.length-1].volume;
-                
+
+                const volumeMA = candles.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
+                const currentVol = candles[candles.length - 1].volume;
+
                 const indicators = {
-                    close: closes[closes.length-1],
-                    ema20: ema20[ema20.length-1],
-                    ema50: ema50[ema50.length-1],
+                    close: closes[closes.length - 1],
+                    ema20: ema20[ema20.length - 1],
+                    ema50: ema50[ema50.length - 1],
                     rsi: currentRSI,
                     adx: adxData.adx,
                     trend: adxData.trend,
@@ -619,28 +561,28 @@
                     macdHist: 0,
                     macdHistPrev: 0
                 };
-                
+
                 const scoreData = calculateSignalScore(indicators);
-                
+
                 const adxFilt = adxFilter(candles);
                 const obFilt = orderBookFilter(obData, scoreData.direction);
                 const fundFilt = fundingFilter(fundingData, scoreData.direction);
                 const fgFilt = fearGreedFilter(fgData, scoreData.direction);
-                
+
                 let blocked = [];
                 if (!adxFilt.pass) blocked.push(adxFilt.reason);
                 if (!obFilt.pass) blocked.push(obFilt.reason);
                 if (!fundFilt.pass) blocked.push(fundFilt.reason);
-                
+
                 const canTrade = blocked.length === 0 && scoreData.score >= 55;
-                
+
                 let trailingParams = null;
                 if (canTrade) {
                     trailingParams = generateTrailingStopParams(candles, indicators.close, scoreData.direction);
                 }
-                
+
                 updateStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData);
-                
+
                 const signalEl = document.getElementById('mainSignal');
                 if (signalEl) {
                     if (canTrade) {
@@ -658,7 +600,7 @@
                         signalEl.innerHTML = html;
                     }
                 }
-                
+
                 // Atualiza o score principal
                 const scoreEl = DOM['score-value'] || document.getElementById('score-value');
                 const barEl = DOM['score-bar'] || document.getElementById('score-bar');
@@ -671,31 +613,31 @@
                     barEl.style.width = scoreData.score + '%';
                     barEl.style.background = scoreData.score >= 75 ? 'var(--accent-green)' : scoreData.score <= 25 ? 'var(--accent-red)' : 'var(--accent-yellow)';
                 }
-                
-            } catch(e) {
+
+            } catch (e) {
                 console.error('Signal engine error:', e);
             } finally {
                 signalEngineRunning = false;
-                // Auto-agendamento: executa novamente após 15 segundos
                 setTimeout(runSignalEngine, 15000);
             }
         }
 
-        // ============================================================
-        //  FUNÇÕES LEGADO
-        // ============================================================
-
-        // ---- WebSocket com reconexão limitada ----
+        // ===== WEBSOCKET (com reconexão limitada) =====
         let wsRetryCount = 0;
         const WS_MAX_RETRIES = 5;
+
         function initWebSockets() {
             const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
             const streams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
             const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
-            
+
             ws.onopen = () => {
                 wsRetryCount = 0;
-                if(wsStatusEl) { wsStatusEl.textContent = '🔄 WEBSOCKET LIVE'; wsStatusEl.style.color = 'var(--accent-green)'; wsStatusEl.style.animation = 'pulse-dot 1.5s infinite'; }
+                if (wsStatusEl) {
+                    wsStatusEl.textContent = '🔄 WEBSOCKET LIVE';
+                    wsStatusEl.style.color = 'var(--accent-green)';
+                    wsStatusEl.style.animation = 'pulse-dot 1.5s infinite';
+                }
             };
             ws.onmessage = (event) => {
                 try {
@@ -714,20 +656,31 @@
                         checkPositionManagement(symbol, price);
                         updateLivePriceUI(symbol, price);
                     }
-                } catch(e) { /* ignora mensagens malformadas */ }
+                } catch (e) { /* ignora mensagens malformadas */ }
             };
             ws.onerror = (e) => {
-                console.warn("WS Error", e);
-                if(wsStatusEl) { wsStatusEl.textContent = '❌ WS OFFLINE'; wsStatusEl.style.color = 'var(--accent-red)'; wsStatusEl.style.animation = 'none'; }
+                console.warn('WS Error', e);
+                if (wsStatusEl) {
+                    wsStatusEl.textContent = '❌ WS OFFLINE';
+                    wsStatusEl.style.color = 'var(--accent-red)';
+                    wsStatusEl.style.animation = 'none';
+                }
             };
             ws.onclose = () => {
-                if(wsStatusEl) { wsStatusEl.textContent = '🔄 RECONNECTING...'; wsStatusEl.style.color = 'var(--accent-yellow)'; wsStatusEl.style.animation = 'none'; }
+                if (wsStatusEl) {
+                    wsStatusEl.textContent = '🔄 RECONNECTING...';
+                    wsStatusEl.style.color = 'var(--accent-yellow)';
+                    wsStatusEl.style.animation = 'none';
+                }
                 wsRetryCount++;
                 const delay = Math.min(3000 * Math.pow(1.5, wsRetryCount), 30000);
                 if (wsRetryCount <= WS_MAX_RETRIES) {
                     setTimeout(initWebSockets, delay);
                 } else {
-                    if(wsStatusEl) { wsStatusEl.textContent = '⛔ WS FALHOU (limite)'; wsStatusEl.style.color = 'var(--accent-red)'; }
+                    if (wsStatusEl) {
+                        wsStatusEl.textContent = '⛔ WS FALHOU (limite)';
+                        wsStatusEl.style.color = 'var(--accent-red)';
+                    }
                 }
             };
 
@@ -742,20 +695,22 @@
                             const side = o.order.side;
                             const price = parseFloat(o.order.price);
                             const qty = parseFloat(o.order.origQty) * price;
-                            if (side === 'BUY') liqMap[symbol].longs += qty; 
+                            if (side === 'BUY') liqMap[symbol].longs += qty;
                             else liqMap[symbol].shorts += qty;
                             if (!liquidationLevels[symbol]) liquidationLevels[symbol] = [];
                             liquidationLevels[symbol].push(price);
                             if (liquidationLevels[symbol].length > 100) liquidationLevels[symbol].shift();
                         }
                     });
-                } catch(e) { /* ignora */ }
+                } catch (e) { /* ignora */ }
             };
             wsLiq.onclose = () => setTimeout(initWebSockets, 5000);
-            setInterval(() => { Object.keys(liqMap).forEach(k => liqMap[k] = { longs: 0, shorts: 0 }); }, 4 * 60 * 60 * 1000);
+            setInterval(() => {
+                Object.keys(liqMap).forEach(k => liqMap[k] = { longs: 0, shorts: 0 });
+            }, 4 * 60 * 60 * 1000);
         }
 
-        // ---- Atualizações de UI ----
+        // ===== UI UPDATES =====
         function updateLivePriceUI(symbol, price) {
             const prefix = symbol.replace('USDT', '').toLowerCase();
             const el = DOM[`${prefix}-price`] || document.getElementById(`${prefix}-price`);
@@ -790,8 +745,7 @@
             document.getElementById('score-onchain').textContent = c.macro;
             document.getElementById('score-oi').textContent = c.oi;
             const reasonEl = document.getElementById('block-reason');
-            if (blockReason) { reasonEl.style.display = 'block'; reasonEl.textContent = '🚫 ' + blockReason; } 
-            else { reasonEl.style.display = 'none'; }
+            if (blockReason) { reasonEl.style.display = 'block'; reasonEl.textContent = '🚫 ' + blockReason; } else { reasonEl.style.display = 'none'; }
         }
 
         function updateActiveTradesUI() {
@@ -825,7 +779,7 @@
             });
         }
 
-        // ---- Gerenciamento de posições ----
+        // ===== POSITION MANAGEMENT =====
         function checkPositionManagement(symbol, currentPrice) {
             const pos = activePositions[symbol];
             if (!pos) return;
@@ -836,7 +790,7 @@
                     const lastSwingLow = Math.min(...data.swingLows);
                     let newTrail = lastSwingLow - (data.atr_1H * 0.2);
                     if (data.atrHistory && data.atrHistory.length > 20) {
-                        const avgATR = data.atrHistory.slice(-20).reduce((a,b)=>a+b,0)/20;
+                        const avgATR = data.atrHistory.slice(-20).reduce((a, b) => a + b, 0) / 20;
                         if (data.atr_1H > avgATR * 1.5) newTrail -= data.atr_1H * 0.1;
                         else if (data.atr_1H < avgATR * 0.7) newTrail += data.atr_1H * 0.1;
                     }
@@ -867,7 +821,7 @@
                     const lastSwingHigh = Math.max(...data.swingHighs);
                     let newTrail = lastSwingHigh + (data.atr_1H * 0.2);
                     if (data.atrHistory && data.atrHistory.length > 20) {
-                        const avgATR = data.atrHistory.slice(-20).reduce((a,b)=>a+b,0)/20;
+                        const avgATR = data.atrHistory.slice(-20).reduce((a, b) => a + b, 0) / 20;
                         if (data.atr_1H > avgATR * 1.5) newTrail += data.atr_1H * 0.1;
                         else if (data.atr_1H < avgATR * 0.7) newTrail -= data.atr_1H * 0.1;
                     }
@@ -908,7 +862,7 @@
             updateActiveTradesUI();
         }
 
-        // ---- Avaliação de mercado (legado) ----
+        // ===== AVALIAÇÃO DE MERCADO (LEGADO) =====
         function evaluateMarkets() {
             CONFIG.ASSETS.forEach(symbol => {
                 const data = assetsData[symbol];
@@ -964,7 +918,7 @@
             graficos.updateScoreChart(scoreHistory);
         }
 
-        // ---- Atualização de dados externos (com agendamento recursivo) ----
+        // ===== ATUALIZAÇÃO DE DADOS EXTERNOS (RECURSIVA) =====
         let externalUpdating = false;
         async function updateExternalData() {
             if (externalUpdating) return;
@@ -992,7 +946,10 @@
 
                 const premium = await fetchTetherPremium();
                 const tetherEl = document.getElementById('tether-premium');
-                if (tetherEl) { tetherEl.textContent = premium !== null ? ((premium >= 0 ? '+' : '') + premium.toFixed(2) + '%') : 'N/A'; tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative'); }
+                if (tetherEl) {
+                    tetherEl.textContent = premium !== null ? ((premium >= 0 ? '+' : '') + premium.toFixed(2) + '%') : 'N/A';
+                    tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
+                }
 
                 const pcr = await fetchPutCallRatio();
                 if (pcr !== null) { document.getElementById('put-call-ratio').textContent = pcr.toFixed(3); }
@@ -1021,17 +978,19 @@
                 }
 
                 const fg = await fetchFearGreed();
-                if (fg) { document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')'; document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH'; }
-            } catch(e) { console.warn('Erro ao atualizar dados externos:', e); } finally {
+                if (fg) {
+                    document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
+                    document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
+                }
+            } catch (e) {
+                console.warn('Erro ao atualizar dados externos:', e);
+            } finally {
                 externalUpdating = false;
-                // Auto-agendamento: executa novamente após 2 minutos
                 setTimeout(updateExternalData, 120000);
             }
         }
 
-        // ============================================================
-        //  INICIALIZAÇÃO
-        // ============================================================
+        // ===== INICIALIZAÇÃO =====
         async function init() {
             cacheDOM();
             graficos.initCharts();
@@ -1052,17 +1011,17 @@
                 if (c1H.length > 0) {
                     const closes = c1H.map(c => c.close);
                     assetsData[symbol].price = closes[closes.length - 1];
-                    assetsData[symbol].ema50_1H = closes.slice(-50).reduce((a,b)=>a+b,0) / 50;
+                    assetsData[symbol].ema50_1H = closes.slice(-50).reduce((a, b) => a + b, 0) / 50;
                     const closes4H = c4H.map(c => c.close);
-                    assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a,b)=>a+b,0) / 200 : closes.slice(-200).reduce((a,b)=>a+b,0) / 200;
+                    assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : closes.slice(-200).reduce((a, b) => a + b, 0) / 200;
                     assetsData[symbol].atr_1H = calculateATR(c1H, 14);
                     let gains = 0, losses = 0;
                     for (let i = closes.length - 14; i < closes.length; i++) {
-                        const diff = closes[i] - closes[i-1];
+                        const diff = closes[i] - closes[i - 1];
                         if (diff > 0) gains += diff; else losses += Math.abs(diff);
                     }
                     const avgGain = gains / 14, avgLoss = losses / 14;
-                    assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain/avgLoss)) };
+                    assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
                     assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
                     assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], c4H);
                     if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
@@ -1070,28 +1029,26 @@
             }
 
             initWebSockets();
-            await updateExternalData(); // inicia o loop recursivo
+            await updateExternalData();
             await evaluateMarkets();
 
-            // Inicia o motor de sinais (loop recursivo)
             setTimeout(runSignalEngine, 1000);
 
-            // Ciclo de 5 min para atualizar velas e rodar o motor legado
             setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
                     const c1H = await fetchHistoricalCandles(symbol, '1h', 10);
-                    if(c1H.length > 0) {
+                    if (c1H.length > 0) {
                         assetsData[symbol].candles1H = [...assetsData[symbol].candles1H.slice(0, -10), ...c1H];
                         const closes1H = assetsData[symbol].candles1H.map(c => c.close);
-                        assetsData[symbol].ema50_1H = closes1H.slice(-50).reduce((a,b)=>a+b,0) / 50;
+                        assetsData[symbol].ema50_1H = closes1H.slice(-50).reduce((a, b) => a + b, 0) / 50;
                         assetsData[symbol].atr_1H = calculateATR(assetsData[symbol].candles1H, 14);
                         let gains = 0, losses = 0;
                         for (let i = closes1H.length - 14; i < closes1H.length; i++) {
-                            const diff = closes1H[i] - closes1H[i-1];
+                            const diff = closes1H[i] - closes1H[i - 1];
                             if (diff > 0) gains += diff; else losses += Math.abs(diff);
                         }
                         const avgGain = gains / 14, avgLoss = losses / 14;
-                        assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain/avgLoss)) };
+                        assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
                         assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
                         if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], assetsData[symbol].candles1H);
                     }
@@ -1099,23 +1056,24 @@
                     if (c4H.length > 0) {
                         assetsData[symbol].candles4H = [...assetsData[symbol].candles4H.slice(0, -20), ...c4H];
                         const closes4H = assetsData[symbol].candles4H.map(c => c.close);
-                        assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a,b)=>a+b,0) / 200 : assetsData[symbol].ema200_4H;
+                        assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : assetsData[symbol].ema200_4H;
                         assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
                     }
                 }
                 evaluateMarkets();
             }, 300000);
 
-            // Botão de teste Telegram
-            document.getElementById('test-telegram-btn').addEventListener('click', async function(e) {
+            document.getElementById('test-telegram-btn').addEventListener('click', async function (e) {
                 this.disabled = true;
                 document.getElementById('test-btn-label').innerHTML = '<span class="spinner"></span> Enviando...';
                 const ok = await telegram.sendTelegramAlert('🔔 <b>TESTE DE CONEXÃO V2</b>\n⚛️ Motor Institucional Ativo!\n⏰ ' + getCurrentTimestamp());
                 document.getElementById('test-btn-label').textContent = ok ? '✅ Enviado!' : '❌ Falha';
-                setTimeout(() => { document.getElementById('test-btn-label').textContent = '📨 Testar Alerta'; this.disabled = false; }, 3000);
+                setTimeout(() => {
+                    document.getElementById('test-btn-label').textContent = '📨 Testar Alerta';
+                    this.disabled = false;
+                }, 3000);
             });
 
-            // Atualiza timestamp a cada segundo
             setInterval(() => {
                 const ts = getCurrentTimestamp();
                 const headerEl = DOM['header-timestamp'] || document.getElementById('header-timestamp');
