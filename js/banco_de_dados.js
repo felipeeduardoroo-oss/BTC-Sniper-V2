@@ -31,9 +31,10 @@ export function setCachedMarketData(data) {
     setData('marketData', data);
 }
 
-// ===== Histórico de sinais (será usado pelo módulo historicos_sinais) =====
+// ===== Histórico de sinais =====
 export function getAlertLog() {
-    return getData('alertLog') || [];
+    // FIX 3: maxAge=Infinity para não perder o histórico de sinais antigos
+    return getData('alertLog', Infinity) || [];
 }
 
 export function setAlertLog(log) {
@@ -41,9 +42,6 @@ export function setAlertLog(log) {
 }
 
 export function getTradeStats() {
-    // maxAge=Infinity: estatísticas de trade são persistentes e não devem expirar
-    // como o cache de dados de API (CONFIG.CACHE_TTL_MS). Antes, herdava o TTL de
-    // 10 minutos e zerava wins/losses silenciosamente se não houvesse trade recente.
     return getData('tradeStats', Infinity) || { wins: 0, losses: 0, totalPNL: 0 };
 }
 
