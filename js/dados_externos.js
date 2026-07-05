@@ -180,7 +180,6 @@ export async function fetchFedRate() {
         console.warn('[Backend] FedRate falhou:', e);
     }
 
-    // Fallback estático
     if (cached) return cached;
     console.warn('[FedRate] Usando fallback estático 4.33%');
     return 4.33;
@@ -228,6 +227,47 @@ export async function fetchOrderBook(symbol, limit = 10) {
                     bidTotal, askTotal,
                     imbalance: ((bidTotal - askTotal) / (bidTotal + askTotal) * 100)
                 };
+            }
+        } catch(e2) { /* ignora */ }
+        return null;
+    }
+}
+
+export async function fetchOpenInterest(symbol) {
+    try {
+        const resp = await fetch(`${BACKEND_URL}/api/openinterest?symbol=${symbol}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return await resp.json();
+    } catch(e) {
+        console.warn('[Backend] OpenInterest falhou:', e);
+        // Fallback: Binance
+        try {
+            const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=15m&limit=8`;
+            const data = await fetchWithRetry(url);
+            if (data && data.length >= 2) {
+                const prev = parseFloat(data[0].sumOpenInterest);
+                const curr = parseFloat(data[data.length - 1].sumOpenInterest);
+                return { oi: curr, delta: ((curr - prev) / prev) * 100 };
+            }
+        } catch(e2) { /* ignora */ }
+        return null;
+    }
+}
+
+export async function fetchBasis(symbol = 'BTCUSDT') {
+    try {
+        const resp = await fetch(`${BACKEND_URL}/api/basis?symbol=${symbol}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        return data.basis;
+    } catch(e) {
+        console.warn('[Backend] Basis falhou:', e);
+        // Fallback: Binance
+        try {
+            const url = `https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`;
+            const data = await fetchWithRetry(url);
+            if (data && data.markPrice && data.indexPrice) {
+                return ((parseFloat(data.markPrice) - parseFloat(data.indexPrice)) / parseFloat(data.indexPrice)) * 100;
             }
         } catch(e2) { /* ignora */ }
         return null;
@@ -378,3 +418,12 @@ export async function getMTFConfluence(symbol) {
 
 // ===== AUXILIAR =====
 export function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ===== PREÇO ATUAL =====
+let _currentPrices = { 'BTCUSDT': 0, 'ETHUSDT': 0, 'SOLUSDT': 0 };
+export function setCurrentPrice(symbol, price) {
+    _currentPrices[symbol] = price;
+}
+export function getCurrentPrice(symbol) {
+    return _currentPrices[symbol] || 0;
+}
