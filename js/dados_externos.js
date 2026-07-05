@@ -2,6 +2,9 @@
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
+// ===== API KEY =====
+const TWELVEDATA_KEY = CONFIG.TWELVEDATA_API_KEY;
+
 // ===== HELPERS =====
 export function fetchWithTimeout(url, options = {}, timeout = 15000) {
     return new Promise((resolve, reject) => {
@@ -28,7 +31,6 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
         try {
             const resp = await fetchWithTimeout(url, options, 15000);
             if (resp.status === 429) {
-                // Rate limit - espera e tenta novamente com backoff exponencial
                 const wait = 1000 * Math.pow(2, i) + 500;
                 await new Promise(r => setTimeout(r, wait));
                 continue;
@@ -38,7 +40,6 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
             try {
                 return JSON.parse(text);
             } catch(e) {
-                // Se não for JSON, retorna o texto (para CSV, etc)
                 return text;
             }
         } catch(e) {
@@ -49,6 +50,14 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
         }
     }
     throw lastError || new Error(`Falha ao buscar ${url}`);
+}
+
+// ===== TWELVE DATA =====
+async function fetchTwelveData(endpoint, params = {}) {
+    const url = new URL(`https://api.twelvedata.com/${endpoint}`);
+    url.searchParams.set('apikey', TWELVEDATA_KEY);
+    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+    return fetchWithRetry(url.toString(), {}, 2);
 }
 
 // ===== CACHE =====
@@ -70,7 +79,7 @@ function setCachedData(key, data) {
     } catch(e) { /* ignore */ }
 }
 
-// ===== POOL DE REQUISIÇÕES (limita paralelismo) =====
+// ===== POOL DE REQUISIÇÕES =====
 let activeRequests = 0;
 const MAX_CONCURRENT = 3;
 const requestQueue = [];
@@ -92,7 +101,7 @@ function requestPool(fn) {
     });
 }
 
-// ===== MAPEAMENTO DE SÍMBOLOS PARA COINGECKO =====
+// ===== MAPEAMENTO =====
 const SYMBOL_TO_COINGECKO = {
     'BTCUSDT': 'bitcoin',
     'ETHUSDT': 'ethereum',
@@ -106,94 +115,211 @@ const TIMEFRAME_TO_MINUTES = {
     '1d': 1440
 };
 
-// ===== FONTE PRIMÁRIA: COINGECKO (COM POOL DE REQUISIÇÕES) =====
-// ===== FONTE PRIMÁRIA: BINANCE (CORS estável, sem API key, volume real) =====
-export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
-    const cacheKey = `candles_${symbol}_${interval}_${limit}`;
-    const cached = getCachedData(cacheKey, 300000); // 5 min de cache
-    if (cached && !cached.stale) {
-        return cached;
-    }
-
-    // 1) BINANCE (primário)
-    try {
-        const intervalMap = { '15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d' };
-        const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${intervalMap[interval]}&limit=${limit}`;
-        const data = await fetchWithRetry(url, {}, 3);
-        if (data && Array.isArray(data) && data.length > 0) {
-            const candles = data.map(k => ({
-                time: k[0] / 1000,
-                open: parseFloat(k[1]),
-                high: parseFloat(k[2]),
-                low: parseFloat(k[3]),
-                close: parseFloat(k[4]),
-                volume: parseFloat(k[5]) // volume real, não zerado
-            }));
-            setCachedData(cacheKey, candles);
-            return candles;
-        }
-    } catch(e) {
-        console.warn(`[Binance Candles] ${symbol} ${interval} falhou:`, e.message);
-    }
-
-    // 2) COINGECKO (fallback secundário)
-    const coinId = SYMBOL_TO_COINGECKO[symbol];
-    if (coinId) {
-        try {
-            const minutesPerCandle = TIMEFRAME_TO_MINUTES[interval] || 60;
-            let days = Math.ceil((limit * minutesPerCandle) / 1440) + 1;
-            days = Math.min(Math.max(days, 1), 90);
-            const data = await requestPool(async () => {
-                const url = `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
-                return await fetchWithRetry(url, {}, 2);
-            });
-            if (data && Array.isArray(data) && data.length > 0) {
-                const candles = data.map(k => ({
-                    time: k[0] / 1000, open: parseFloat(k[1]), high: parseFloat(k[2]),
-                    low: parseFloat(k[3]), close: parseFloat(k[4]), volume: 0 // CoinGecko OHLC não retorna volume
-                })).slice(-limit);
-                setCachedData(cacheKey, candles);
-                return candles;
-            }
-        } catch(e) {
-            console.warn(`[CoinGecko] ${symbol} ${interval} falhou:`, e.message);
-        }
-    }
-
-    // 3) BYBIT (fallback terciário)
-    try {
-        const intervalMap = { '15m': '15', '1h': '60', '4h': '240', '1d': 'D' };
-        const url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${symbol}&interval=${intervalMap[interval]}&limit=${limit}`;
-        const resp = await fetchWithRetry(url, {}, 2);
-        if (resp && resp.result && resp.result.list && resp.result.list.length > 0) {
-            const candles = resp.result.list.reverse().map(k => ({
-                time: parseInt(k[0]) / 1000, open: parseFloat(k[1]), high: parseFloat(k[2]),
-                low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5])
-            }));
-            setCachedData(cacheKey, candles);
-            return candles;
-        }
-    } catch(e) {
-        console.warn(`[Bybit Candles] ${symbol} ${interval} falhou:`, e.message);
-    }
-
-    // 4) Último recurso: cache antigo (mesmo "stale") — NUNCA dados inventados
-    if (cached) {
-        console.warn(`[Candles] Todas as fontes falharam, usando cache antigo (stale) para ${symbol} ${interval}`);
-        return cached.stale ? cached.data : cached;
-    }
-    console.warn(`[Candles] Todas as fontes falharam e não há cache para ${symbol} ${interval} — retornando vazio`);
-    return [];
-}
-
-// ===== AUXILIAR PARA PREÇO ATUAL =====
+// ===== PREÇO ATUAL =====
 let _currentPrices = { 'BTCUSDT': 0, 'ETHUSDT': 0, 'SOLUSDT': 0 };
 export function setCurrentPrice(symbol, price) {
     _currentPrices[symbol] = price;
 }
-function getCurrentPrice(symbol) {
+export function getCurrentPrice(symbol) {
     return _currentPrices[symbol] || 0;
 }
+
+// ===== FETCH CANDLES (Twelve Data primário) =====
+export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
+    const cacheKey = `candles_${symbol}_${interval}_${limit}`;
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) {
+        return cached;
+    }
+
+    // 1) Twelve Data
+    try {
+        // Converte BTCUSDT → BTC/USD (formato da Twelve Data)
+        const cleanSymbol = symbol.replace('USDT', '/USD');
+        const data = await requestPool(async () => {
+            return await fetchTwelveData('time_series', {
+                symbol: cleanSymbol,
+                interval: interval,
+                outputsize: limit,
+                format: 'JSON'
+            });
+        });
+        if (data && data.values && data.values.length > 0) {
+            const candles = data.values.map(v => ({
+                time: new Date(v.datetime).getTime() / 1000,
+                open: parseFloat(v.open),
+                high: parseFloat(v.high),
+                low: parseFloat(v.low),
+                close: parseFloat(v.close),
+                volume: parseFloat(v.volume || 0)
+            }));
+            setCachedData(cacheKey, candles);
+            return candles;
+        }
+    } catch(e) {
+        console.warn(`[Twelve Data] ${symbol} ${interval} falhou:`, e.message);
+    }
+
+    // 2) Binance (fallback)
+    try {
+        const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+        const data = await requestPool(async () => await fetchWithRetry(url, {}, 3));
+        if (data && data.length > 0) {
+            const candles = data.map(k => ({
+                time: k[0]/1000,
+                open: parseFloat(k[1]),
+                high: parseFloat(k[2]),
+                low: parseFloat(k[3]),
+                close: parseFloat(k[4]),
+                volume: parseFloat(k[5])
+            }));
+            setCachedData(cacheKey, candles);
+            return candles;
+        }
+    } catch(e) {
+        console.warn(`[Binance] ${symbol} ${interval} falhou:`, e.message);
+    }
+
+    // 3) CoinGecko (sem volume)
+    try {
+        const coinId = SYMBOL_TO_COINGECKO[symbol];
+        if (coinId) {
+            const minutesPerCandle = TIMEFRAME_TO_MINUTES[interval] || 60;
+            let days = Math.ceil((limit * minutesPerCandle) / 1440) + 1;
+            days = Math.min(Math.max(days, 1), 90);
+            const url = `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
+            const data = await requestPool(async () => await fetchWithRetry(url, {}, 2));
+            if (data && data.length > 0) {
+                const candles = data.map(k => ({
+                    time: k[0]/1000,
+                    open: parseFloat(k[1]),
+                    high: parseFloat(k[2]),
+                    low: parseFloat(k[3]),
+                    close: parseFloat(k[4]),
+                    volume: 0
+                }));
+                const filtered = candles.slice(-limit);
+                setCachedData(cacheKey, filtered);
+                return filtered;
+            }
+        }
+    } catch(e) {
+        console.warn(`[CoinGecko] ${symbol} ${interval} falhou:`, e.message);
+    }
+
+    // 4) Bybit (último fallback)
+    try {
+        const intervalMap = { '15m': '15', '1h': '60', '4h': '240', '1d': 'D' };
+        const bybitInterval = intervalMap[interval] || '60';
+        const url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${symbol}&interval=${bybitInterval}&limit=${limit}`;
+        const resp = await fetchWithRetry(url, {}, 2);
+        if (resp && resp.result && resp.result.list && resp.result.list.length > 0) {
+            const list = resp.result.list.reverse();
+            const candles = list.map(k => ({
+                time: parseInt(k[0]) / 1000,
+                open: parseFloat(k[1]),
+                high: parseFloat(k[2]),
+                low: parseFloat(k[3]),
+                close: parseFloat(k[4]),
+                volume: parseFloat(k[5])
+            }));
+            setCachedData(cacheKey, candles);
+            return candles;
+        }
+    } catch(e) {
+        console.warn(`[Bybit] ${symbol} ${interval} falhou:`, e.message);
+    }
+
+    // Se tudo falhar, retorna cache antigo ou vazio
+    if (cached) {
+        console.warn(`[Candles] Usando cache antigo para ${symbol} ${interval}`);
+        return cached;
+    }
+    console.warn(`[Candles] Sem dados para ${symbol} ${interval}`);
+    return [];
+}
+
+// ===== FETCH MACRO (Twelve Data primário) =====
+export const fetchMacroStatic = async () => {
+    const cacheKey = 'macroData';
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) {
+        return cached;
+    }
+
+    try {
+        // Twelve Data: DXY, TNX (US10Y), VIX, SPX, NDX
+        const symbols = ['DXY', 'TNX', 'VIX', 'SPX', 'NDX'];
+        const promises = symbols.map(sym =>
+            requestPool(async () => {
+                const data = await fetchTwelveData('price', { symbol: sym });
+                return { symbol: sym, price: parseFloat(data.price || 0) };
+            })
+        );
+        const results = await Promise.all(promises);
+        const map = {};
+        results.forEach(r => map[r.symbol] = r.price);
+
+        // Para SPX e NDX, calculamos a variação diária aproximada (se disponível)
+        // Twelve Data não retorna change no endpoint price, então usamos um segundo endpoint para change
+        // Vamos buscar o change separadamente (ou usar fallback)
+        const changePromises = ['SPX', 'NDX'].map(sym =>
+            requestPool(async () => {
+                const data = await fetchTwelveData('quote', { symbol: sym });
+                return { symbol: sym, change: parseFloat(data.change || 0) };
+            })
+        );
+        const changeResults = await Promise.all(changePromises);
+        const changeMap = {};
+        changeResults.forEach(r => changeMap[r.symbol] = r.change);
+
+        const macro = {
+            dxy: map.DXY || 0,
+            us10y: map.TNX || 0,
+            vix: map.VIX || 0,
+            spChange: changeMap.SPX || 0,
+            nasdaqChange: changeMap.NDX || 0
+        };
+        setCachedData(cacheKey, macro);
+        return macro;
+    } catch(e) {
+        console.warn('[Macro Twelve Data] falhou:', e);
+    }
+
+    // Fallback: Yahoo Finance via proxy
+    try {
+        const proxy = CONFIG.PROXY_URL;
+        const fetchYahoo = async (ticker) => {
+            const url = `${proxy}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`)}`;
+            const data = await fetchWithRetry(url, {}, 2);
+            if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
+                const meta = data.chart.result[0].meta;
+                return { current: meta.regularMarketPrice, change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 };
+            }
+            return null;
+        };
+        const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
+            fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), fetchYahoo('^GSPC'), fetchYahoo('^NDX')
+        ]);
+        const macro = {
+            dxy: dxy?.current || 0,
+            us10y: us10y?.current || 0,
+            vix: vix?.current || 0,
+            spChange: sp?.change || 0,
+            nasdaqChange: nasdaq?.change || 0
+        };
+        setCachedData(cacheKey, macro);
+        return macro;
+    } catch(e) {
+        console.warn('[Macro Yahoo fallback] falhou:', e);
+    }
+
+    if (cached) {
+        console.warn('[Macro] Usando cache antigo');
+        return cached;
+    }
+    return { dxy: 0, us10y: 0, vix: 0, spChange: 0, nasdaqChange: 0 };
+};
 
 // ===== DEMAIS FUNÇÕES (mantidas) =====
 export const fetchFundingRate = async (symbol) => {
@@ -321,14 +447,24 @@ export const fetchETFData = async () => {
 
 export const fetchFedRate = async () => {
     const cacheKey = 'fedRate';
-    // FIX: cache de 12h em vez de CONFIG.CACHE_TTL_MS (10min) — o Fed Funds Rate
-    // não muda de um dia pro outro, então não vale a pena depender de proxy gratuito
-    // a cada ciclo. Uma vez que uma busca dá certo, ela fica valendo por 12h.
-    const cached = getCachedData(cacheKey, 12 * 60 * 60 * 1000);
+    const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
     if (cached && !cached.stale) {
         return cached;
     }
 
+    try {
+        // Twelve Data: FEDFUNDS
+        const data = await fetchTwelveData('price', { symbol: 'FEDFUNDS' });
+        if (data && data.price) {
+            const rate = parseFloat(data.price);
+            setCachedData(cacheKey, rate);
+            return rate;
+        }
+    } catch(e) {
+        console.warn('[FedRate Twelve Data] falhou:', e);
+    }
+
+    // Fallback FRED
     try {
         const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS';
         const resp = await fetchWithTimeout(url, {}, 10000);
@@ -342,30 +478,7 @@ export const fetchFedRate = async () => {
             }
         }
     } catch(e) {
-        console.warn('[FedRate] Chamada direta falhou:', e.message);
-    }
-
-const proxies = [
-        'https://corsproxy.io/?url=',
-        'https://api.allorigins.win/raw?url=',
-        'https://api.codetabs.com/v1/proxy?quest=' // 3º proxy de reserva (mais um serviço gratuito de CORS)
-    ];
-    for (const proxy of proxies) {
-        try {
-            const url = proxy + encodeURIComponent('https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS');
-            const resp = await fetchWithTimeout(url, {}, 15000);
-            if (resp.ok) {
-                const csv = await resp.text();
-                const lastLine = csv.trim().split('\n').pop();
-                const rate = parseFloat(lastLine.split(',')[1]);
-                if (!isNaN(rate) && rate > 0) {
-                    setCachedData(cacheKey, rate);
-                    return rate;
-                }
-            }
-        } catch(e) {
-            console.warn(`[FedRate] Proxy ${proxy} falhou:`, e.message);
-        }
+        console.warn('[FedRate FRED] falhou:', e);
     }
 
     if (cached) {
@@ -418,13 +531,11 @@ export const fetchTetherPremium = async () => {
     }
 
     try {
-        // FIX: Mercado Bitcoin (exchange brasileira) — endpoint público de ticker aceita CORS
-        // direto do navegador, sem precisar de proxy. Substitui CoinGecko simple/price.
-        const [mbData, fiatData] = await Promise.all([
-            fetchWithRetry('https://api.mercadobitcoin.net/api/v4/USDT-BRL/ticker'),
+        const [cryptoData, fiatData] = await Promise.all([
+            fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=brl'),
             fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD')
         ]);
-        const usdtBrl = parseFloat(mbData?.[0]?.last);
+        const usdtBrl = cryptoData?.tether?.brl;
         const usdBrl = fiatData?.rates?.BRL;
         if (usdtBrl && usdBrl) {
             const premium = ((usdtBrl / usdBrl) - 1) * 100;
@@ -457,31 +568,7 @@ export const fetchFearGreed = async () => {
     } catch(e) { console.warn('[FearGreed]', e); return null; }
 };
 
-export const fetchMacroStatic = async () => {
-    try {
-        const proxy = CONFIG.PROXY_URL;
-        const fetchYahoo = async (ticker) => {
-            const url = `${proxy}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`)}`;
-            const data = await fetchWithRetry(url, {}, 2);
-            if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
-                const meta = data.chart.result[0].meta;
-                return { current: meta.regularMarketPrice, change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 };
-            }
-            return null;
-        };
-        const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
-            fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), fetchYahoo('^GSPC'), fetchYahoo('^NDX')
-        ]);
-        return {
-            dxy: dxy?.current || 0,
-            us10y: us10y?.current || 0,
-            vix: vix?.current || 0,
-            spChange: sp?.change || 0,
-            nasdaqChange: nasdaq?.change || 0
-        };
-    } catch(e) { console.warn('[Macro]', e); return null; }
-};
-
+// ===== MTF Confluence =====
 export async function getMTFConfluence(symbol) {
     const timeframes = ['15m', '1h', '4h'];
     const directions = [];
