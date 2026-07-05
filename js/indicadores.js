@@ -191,10 +191,13 @@ export function updateSwingPoints(data) {
     data.swingLows = recentLows.slice(-3);
     const lastCandle = c1H[c1H.length - 1];
     if (!lastCandle) return;
-    const lastHigh = data.swingHighs.length > 0 ? Math.max(...data.swingHighs) : 0;
-    const lastLow = data.swingLows.length > 0 ? Math.min(...data.swingLows) : Infinity;
-    if (lastCandle.close > lastHigh) data.currentBOS = 'BULLISH';
-    else if (lastCandle.close < lastLow) data.currentBOS = 'BEARISH';
+    
+    // CORREÇÃO: Tratar arrays vazios para evitar Infinity
+    const lastHigh = data.swingHighs.length > 0 ? Math.max(...data.swingHighs) : null;
+    const lastLow = data.swingLows.length > 0 ? Math.min(...data.swingLows) : null;
+    
+    if (lastHigh !== null && lastCandle.close > lastHigh) data.currentBOS = 'BULLISH';
+    else if (lastLow !== null && lastCandle.close < lastLow) data.currentBOS = 'BEARISH';
     else data.currentBOS = 'NEUTRAL';
 }
 
@@ -202,6 +205,7 @@ export function findSMCSetup(data, direction) {
     const recent = data.candles1H.slice(-3);
     const lastClose = data.candles1H.length > 0 ? data.candles1H[data.candles1H.length - 1].close : 0;
     if (!lastClose || data.swingLows.length === 0 || data.swingHighs.length === 0) return false;
+    
     if (direction === 'LONG' && data.currentBOS === 'BULLISH') {
         const swingLow = Math.min(...data.swingLows);
         const sweep = recent.some(c => c.low < swingLow) && lastClose > swingLow;
@@ -245,7 +249,6 @@ export function checkHTFAlignment(data, ltfDirection) {
 export function checkOnChainFilter(data, symbol) {
     const currentPrice = data.price || 0;
     if (symbol === 'BTCUSDT') {
-        // Removidos os valores fixos falsos. Se não houver dado, o filtro simplesmente não aciona bônus
         const mvrv = data.mvrv; 
         const sopr = data.sopr; 
         const realizedPrice = data.realizedPrice; 
@@ -288,7 +291,6 @@ export function checkVolumeAndOrderflow(data, direction) {
         if (direction === 'SHORT' && c1.high < c2.low && c3.close < c2.low) fvgConfluence = true;
     }
     
-    // CORREÇÃO: Não bloqueia mais o sinal se não tiver FVG, apenas não dá bônus
     if (!fvgConfluence) {
         return { volumeConfirmed: volumeSpike, orderflowConfirmed: cvdSpike, fvgConfluence: false, bonus: 0, blocked: false };
     }
@@ -425,15 +427,10 @@ export function isSafeToTrade(assetsData) {
     const now = new Date();
     const hourUTC = now.getUTCHours();
     const minUTC = now.getUTCMinutes();
-    const day = now.getUTCDay(); // 0 = Dom, 1 = Seg, ..., 5 = Sex, 6 = Sab
-    
-    // Bloquear apenas around 12:30 UTC (releases de dados dos EUA) de seg a sex
+    const day = now.getUTCDay(); 
     if (day >= 1 && day <= 5 && ((hourUTC === 12 && minUTC >= 20) || (hourUTC === 13 && minUTC <= 40))) {
         return false;
     }
-    
-    // Permitir negociação 24/5 fora desses horários específicos de alta volatilidade
-    // Finais de semana (sabado e domingo) crypto ainda opera, então retornamos true.
     return true;
 }
 
