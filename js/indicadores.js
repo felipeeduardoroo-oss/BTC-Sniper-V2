@@ -189,7 +189,7 @@ export function updateSwingPoints(data) {
     }
     data.swingHighs = recentHighs.slice(-3);
     data.swingLows = recentLows.slice(-3);
-    const lastCandle = c1H.at(-1);
+    const lastCandle = c1H[c1H.length - 1];
     if (!lastCandle) return;
     const lastHigh = data.swingHighs.length > 0 ? Math.max(...data.swingHighs) : 0;
     const lastLow = data.swingLows.length > 0 ? Math.min(...data.swingLows) : Infinity;
@@ -200,7 +200,7 @@ export function updateSwingPoints(data) {
 
 export function findSMCSetup(data, direction) {
     const recent = data.candles1H.slice(-3);
-    const lastClose = data.candles1H.at(-1)?.close;
+    const lastClose = data.candles1H.length > 0 ? data.candles1H[data.candles1H.length - 1].close : 0;
     if (!lastClose || data.swingLows.length === 0 || data.swingHighs.length === 0) return false;
     if (direction === 'LONG' && data.currentBOS === 'BULLISH') {
         const swingLow = Math.min(...data.swingLows);
@@ -245,13 +245,15 @@ export function checkHTFAlignment(data, ltfDirection) {
 export function checkOnChainFilter(data, symbol) {
     const currentPrice = data.price || 0;
     if (symbol === 'BTCUSDT') {
-        const mvrv = data.mvrv || 1.2;
-        const sopr = data.sopr || 0.95;
-        const realizedPrice = data.realizedPrice || 53600;
-        if (mvrv > 3.5) return { allow: false, reason: `MVRV extremo (${mvrv.toFixed(2)}) - zona de distribuição` };
-        if (sopr < 0.75) return { allow: false, reason: `SOPR < 0.75 (${sopr.toFixed(2)}) - capitulação extrema` };
-        if (mvrv < 1.0 && sopr < 1) return { allow: true, bonus: 15, reason: 'MVRV/SOPR indicam capitulação' };
-        if (currentPrice < realizedPrice) return { allow: true, bonus: 10, reason: 'Preço abaixo do valor realizado' };
+        // Removidos os valores fixos falsos. Se não houver dado, o filtro simplesmente não aciona bônus
+        const mvrv = data.mvrv; 
+        const sopr = data.sopr; 
+        const realizedPrice = data.realizedPrice; 
+        
+        if (mvrv && mvrv > 3.5) return { allow: false, reason: `MVRV extremo (${mvrv.toFixed(2)}) - zona de distribuição` };
+        if (sopr && sopr < 0.75) return { allow: false, reason: `SOPR < 0.75 (${sopr.toFixed(2)}) - capitulação extrema` };
+        if (mvrv && sopr && mvrv < 1.0 && sopr < 1) return { allow: true, bonus: 15, reason: 'MVRV/SOPR indicam capitulação' };
+        if (realizedPrice && currentPrice < realizedPrice) return { allow: true, bonus: 10, reason: 'Preço abaixo do valor realizado' };
         return { allow: true, bonus: 0 };
     } else {
         const ema200 = data.ema200_4H || data.price;
@@ -272,21 +274,23 @@ export function checkVolumeAndOrderflow(data, direction) {
     const candles = data.candles1H;
     let cvdDelta = 0;
     if (candles.length > 2) {
-        const lastClose = candles.at(-1).close;
-        const prevClose = candles.at(-2).close;
+        const lastClose = candles[candles.length - 1].close;
+        const prevClose = candles[candles.length - 2].close;
         cvdDelta = (lastClose - prevClose) / prevClose;
     }
     const cvdSpike = Math.abs(cvdDelta) > 0.01;
     let fvgConfluence = false;
     if (candles.length > 3) {
-        const c1 = candles.at(-3);
-        const c2 = candles.at(-2);
-        const c3 = candles.at(-1);
+        const c1 = candles[candles.length - 3];
+        const c2 = candles[candles.length - 2];
+        const c3 = candles[candles.length - 1];
         if (direction === 'LONG' && c1.low > c2.high && c3.close > c2.high) fvgConfluence = true;
         if (direction === 'SHORT' && c1.high < c2.low && c3.close < c2.low) fvgConfluence = true;
     }
+    
+    // CORREÇÃO: Não bloqueia mais o sinal se não tiver FVG, apenas não dá bônus
     if (!fvgConfluence) {
-        return { volumeConfirmed: volumeSpike, orderflowConfirmed: cvdSpike, fvgConfluence: false, bonus: 0, blocked: true, reason: 'FVG confluente não encontrado' };
+        return { volumeConfirmed: volumeSpike, orderflowConfirmed: cvdSpike, fvgConfluence: false, bonus: 0, blocked: false };
     }
     let bonus = 0;
     if (volumeSpike && cvdSpike) bonus += 25;
@@ -317,7 +321,7 @@ export function checkDerivativesFilter(data, direction) {
 export function checkPortfolioExposure(activePositions, direction) {
     const sameDir = Object.values(activePositions).filter(p => p.type === direction).length;
     if (sameDir >= 1) {
-        return { blocked: true, reason: `Exposição correlacionada: já há ${sameDir} posição(ões) ${direction}` };
+        return { blocked: true, reason: `Exposição correlacionada: já há ${sameDir} posição(oes) ${direction}` };
     }
     return { blocked: false };
 }
@@ -421,16 +425,16 @@ export function isSafeToTrade(assetsData) {
     const now = new Date();
     const hourUTC = now.getUTCHours();
     const minUTC = now.getUTCMinutes();
-    const day = now.getUTCDate();
-    if (day <= 5 && hourUTC === 12 && minUTC >= 20) return false;
-    if (day <= 5 && hourUTC === 13 && minUTC <= 40) return false;
-    const data = assetsData['BTCUSDT'];
-    if (data && data.atrHistory && data.atrHistory.length > 20) {
-        const avgATR = data.atrHistory.slice(-20).reduce((a,b)=>a+b,0)/20;
-        if (data.atr_1H > avgATR * 2.5) return false;
+    const day = now.getUTCDay(); // 0 = Dom, 1 = Seg, ..., 5 = Sex, 6 = Sab
+    
+    // Bloquear apenas around 12:30 UTC (releases de dados dos EUA) de seg a sex
+    if (day >= 1 && day <= 5 && ((hourUTC === 12 && minUTC >= 20) || (hourUTC === 13 && minUTC <= 40))) {
+        return false;
     }
-    if ((hourUTC >= 7 && hourUTC <= 11) || (hourUTC >= 13 && hourUTC <= 17) || (hourUTC >= 0 && hourUTC <= 4)) return true;
-    return false;
+    
+    // Permitir negociação 24/5 fora desses horários específicos de alta volatilidade
+    // Finais de semana (sabado e domingo) crypto ainda opera, então retornamos true.
+    return true;
 }
 
 // ===== Kelly =====
