@@ -265,7 +265,7 @@ export const fetchFedRate = async () => {
         return cached;
     }
 
-    // Tenta direto (sem proxy)
+    // Tentativa 1: Chamada direta (sem proxy)
     try {
         const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS';
         const resp = await fetchWithTimeout(url, {}, 10000);
@@ -282,7 +282,7 @@ export const fetchFedRate = async () => {
         console.warn('[FedRate] Chamada direta falhou:', e.message);
     }
 
-    // Fallback com proxies
+    // Tentativa 2: Proxies (usando fetchWithTimeout diretamente)
     const proxies = [
         'https://corsproxy.io/?url=',
         'https://api.allorigins.win/raw?url='
@@ -305,12 +305,18 @@ export const fetchFedRate = async () => {
         }
     }
 
-    // Se tudo falhar, retorna cache velho ou fallback estático
-    if (cached) return cached;
-    console.warn('[FedRate] Todas as tentativas falharam, usando fallback estático (4.33%)');
-    return 4.33; // Valor realista para 2025
-};
+    // Tentativa 3: Retornar do cache antigo (mesmo que stale)
+    if (cached) {
+        console.warn('[FedRate] Usando cache antigo');
+        return cached;
+    }
 
+    // Último recurso: valor estático (taxa atual aproximada)
+    console.warn('[FedRate] Todas as tentativas falharam, usando fallback estático (4.33%)');
+    const fallback = 4.33;
+    setCachedData(cacheKey, fallback);
+    return fallback;
+};
 export const fetchPutCallRatio = async () => {
     try {
         const data = await fetchWithRetry('https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option');
