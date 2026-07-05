@@ -85,8 +85,7 @@ export async function fetchBasis(symbol = 'BTCUSDT') {
 
 // ===== Long/Short (CORS bloqueado) =====
 export async function fetchLSRatio(symbol = 'BTCUSDT') {
-    console.warn('[LSRatio] CORS bloqueado, retornando null');
-    return null;
+    return null; // Binance bloqueia CORS no browser para esse endpoint
 }
 
 // ===== CoinMetrics (via CoinGecko) =====
@@ -95,8 +94,8 @@ export async function fetchCoinMetrics() {
         const gecko = await fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
         if (gecko && gecko.bitcoin) {
             const price = gecko.bitcoin.usd;
-            const realized = price * 0.72;
-            const result = { price, realized, netflow: 0, minerOutflow: 0 };
+            // Não usamos mais o cálculo fictício realized = price * 0.72
+            const result = { price, realized: null, netflow: 0, minerOutflow: 0 };
             setCachedData('coinmetrics_fallback', result);
             return result;
         }
@@ -105,7 +104,7 @@ export async function fetchCoinMetrics() {
         const cached = getCachedData('coinmetrics_fallback');
         if (cached) return cached;
     }
-    return { price: 60000, realized: 43200, netflow: 0, minerOutflow: 0 };
+    return { price: 0, realized: null, netflow: 0, minerOutflow: 0 };
 }
 
 // ===== Blockchair =====
@@ -134,16 +133,37 @@ export async function fetchHashrate() {
     return null;
 }
 
-// ===== ETF Flows =====
+// ===== ETF Data (via Yahoo Finance) =====
 export async function fetchETFData() {
     try {
         const cached = getCachedData('etf_fallback');
         if (cached) return cached;
-        const fallback = { btcFlow: -445, ethFlow: -12.85 };
-        setCachedData('etf_fallback', fallback);
-        return fallback;
-    } catch(e) { console.warn('[ETF]', e); }
-    return { btcFlow: -445, ethFlow: -12.85 };
+
+        const proxy = CONFIG.PROXY_URL;
+        const fetchYahooChange = async (ticker) => {
+            const url = `${proxy}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`)}`;
+            const data = await fetchWithRetry(url, {}, 2);
+            if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
+                const meta = data.chart.result[0].meta;
+                const prev = meta.chartPreviousClose;
+                const curr = meta.regularMarketPrice;
+                return ((curr - prev) / prev) * 100;
+            }
+            return 0;
+        };
+
+        const [btcChange, ethChange] = await Promise.all([
+            fetchYahooChange('IBIT'), // BlackRock BTC ETF
+            fetchYahooChange('ETHA')  // BlackRock ETH ETF
+        ]);
+
+        const result = { btcFlow: btcChange, ethFlow: ethChange };
+        setCachedData('etf_fallback', result);
+        return result;
+    } catch(e) { 
+        console.warn('[ETF]', e); 
+        return getCachedData('etf_fallback') || { btcFlow: 0, ethFlow: 0 };
+    }
 }
 
 // ===== Deribit =====
@@ -188,51 +208,30 @@ export async function fetchDeFiData() {
     }
 }
 
-// ===== Tether Premium (CORRIGIDO – SEM LOGS) =====
+// ===== Tether Premium (Real via CoinGecko) =====
 export async function fetchTetherPremium() {
-    // Verifica cache primeiro
     const cached = getCachedData('tether_premium_fallback');
     if (cached !== null) return cached;
 
-    const apis = [
-        {
-            url: 'https://api.exchangerate-api.com/v4/latest/USD',
-            extract: (data) => {
-                if (data && data.rates && typeof data.rates.BRL === 'number') {
-                    return data.rates.BRL;
-                }
-                return null;
-            }
-        },
-        {
-            url: 'https://api.exchangerate.host/latest?base=USD&symbols=BRL',
-            extract: (data) => {
-                if (data && data.rates && typeof data.rates.BRL === 'number') {
-                    return data.rates.BRL;
-                }
-                return null;
-            }
-        }
-    ];
+    try {
+        // Busca preço real do USDT em BRL e do USD em BRL
+        const [cryptoData, fiatData] = await Promise.all([
+            fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=brl'),
+            fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD')
+        ]);
 
-    for (const api of apis) {
-        try {
-            const response = await fetchWithRetry(api.url, {}, 2);
-            const usdbrl = api.extract(response);
-            if (usdbrl !== null && usdbrl > 0) {
-                const usdtbrl = usdbrl * 1.002;
-                const premium = ((usdtbrl / usdbrl) - 1) * 100;
-                setCachedData('tether_premium_fallback', premium);
-                return premium;
-            }
-        } catch(e) {
-            // Silenciosamente tenta a próxima API
-            continue;
+        const usdtBrl = cryptoData?.tether?.brl;
+        const usdBrl = fiatData?.rates?.BRL;
+
+        if (usdtBrl && usdBrl) {
+            const premium = ((usdtBrl / usdBrl) - 1) * 100;
+            setCachedData('tether_premium_fallback', premium);
+            return premium;
         }
+    } catch(e) {
+        console.warn('[TetherPremium]', e);
     }
-
-    setCachedData('tether_premium_fallback', 0.0);
-    return 0.0;
+    return null;
 }
 
 // ===== Fear & Greed =====
@@ -245,13 +244,55 @@ export async function fetchFearGreed() {
     return null;
 }
 
-// ===== MACRO (dados estáticos) =====
+// ===== MACRO (via Yahoo Finance) =====
 export async function fetchMacroStatic() {
-    const cached = getCachedData('macro_fallback');
-    if (cached) return cached;
-    const fallback = { dxy: 101.37, us10y: 4.28, vix: 18.41, nasdaqChange: -1.09, spChange: -0.05 };
-    setCachedData('macro_fallback', fallback);
-    return fallback;
+    try {
+        const cached = getCachedData('macro_fallback');
+        if (cached) return cached;
+
+        const proxy = CONFIG.PROXY_URL;
+        const tickers = {
+            dxy: 'DX-Y.NYB',
+            us10y: '^TNX',
+            vix: '^VIX',
+            sp: '^GSPC',
+            nasdaq: '^NDX'
+        };
+
+        const fetchYahoo = async (ticker) => {
+            const url = `${proxy}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`)}`;
+            const data = await fetchWithRetry(url, {}, 2);
+            if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
+                const meta = data.chart.result[0].meta;
+                const prev = meta.chartPreviousClose;
+                const curr = meta.regularMarketPrice;
+                return { current: curr, change: ((curr - prev) / prev) * 100 };
+            }
+            return null;
+        };
+
+        const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
+            fetchYahoo(tickers.dxy),
+            fetchYahoo(tickers.us10y),
+            fetchYahoo(tickers.vix),
+            fetchYahoo(tickers.sp),
+            fetchYahoo(tickers.nasdaq)
+        ]);
+
+        const result = {
+            dxy: dxy?.current || 0,
+            us10y: us10y?.current || 0,
+            vix: vix?.current || 0,
+            spChange: sp?.change || 0,
+            nasdaqChange: nasdaq?.change || 0
+        };
+
+        setCachedData('macro_fallback', result);
+        return result;
+    } catch(e) { 
+        console.warn('[Macro]', e); 
+        return getCachedData('macro_fallback') || null;
+    }
 }
 
 // ===== MTF Confluence =====
