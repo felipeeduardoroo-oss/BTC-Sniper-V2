@@ -189,36 +189,54 @@ export async function fetchDeFiData() {
 }
 
 // ===== Tether Premium (com fallback) =====
+// ===== Tether Premium (com fallback e supressão de logs) =====
 export async function fetchTetherPremium() {
-    try {
-        const data = await fetchWithRetry('https://api.exchangerate.host/latest?base=USD&symbols=BRL');
-        if (data && data.rates && typeof data.rates.BRL !== 'undefined') {
-            const usdbrl = data.rates.BRL;
-            const usdtbrl = usdbrl * 1.002;
-            const premium = ((usdtbrl / usdbrl) - 1) * 100;
-            setCachedData('tether_premium_fallback', premium);
-            return premium;
+    // Primeiro, verifica se temos um valor em cache válido
+    const cached = getCachedData('tether_premium_fallback');
+    if (cached !== null) return cached;
+
+    // Lista de APIs a tentar (em ordem de preferência)
+    const apis = [
+        {
+            url: 'https://api.exchangerate-api.com/v4/latest/USD',
+            extract: (data) => {
+                if (data && data.rates && typeof data.rates.BRL === 'number') {
+                    return data.rates.BRL;
+                }
+                return null;
+            }
+        },
+        {
+            url: 'https://api.exchangerate.host/latest?base=USD&symbols=BRL',
+            extract: (data) => {
+                if (data && data.rates && typeof data.rates.BRL === 'number') {
+                    return data.rates.BRL;
+                }
+                return null;
+            }
         }
-        throw new Error('Resposta inválida do exchangerate.host');
-    } catch(e) {
-        console.warn('[TetherPremium] exchangerate.host falhou, tentando fallback...', e);
+    ];
+
+    for (const api of apis) {
         try {
-            const data2 = await fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD');
-            if (data2 && data2.rates && typeof data2.rates.BRL !== 'undefined') {
-                const usdbrl = data2.rates.BRL;
+            const response = await fetchWithRetry(api.url, {}, 2);
+            const usdbrl = api.extract(response);
+            if (usdbrl !== null && usdbrl > 0) {
+                // Estimar USDT/BRL com um pequeno prêmio (0.2%)
                 const usdtbrl = usdbrl * 1.002;
                 const premium = ((usdtbrl / usdbrl) - 1) * 100;
                 setCachedData('tether_premium_fallback', premium);
                 return premium;
             }
-            throw new Error('Resposta inválida do exchangerate-api');
-        } catch(e2) {
-            console.warn('[TetherPremium] Fallback também falhou, usando cache ou 0.0', e2);
-            const cached = getCachedData('tether_premium_fallback');
-            if (cached !== null) return cached;
-            return 0.0;
+        } catch(e) {
+            // Silenciosamente tenta a próxima API
+            continue;
         }
     }
+
+    // Se todas falharem, retorna 0.0 (neutro) e guarda em cache
+    setCachedData('tether_premium_fallback', 0.0);
+    return 0.0;
 }
 
 // ===== Fear & Greed =====
