@@ -44,7 +44,7 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 200) {
         if (data && data.length > 0) {
             return data.map(k => ({ time: k[0]/1000, open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5]) }));
         }
-    } catch(e) { /* ignore */ }
+    } catch(e) { console.warn(`[Binance Candles] ${symbol}:`, e); }
 
     try {
         const bybitInterval = intervalMap[interval] || '60';
@@ -54,7 +54,7 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 200) {
             const list = resp.result.list.reverse();
             return list.map(k => ({ time: parseInt(k[0])/1000, open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5]) }));
         }
-    } catch(e) { console.warn(`[Bybit] ${symbol} ${interval}:`, e); }
+    } catch(e) { console.warn(`[Bybit Candles] ${symbol}:`, e); }
     return [];
 }
 
@@ -63,7 +63,7 @@ export async function fetchFundingRate(symbol) {
         const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`;
         const data = await fetchWithRetry(url);
         if (data && data.length > 0) return { rate: parseFloat(data[0].fundingRate), time: data[0].fundingTime };
-    } catch(e) { /* ignore */ }
+    } catch(e) { console.warn('[Binance FR]', e); }
 
     try {
         const url = `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`;
@@ -72,7 +72,7 @@ export async function fetchFundingRate(symbol) {
             const item = resp.result.list[0];
             return { rate: parseFloat(item.fundingRate), time: parseInt(item.nextFundingTime) };
         }
-    } catch(e) { console.warn('[FundingRate]', e); }
+    } catch(e) { console.warn('[Bybit FR]', e); }
     return null;
 }
 
@@ -85,7 +85,7 @@ export async function fetchOpenInterest(symbol) {
             const curr = parseFloat(data[data.length - 1].sumOpenInterest);
             return { oi: curr, delta: ((curr - prev) / prev) * 100 };
         }
-    } catch(e) { /* ignore */ }
+    } catch(e) { console.warn('[Binance OI]', e); }
 
     try {
         const url = `https://api.bybit.com/v5/market/open-interest?category=linear&symbol=${symbol}&intervalTime=15min&limit=8`;
@@ -96,7 +96,7 @@ export async function fetchOpenInterest(symbol) {
             const prev = parseFloat(list[list.length - 1].openInterest);
             return { oi: curr, delta: ((curr - prev) / prev) * 100 };
         }
-    } catch(e) { console.warn('[OpenInterest]', e); }
+    } catch(e) { console.warn('[Bybit OI]', e); }
     return null;
 }
 
