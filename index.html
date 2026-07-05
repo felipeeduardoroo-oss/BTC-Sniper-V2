@@ -343,6 +343,7 @@
         import * as historico from './js/historicos_sinais.js';
 
         const {
+            // ... funções do indicadores
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
             generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
             calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
@@ -352,9 +353,14 @@
             checkPortfolioExposure, checkMTFAlignment, computeScore, isSafeToTrade,
             KellyPositionSize
         } = indicadores;
-    fetchOpenInterest,
-    fetchBasis,
-} = dadosExternos;
+
+        const {
+            fetchHistoricalCandles, fetchFundingRate, fetchOpenInterest, fetchBasis,
+            fetchBlockchairStats, fetchMempoolStats, fetchETFData, fetchFedRate,
+            fetchPutCallRatio, fetchDeFiData, fetchTetherPremium, fetchFearGreed,
+            fetchMacroStatic, getMTFConfluence, fetchOrderBook, setCurrentPrice,
+            sleep
+        } = dadosExternos;
         const {
             fetchHistoricalCandles, fetchFundingRate, fetchOpenInterest, fetchBasis,
             fetchBlockchairStats, fetchMempoolStats, fetchETFData, fetchFedRate,
