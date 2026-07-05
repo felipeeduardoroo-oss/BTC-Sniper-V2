@@ -10,7 +10,12 @@ export function fetchWithTimeout(url, options = {}, timeout = 15000) {
             controller.abort();
             reject(new Error(`Timeout: ${url}`));
         }, timeout);
-        fetch(url, { ...options, signal: controller.signal })
+        const headers = {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            ...options.headers
+        };
+        fetch(url, { ...options, signal: controller.signal, headers, mode: 'cors' })
             .then(resolve)
             .catch(reject)
             .finally(() => clearTimeout(id));
@@ -23,8 +28,8 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
         try {
             const resp = await fetchWithTimeout(url, options, 15000);
             if (resp.status === 429) {
-                // Rate limit - espera e tenta novamente
-                const wait = 1000 * (i + 1) * 2;
+                // Rate limit - espera e tenta novamente com backoff exponencial
+                const wait = 1000 * Math.pow(2, i) + 500;
                 await new Promise(r => setTimeout(r, wait));
                 continue;
             }
@@ -39,7 +44,8 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
         } catch(e) {
             lastError = e;
             if (i === retries - 1) break;
-            await new Promise(r => setTimeout(r, CONFIG.RETRY_DELAY_MS * (i + 1) * 2));
+            const wait = CONFIG.RETRY_DELAY_MS * Math.pow(2, i) + 500;
+            await new Promise(r => setTimeout(r, wait));
         }
     }
     throw lastError || new Error(`Falha ao buscar ${url}`);
@@ -64,6 +70,28 @@ function setCachedData(key, data) {
     } catch(e) { /* ignore */ }
 }
 
+// ===== POOL DE REQUISIÇÕES (limita paralelismo) =====
+let activeRequests = 0;
+const MAX_CONCURRENT = 3;
+const requestQueue = [];
+
+function runNextRequest() {
+    if (requestQueue.length === 0 || activeRequests >= MAX_CONCURRENT) return;
+    const { fn, resolve, reject } = requestQueue.shift();
+    activeRequests++;
+    fn().then(resolve, reject).finally(() => {
+        activeRequests--;
+        runNextRequest();
+    });
+}
+
+function requestPool(fn) {
+    return new Promise((resolve, reject) => {
+        requestQueue.push({ fn, resolve, reject });
+        runNextRequest();
+    });
+}
+
 // ===== MAPEAMENTO DE SÍMBOLOS PARA COINGECKO =====
 const SYMBOL_TO_COINGECKO = {
     'BTCUSDT': 'bitcoin',
@@ -78,7 +106,7 @@ const TIMEFRAME_TO_MINUTES = {
     '1d': 1440
 };
 
-// ===== FONTE PRIMÁRIA: COINGECKO (COM CORREÇÃO) =====
+// ===== FONTE PRIMÁRIA: COINGECKO (COM POOL DE REQUISIÇÕES) =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     const cacheKey = `candles_${symbol}_${interval}_${limit}`;
     const cached = getCachedData(cacheKey, 300000); // 5 min de cache
@@ -93,14 +121,15 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     }
 
     const minutesPerCandle = TIMEFRAME_TO_MINUTES[interval] || 60;
-    // CoinGecko aceita days entre 1 e 90
     let days = Math.ceil((limit * minutesPerCandle) / 1440) + 1;
-    days = Math.min(Math.max(days, 1), 90); // Limitar entre 1 e 90
+    days = Math.min(Math.max(days, 1), 90); // CoinGecko aceita 1-90
 
+    // Usando o pool de requisições para não exceder o rate limit
     try {
-        // Usando o endpoint OHLC (mais leve)
-        const url = `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
-        const data = await fetchWithRetry(url, {}, 3);
+        const data = await requestPool(async () => {
+            const url = `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
+            return await fetchWithRetry(url, {}, 3);
+        });
         
         if (data && data.length > 0) {
             const candles = data.map(k => ({
@@ -111,7 +140,6 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
                 close: parseFloat(k[4]),
                 volume: 0
             }));
-            // Pegar os últimos 'limit' candles
             const filtered = candles.slice(-limit);
             setCachedData(cacheKey, filtered);
             return filtered;
@@ -143,13 +171,12 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
         console.warn(`[Bybit Candles] ${symbol}:`, e);
     }
 
-    // ===== ÚLTIMO FALLBACK: DADOS MOCKADOS (para não quebrar a UI) =====
+    // ===== ÚLTIMO FALLBACK: DADOS MOCKADOS =====
     if (cached) {
         console.warn(`[Candles] Usando cache antigo para ${symbol} ${interval}`);
         return cached;
     }
 
-    // Gerar dados mockados a partir do preço atual (se disponível)
     const price = getCurrentPrice(symbol);
     if (price > 0) {
         const mockCandles = [];
@@ -171,7 +198,7 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     return [];
 }
 
-// ===== AUXILIAR PARA PREÇO ATUAL (usado no fallback) =====
+// ===== AUXILIAR PARA PREÇO ATUAL =====
 let _currentPrices = { 'BTCUSDT': 0, 'ETHUSDT': 0, 'SOLUSDT': 0 };
 export function setCurrentPrice(symbol, price) {
     _currentPrices[symbol] = price;
@@ -180,7 +207,7 @@ function getCurrentPrice(symbol) {
     return _currentPrices[symbol] || 0;
 }
 
-// ===== DEMAIS FUNÇÕES =====
+// ===== DEMAIS FUNÇÕES (mantidas) =====
 export const fetchFundingRate = async (symbol) => {
     try {
         const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`;
@@ -304,7 +331,6 @@ export const fetchETFData = async () => {
     } catch(e) { console.warn('[ETF]', e); return null; }
 };
 
-// ===== FETCH FED RATE (CORRIGIDO) =====
 export const fetchFedRate = async () => {
     const cacheKey = 'fedRate';
     const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
@@ -312,7 +338,6 @@ export const fetchFedRate = async () => {
         return cached;
     }
 
-    // Tentativa direta
     try {
         const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS';
         const resp = await fetchWithTimeout(url, {}, 10000);
@@ -329,7 +354,6 @@ export const fetchFedRate = async () => {
         console.warn('[FedRate] Chamada direta falhou:', e.message);
     }
 
-    // Proxies
     const proxies = [
         'https://corsproxy.io/?url=',
         'https://api.allorigins.win/raw?url='
@@ -352,7 +376,6 @@ export const fetchFedRate = async () => {
         }
     }
 
-    // Fallback para cache antigo ou valor estático
     if (cached) {
         console.warn('[FedRate] Usando cache antigo');
         return cached;
@@ -418,7 +441,6 @@ export const fetchTetherPremium = async () => {
         console.warn('[TetherPremium]', e);
     }
 
-    // Fallback
     if (cached) {
         console.warn('[TetherPremium] Usando cache antigo');
         return cached;
