@@ -333,7 +333,7 @@
 
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
-<script type="module">
+    <script type="module">
         import { CONFIG } from './js/config.js';
         import * as indicadores from './js/indicadores.js';
         import * as dadosExternos from './js/dados_externos.js';
@@ -342,8 +342,9 @@
         import * as banco from './js/banco_de_dados.js';
         import * as historico from './js/historicos_sinais.js';
 
+        // Desestruturação única
         const {
-            // ... funções do indicadores
+            // Do indicadores
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
             generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
             calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
@@ -355,17 +356,23 @@
         } = indicadores;
 
         const {
-            fetchHistoricalCandles, fetchFundingRate, fetchOpenInterest, fetchBasis,
-            fetchBlockchairStats, fetchMempoolStats, fetchETFData, fetchFedRate,
-            fetchPutCallRatio, fetchDeFiData, fetchTetherPremium, fetchFearGreed,
-            fetchMacroStatic, getMTFConfluence, fetchOrderBook, setCurrentPrice,
-            sleep
-        } = dadosExternos;
-        const {
-            fetchHistoricalCandles, fetchFundingRate, fetchOpenInterest, fetchBasis,
-            fetchBlockchairStats, fetchMempoolStats, fetchETFData, fetchFedRate,
-            fetchPutCallRatio, fetchDeFiData, fetchTetherPremium, fetchFearGreed,
-            fetchMacroStatic, getMTFConfluence, fetchOrderBook, setCurrentPrice,
+            // Do dadosExternos
+            fetchHistoricalCandles,
+            fetchFundingRate,
+            fetchOpenInterest,
+            fetchBasis,
+            fetchBlockchairStats,
+            fetchMempoolStats,
+            fetchETFData,
+            fetchFedRate,
+            fetchPutCallRatio,
+            fetchDeFiData,
+            fetchTetherPremium,
+            fetchFearGreed,
+            fetchMacroStatic,
+            getMTFConfluence,
+            fetchOrderBook,
+            setCurrentPrice,
             sleep
         } = dadosExternos;
 
@@ -1237,6 +1244,5 @@
 
         init();
     </script>
-    
-    </body>
+</body>
 </html>
