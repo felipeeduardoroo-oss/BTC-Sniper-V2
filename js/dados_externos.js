@@ -62,7 +62,13 @@ export async function fetchFundingRate(symbol) {
     try {
         const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`;
         const data = await fetchWithRetry(url);
-        if (data && data.length > 0) return { rate: parseFloat(data[0].fundingRate), time: data[0].fundingTime };
+        if (data && data.length > 0) {
+            const rate = parseFloat(data[0].fundingRate);
+            let interpretacao = 'EQUILIBRADO';
+            if (rate > 0.01) interpretacao = 'LONGS SOBRE-APOSTADOS';
+            else if (rate < -0.01) interpretacao = 'SHORTS SOBRE-APOSTADOS';
+            return { rate, time: data[0].fundingTime, interpretacao };
+        }
     } catch(e) { console.warn('[Binance FR]', e); }
 
     try {
@@ -70,7 +76,11 @@ export async function fetchFundingRate(symbol) {
         const resp = await fetchWithRetry(url);
         if (resp && resp.result && resp.result.list && resp.result.list.length > 0) {
             const item = resp.result.list[0];
-            return { rate: parseFloat(item.fundingRate), time: parseInt(item.nextFundingTime) };
+            const rate = parseFloat(item.fundingRate);
+            let interpretacao = 'EQUILIBRADO';
+            if (rate > 0.01) interpretacao = 'LONGS SOBRE-APOSTADOS';
+            else if (rate < -0.01) interpretacao = 'SHORTS SOBRE-APOSTADOS';
+            return { rate, time: parseInt(item.nextFundingTime), interpretacao };
         }
     } catch(e) { console.warn('[Bybit FR]', e); }
     return null;
@@ -100,7 +110,6 @@ export async function fetchOpenInterest(symbol) {
     return null;
 }
 
-// FIX 4: Corrigido para usar markPrice e indexPrice
 export async function fetchBasis(symbol = 'BTCUSDT') {
     try {
         const url = `https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`;
@@ -110,6 +119,22 @@ export async function fetchBasis(symbol = 'BTCUSDT') {
         }
     } catch(e) { console.warn('[Basis]', e); }
     return null;
+}
+
+// ===== ORDER BOOK (NOVO) =====
+export async function fetchOrderBook(symbol = 'BTCUSDT', limit = 10) {
+    try {
+        const data = await fetchWithRetry(`https://api.binance.com/api/v3/depth?symbol=${symbol}&limit=${limit}`);
+        if (!data || !data.bids || !data.asks) return null;
+        const bidTotal = data.bids.reduce((s, b) => s + parseFloat(b[1]) * parseFloat(b[0]), 0);
+        const askTotal = data.asks.reduce((s, a) => s + parseFloat(a[1]) * parseFloat(a[0]), 0);
+        return {
+            bids: data.bids.slice(0, 5).map(b => ({ price: +b[0], qty: +b[1] })),
+            asks: data.asks.slice(0, 5).map(a => ({ price: +a[0], qty: +a[1] })),
+            bidTotal, askTotal,
+            imbalance: ((bidTotal - askTotal) / (bidTotal + askTotal) * 100)
+        };
+    } catch(e) { console.warn('[OrderBook]', e); return null; }
 }
 
 // ===== Blockchair (On-Chain Real) =====
@@ -171,7 +196,6 @@ export async function fetchETFData() {
     }
 }
 
-// FIX 5: Fed Rate via FRED
 export async function fetchFedRate() {
     try {
         const url = CONFIG.PROXY_URL + encodeURIComponent('https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS');
@@ -231,13 +255,19 @@ export async function fetchTetherPremium() {
     return null;
 }
 
-// ===== Fear & Greed =====
+// ===== Fear & Greed (com cor) =====
 export async function fetchFearGreed() {
     try {
         const data = await fetchWithRetry('https://api.alternative.me/fng/?limit=1');
-        return { value: parseInt(data.data[0].value), classification: data.data[0].value_classification };
-    } catch(e) { console.warn('[FearGreed]', e); }
-    return null;
+        const v = parseInt(data.data[0].value);
+        let color = '#ffc107';
+        if (v < 25) color = '#ff1744';
+        else if (v < 45) color = '#ff9800';
+        else if (v < 55) color = '#ffc107';
+        else if (v < 75) color = '#8bc34a';
+        else color = '#00e676';
+        return { value: v, classification: data.data[0].value_classification, color };
+    } catch(e) { console.warn('[FearGreed]', e); return null; }
 }
 
 // ===== MACRO (via Yahoo Finance) =====
