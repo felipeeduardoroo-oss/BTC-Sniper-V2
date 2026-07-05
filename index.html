@@ -166,8 +166,6 @@
                 <div style="position:relative;height:28px;background:#21262d;border-radius:14px;overflow:hidden;margin-bottom:10px;">
                     <div id="scoreBar" style="height:100%;width:50%;border-radius:14px;transition:width 0.6s ease, background 0.6s ease;background:linear-gradient(90deg,#ff1744,#ffc107,#00e676);"></div>
                     <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-weight:800;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,0.8);"><span id="scoreValue">50</span>/100</div>
-                    <div style="position:absolute;left:20%;top:0;bottom:0;width:1px;background:rgba(255,255,255,0.15);"></div>
-                    <div style="position:absolute;left:80%;top:0;bottom:0;width:1px;background:rgba(255,255,255,0.15);"></div>
                 </div>
                 <div style="display:flex;gap:6px;margin-bottom:10px;" id="mtfBadges"></div>
                 <div id="scoreReasons" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
@@ -432,9 +430,9 @@
 
         async function evaluateMarkets() {
             for (const symbol of CONFIG.ASSETS) {
-                try { const conf = await dadosExternos.getMTFConfluence(symbol); if (assetsData[symbol]) assetsData[symbol].mtfConfluence = conf; } catch(e) {}
-                try { const fr = await dadosExternos.fetchFundingRate(symbol); if (fr && assetsData[symbol]) assetsData[symbol].fundingRate = fr.rate; } catch(e) {}
-                try { const oi = await dadosExternos.fetchOpenInterest(symbol); if (oi && assetsData[symbol]) assetsData[symbol].oiDelta = oi.delta; } catch(e) {}
+                try { const conf = await dadosExternos.getMTFConfluence(symbol); if (assetsData[symbol]) assetsData[symbol].mtfConfluence = conf; } catch(e) { console.warn('MTF Err', e); }
+                try { const fr = await dadosExternos.fetchFundingRate(symbol); if (fr && assetsData[symbol]) assetsData[symbol].fundingRate = fr.rate; } catch(e) { console.warn('FR Err', e); }
+                try { const oi = await dadosExternos.fetchOpenInterest(symbol); if (oi && assetsData[symbol]) assetsData[symbol].oiDelta = oi.delta; } catch(e) { console.warn('OI Err', e); }
             }
             CONFIG.ASSETS.forEach(symbol => {
                 const data = assetsData[symbol];
@@ -540,6 +538,13 @@
                     document.getElementById('nasdaq-value').textContent = (macro.nasdaqChange >= 0 ? '+' : '') + macro.nasdaqChange.toFixed(2) + '%';
                     document.getElementById('sp500-value').textContent = (macro.spChange >= 0 ? '+' : '') + macro.spChange.toFixed(2) + '%';
                     graficos.updateMacroChart(macro);
+                }
+
+                const defi = await dadosExternos.fetchDeFiData();
+                if (defi) {
+                    document.getElementById('stablecoin-supply').textContent = '$' + defi.totalStable.toFixed(0) + 'B';
+                    document.getElementById('defi-tvl').textContent = '$' + defi.tvl.toFixed(1) + 'B';
+                    document.getElementById('defi-tvl-change').textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
                 }
 
                 const fg = await dadosExternos.fetchFearGreed();
