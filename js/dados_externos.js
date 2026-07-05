@@ -52,12 +52,17 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
     throw lastError || new Error(`Falha ao buscar ${url}`);
 }
 
-// ===== TWELVE DATA =====
+// ===== TWELVE DATA (com retry e delay) =====
 async function fetchTwelveData(endpoint, params = {}) {
     const url = new URL(`https://api.twelvedata.com/${endpoint}`);
     url.searchParams.set('apikey', TWELVEDATA_KEY);
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-    return fetchWithRetry(url.toString(), {}, 2);
+    try {
+        return await fetchWithRetry(url.toString(), {}, 2);
+    } catch(e) {
+        console.warn(`[Twelve Data] ${endpoint} falhou:`, e.message);
+        return null;
+    }
 }
 
 // ===== CACHE =====
@@ -79,19 +84,32 @@ function setCachedData(key, data) {
     } catch(e) { /* ignore */ }
 }
 
-// ===== POOL DE REQUISIÇÕES =====
+// ===== POOL DE REQUISIÇÕES (sequencial) =====
 let activeRequests = 0;
-const MAX_CONCURRENT = 3;
+const MAX_CONCURRENT = 1; // REDUZIDO para evitar rate limit
 const requestQueue = [];
+let lastRequestTime = 0;
 
-function runNextRequest() {
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function runNextRequest() {
     if (requestQueue.length === 0 || activeRequests >= MAX_CONCURRENT) return;
     const { fn, resolve, reject } = requestQueue.shift();
     activeRequests++;
-    fn().then(resolve, reject).finally(() => {
+    // Delay mínimo de 500ms entre chamadas
+    const now = Date.now();
+    const wait = Math.max(0, 500 - (now - lastRequestTime));
+    if (wait > 0) await sleep(wait);
+    lastRequestTime = Date.now();
+    try {
+        const result = await fn();
+        resolve(result);
+    } catch(e) {
+        reject(e);
+    } finally {
         activeRequests--;
         runNextRequest();
-    });
+    }
 }
 
 function requestPool(fn) {
@@ -124,7 +142,7 @@ export function getCurrentPrice(symbol) {
     return _currentPrices[symbol] || 0;
 }
 
-// ===== FETCH CANDLES (Twelve Data primário) =====
+// ===== FETCH CANDLES (com fallback) =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     const cacheKey = `candles_${symbol}_${interval}_${limit}`;
     const cached = getCachedData(cacheKey, 300000);
@@ -132,9 +150,8 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
         return cached;
     }
 
-    // 1) Twelve Data
+    // 1) Twelve Data (tenta uma vez, se falhar vai para fallback)
     try {
-        // Converte BTCUSDT → BTC/USD (formato da Twelve Data)
         const cleanSymbol = symbol.replace('USDT', '/USD');
         const data = await requestPool(async () => {
             return await fetchTwelveData('time_series', {
@@ -157,10 +174,10 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
             return candles;
         }
     } catch(e) {
-        console.warn(`[Twelve Data] ${symbol} ${interval} falhou:`, e.message);
+        console.warn(`[Twelve Data] ${symbol} ${interval} falhou, usando fallback.`);
     }
 
-    // 2) Binance (fallback)
+    // 2) Binance (fallback principal)
     try {
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
         const data = await requestPool(async () => await fetchWithRetry(url, {}, 3));
@@ -239,7 +256,7 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     return [];
 }
 
-// ===== FETCH MACRO (Twelve Data primário) =====
+// ===== FETCH MACRO (Yahoo primário) =====
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
     const cached = getCachedData(cacheKey, 300000);
@@ -247,48 +264,9 @@ export const fetchMacroStatic = async () => {
         return cached;
     }
 
+    // 1) Yahoo Finance via proxy (primário)
     try {
-        // Twelve Data: DXY, TNX (US10Y), VIX, SPX, NDX
-        const symbols = ['DXY', 'TNX', 'VIX', 'SPX', 'NDX'];
-        const promises = symbols.map(sym =>
-            requestPool(async () => {
-                const data = await fetchTwelveData('price', { symbol: sym });
-                return { symbol: sym, price: parseFloat(data.price || 0) };
-            })
-        );
-        const results = await Promise.all(promises);
-        const map = {};
-        results.forEach(r => map[r.symbol] = r.price);
-
-        // Para SPX e NDX, calculamos a variação diária aproximada (se disponível)
-        // Twelve Data não retorna change no endpoint price, então usamos um segundo endpoint para change
-        // Vamos buscar o change separadamente (ou usar fallback)
-        const changePromises = ['SPX', 'NDX'].map(sym =>
-            requestPool(async () => {
-                const data = await fetchTwelveData('quote', { symbol: sym });
-                return { symbol: sym, change: parseFloat(data.change || 0) };
-            })
-        );
-        const changeResults = await Promise.all(changePromises);
-        const changeMap = {};
-        changeResults.forEach(r => changeMap[r.symbol] = r.change);
-
-        const macro = {
-            dxy: map.DXY || 0,
-            us10y: map.TNX || 0,
-            vix: map.VIX || 0,
-            spChange: changeMap.SPX || 0,
-            nasdaqChange: changeMap.NDX || 0
-        };
-        setCachedData(cacheKey, macro);
-        return macro;
-    } catch(e) {
-        console.warn('[Macro Twelve Data] falhou:', e);
-    }
-
-    // Fallback: Yahoo Finance via proxy
-    try {
-        const proxy = CONFIG.PROXY_URL;
+        const proxy = CONFIG.PROXY_URL || 'https://corsproxy.io/?url=';
         const fetchYahoo = async (ticker) => {
             const url = `${proxy}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`)}`;
             const data = await fetchWithRetry(url, {}, 2);
@@ -311,7 +289,44 @@ export const fetchMacroStatic = async () => {
         setCachedData(cacheKey, macro);
         return macro;
     } catch(e) {
-        console.warn('[Macro Yahoo fallback] falhou:', e);
+        console.warn('[Macro Yahoo] falhou, tentando Twelve Data...', e);
+    }
+
+    // 2) Twelve Data (fallback)
+    try {
+        const symbols = ['DXY', 'TNX', 'VIX', 'SPX', 'NDX'];
+        const promises = symbols.map(sym =>
+            requestPool(async () => {
+                const data = await fetchTwelveData('price', { symbol: sym });
+                return { symbol: sym, price: parseFloat(data?.price || 0) };
+            })
+        );
+        const results = await Promise.all(promises);
+        const map = {};
+        results.forEach(r => map[r.symbol] = r.price);
+
+        // Mudanças (aproximadas via quote)
+        const changePromises = ['SPX', 'NDX'].map(sym =>
+            requestPool(async () => {
+                const data = await fetchTwelveData('quote', { symbol: sym });
+                return { symbol: sym, change: parseFloat(data?.change || 0) };
+            })
+        );
+        const changeResults = await Promise.all(changePromises);
+        const changeMap = {};
+        changeResults.forEach(r => changeMap[r.symbol] = r.change);
+
+        const macro = {
+            dxy: map.DXY || 0,
+            us10y: map.TNX || 0,
+            vix: map.VIX || 0,
+            spChange: changeMap.SPX || 0,
+            nasdaqChange: changeMap.NDX || 0
+        };
+        setCachedData(cacheKey, macro);
+        return macro;
+    } catch(e) {
+        console.warn('[Macro Twelve Data] falhou:', e);
     }
 
     if (cached) {
@@ -319,6 +334,56 @@ export const fetchMacroStatic = async () => {
         return cached;
     }
     return { dxy: 0, us10y: 0, vix: 0, spChange: 0, nasdaqChange: 0 };
+};
+
+// ===== FETCH FED RATE (corrigido) =====
+export const fetchFedRate = async () => {
+    const cacheKey = 'fedRate';
+    const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
+    if (cached && !cached.stale) {
+        return cached;
+    }
+
+    // 1) Twelve Data (opcional)
+    try {
+        const data = await fetchTwelveData('price', { symbol: 'FEDFUNDS' });
+        if (data && data.price) {
+            const rate = parseFloat(data.price);
+            if (!isNaN(rate) && rate > 0) {
+                setCachedData(cacheKey, rate);
+                return rate;
+            }
+        }
+    } catch(e) {
+        console.warn('[FedRate Twelve Data] falhou:', e);
+    }
+
+    // 2) FRED via proxy (corrigido)
+    const proxy = 'https://api.allorigins.win/raw?url=';
+    const url = proxy + encodeURIComponent('https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS');
+    try {
+        const resp = await fetchWithTimeout(url, {}, 15000);
+        if (resp.ok) {
+            const csv = await resp.text();
+            const lastLine = csv.trim().split('\n').pop();
+            const rate = parseFloat(lastLine.split(',')[1]);
+            if (!isNaN(rate) && rate > 0) {
+                setCachedData(cacheKey, rate);
+                return rate;
+            }
+        }
+    } catch(e) {
+        console.warn('[FedRate FRED via proxy] falhou:', e);
+    }
+
+    if (cached) {
+        console.warn('[FedRate] Usando cache antigo');
+        return cached;
+    }
+    console.warn('[FedRate] Todas as tentativas falharam, usando fallback estático (4.33%)');
+    const fallback = 4.33;
+    setCachedData(cacheKey, fallback);
+    return fallback;
 };
 
 // ===== DEMAIS FUNÇÕES (mantidas) =====
@@ -443,52 +508,6 @@ export const fetchETFData = async () => {
         const [btcChange, ethChange] = await Promise.all([fetchYahooChange('IBIT'), fetchYahooChange('ETHA')]);
         return { btcFlow: btcChange, ethFlow: ethChange };
     } catch(e) { console.warn('[ETF]', e); return null; }
-};
-
-export const fetchFedRate = async () => {
-    const cacheKey = 'fedRate';
-    const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
-    if (cached && !cached.stale) {
-        return cached;
-    }
-
-    try {
-        // Twelve Data: FEDFUNDS
-        const data = await fetchTwelveData('price', { symbol: 'FEDFUNDS' });
-        if (data && data.price) {
-            const rate = parseFloat(data.price);
-            setCachedData(cacheKey, rate);
-            return rate;
-        }
-    } catch(e) {
-        console.warn('[FedRate Twelve Data] falhou:', e);
-    }
-
-    // Fallback FRED
-    try {
-        const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS';
-        const resp = await fetchWithTimeout(url, {}, 10000);
-        if (resp.ok) {
-            const csv = await resp.text();
-            const lastLine = csv.trim().split('\n').pop();
-            const rate = parseFloat(lastLine.split(',')[1]);
-            if (!isNaN(rate) && rate > 0) {
-                setCachedData(cacheKey, rate);
-                return rate;
-            }
-        }
-    } catch(e) {
-        console.warn('[FedRate FRED] falhou:', e);
-    }
-
-    if (cached) {
-        console.warn('[FedRate] Usando cache antigo');
-        return cached;
-    }
-    console.warn('[FedRate] Todas as tentativas falharam, usando fallback estático (4.33%)');
-    const fallback = 4.33;
-    setCachedData(cacheKey, fallback);
-    return fallback;
 };
 
 export const fetchPutCallRatio = async () => {
