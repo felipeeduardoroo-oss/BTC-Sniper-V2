@@ -188,14 +188,13 @@ export async function fetchDeFiData() {
     }
 }
 
-// ===== Tether Premium (com fallback) =====
-// ===== Tether Premium (com fallback e supressão de logs) =====
+// ===== Tether Premium (CORRIGIDO – SEM LOGS) =====
 export async function fetchTetherPremium() {
-    // Primeiro, verifica se temos um valor em cache válido
+    // Verifica cache primeiro
     const cached = getCachedData('tether_premium_fallback');
     if (cached !== null) return cached;
 
-    // Lista de APIs a tentar (em ordem de preferência)
+    // Lista de APIs para tentar (ordem de preferência)
     const apis = [
         {
             url: 'https://api.exchangerate-api.com/v4/latest/USD',
@@ -222,8 +221,7 @@ export async function fetchTetherPremium() {
             const response = await fetchWithRetry(api.url, {}, 2);
             const usdbrl = api.extract(response);
             if (usdbrl !== null && usdbrl > 0) {
-                // Estimar USDT/BRL com um pequeno prêmio (0.2%)
-                const usdtbrl = usdbrl * 1.002;
+                const usdtbrl = usdbrl * 1.002; // estimativa com prêmio
                 const premium = ((usdtbrl / usdbrl) - 1) * 100;
                 setCachedData('tether_premium_fallback', premium);
                 return premium;
@@ -234,7 +232,7 @@ export async function fetchTetherPremium() {
         }
     }
 
-    // Se todas falharem, retorna 0.0 (neutro) e guarda em cache
+    // Se todas falharem, retorna 0.0 (neutro)
     setCachedData('tether_premium_fallback', 0.0);
     return 0.0;
 }
