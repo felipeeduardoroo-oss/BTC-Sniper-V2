@@ -1081,40 +1081,8 @@
                     if (changeEl) changeEl.textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
                 }
 
-                const fedRate = await dadosExternos.fetchFedRate();
-                const fedRateEl = document.getElementById('fed-rate');
-                const fedSourceEl = document.getElementById('fed-source');
-                if (fedRate !== null) {
-                    if (fedRateEl) fedRateEl.textContent = fedRate.toFixed(2) + '%';
-                    if (fedSourceEl) fedSourceEl.textContent = 'FRED (live)';
-                } else if (fedRateEl && fedRateEl.textContent === 'Carregando...') {
-                    fedRateEl.textContent = 'Indisponível';
-                }
-
-                const macroSymbols = { dxy: 'DX-Y.NYB', us10y: '^TNX', vix: '^VIX', nasdaq: '^IXIC', sp500: '^GSPC' };
-                const macroIds = { dxy: 'dxy-value', us10y: 'us10y-value', vix: 'vix-value', nasdaq: 'nasdaq-value', sp500: 'sp500-value' };
-                const macroSourceIds = { dxy: 'dxy-source', us10y: 'us10y-source', vix: 'vix-source', nasdaq: 'nasdaq-source', sp500: 'sp500-source' };
-                const macroUpdateIds = ['dxy-update', 'us10y-update', 'vix-update', 'nasdaq-update', 'sp500-update'];
-                let macroLive = {};
-                let anyLive = false;
-                for (const key of Object.keys(macroSymbols)) {
-                    const yahoo = await dadosExternos.fetchYahoo(macroSymbols[key]);
-                    if (yahoo) {
-                        macroLive[key] = yahoo;
-                        anyLive = true;
-                        const srcEl = document.getElementById(macroSourceIds[key]);
-                        if (srcEl) srcEl.textContent = 'Yahoo (live)';
-                    }
-                }
-                // Fallback: para chaves que falharam ao vivo, usa o snapshot estático (rotulado como tal)
-                const macroFallback = await dadosExternos.fetchMacroStatic();
-                const macro = {
-                    dxy: macroLive.dxy ? macroLive.dxy.price : macroFallback.dxy,
-                    us10y: macroLive.us10y ? macroLive.us10y.price : macroFallback.us10y, // ^TNX já retorna o yield em % direto, sem multiplicar
-                    vix: macroLive.vix ? macroLive.vix.price : macroFallback.vix,
-                    nasdaqChange: macroLive.nasdaq ? macroLive.nasdaq.change : macroFallback.nasdaqChange,
-                    spChange: macroLive.sp500 ? macroLive.sp500.change : macroFallback.spChange,
-                };
+                // MACRO (dados estáticos – SEM YAHOO)
+                const macro = await dadosExternos.fetchMacroStatic();
                 if (macro) {
                     const dxyEl = document.getElementById('dxy-value');
                     if (dxyEl) dxyEl.textContent = macro.dxy.toFixed(2);
@@ -1133,19 +1101,10 @@
                         spEl.style.color = macro.spChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
                     }
                     const now = getCurrentTimestamp();
-                    // Só marca "atualizado" nas fontes que realmente vieram ao vivo neste ciclo
-                    Object.keys(macroSymbols).forEach(key => {
-                        if (macroLive[key]) {
-                            const updateEl = document.getElementById(macroIds[key].replace('-value', '-update'));
-                            if (updateEl) updateEl.textContent = 'atualizado ' + now;
-                        }
+                    ['dxy-update', 'us10y-update', 'vix-update', 'nasdaq-update', 'sp500-update'].forEach(id => {
+                        const updateEl = document.getElementById(id);
+                        if (updateEl) updateEl.textContent = 'atualizado ' + now;
                     });
-                    const summaryEl = document.getElementById('macro-summary');
-                    const statusEl = document.getElementById('macro-status');
-                    const macroSrcEl = document.getElementById('macro-source');
-                    if (summaryEl) summaryEl.textContent = 'DXY ' + macro.dxy.toFixed(2) + ' | US10Y ' + macro.us10y.toFixed(2) + '%';
-                    if (statusEl) statusEl.textContent = anyLive ? 'Ao vivo' : 'Referência (fallback)';
-                    if (macroSrcEl) macroSrcEl.textContent = anyLive ? 'Yahoo' : 'Estático';
                 }
 
                 const fg = await dadosExternos.fetchFearGreed();
