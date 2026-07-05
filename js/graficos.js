@@ -117,6 +117,39 @@ export function initCharts() {
     return { scoreChart, etfChart, macroChart, scenariosChart, allocationChart, whaleChart };
 }
 
+export function pushETFDataPoint(btcFlow, ethFlow, label) {
+    if (!etfChart) return;
+    // Na primeira atualização ao vivo, troca o rótulo da série de "(ref)" para "(live)"
+    if (etfChart.data.datasets[0].label.includes('(ref)')) {
+        etfChart.data.datasets[0].label = 'BTC ETF Flow (live)';
+        etfChart.data.datasets[1].label = 'ETH ETF Flow (live)';
+    }
+    etfChart.data.labels.push(label);
+    etfChart.data.datasets[0].data.push(btcFlow);
+    etfChart.data.datasets[1].data.push(ethFlow);
+    if (etfChart.data.labels.length > 30) {
+        etfChart.data.labels.shift();
+        etfChart.data.datasets.forEach(d => d.data.shift());
+    }
+    etfChart.update('none');
+}
+
+export function pushMacroDataPoint(dxy, us10y, label) {
+    if (!macroChart) return;
+    if (macroChart.data.datasets[0].label.includes('(ref)')) {
+        macroChart.data.datasets[0].label = 'DXY (live)';
+        macroChart.data.datasets[1].label = 'US10Y (live)';
+    }
+    macroChart.data.labels.push(label);
+    macroChart.data.datasets[0].data.push(dxy);
+    macroChart.data.datasets[1].data.push(us10y);
+    if (macroChart.data.labels.length > 30) {
+        macroChart.data.labels.shift();
+        macroChart.data.datasets.forEach(d => d.data.shift());
+    }
+    macroChart.update('none');
+}
+
 export function updateScoreChart(history) {
     if (!scoreChart) return;
     const btcHist = history.filter(s => s.symbol === 'BTCUSDT').slice(-50);
