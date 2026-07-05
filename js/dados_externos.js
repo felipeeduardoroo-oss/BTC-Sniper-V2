@@ -36,86 +36,57 @@ export function setCachedData(key, data) {
 
 // ===== Binance (com Fallback Bybit) =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 200) {
-    const intervalMap = {
-        '15m': '15',
-        '1h': '60',
-        '4h': '240',
-        '1d': 'D'
-    };
+    const intervalMap = { '15m': '15', '1h': '60', '4h': '240', '1d': 'D' };
 
-    // 1. Tenta Binance
     try {
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
         const data = await fetchWithRetry(url);
         if (data && data.length > 0) {
             return data.map(k => ({ time: k[0]/1000, open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5]) }));
         }
-    } catch(e) {
-        console.warn(`[Binance] ${symbol} ${interval} falhou. Tentando Bybit...`);
-    }
+    } catch(e) { /* ignore */ }
 
-    // 2. Fallback Bybit
     try {
         const bybitInterval = intervalMap[interval] || '60';
         const url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${symbol}&interval=${bybitInterval}&limit=${limit}`;
         const resp = await fetchWithRetry(url);
         if (resp && resp.result && resp.result.list && resp.result.list.length > 0) {
-            // Bybit retorna do mais novo para o mais velho, então inverte
             const list = resp.result.list.reverse();
-            return list.map(k => ({ 
-                time: parseInt(k[0])/1000, 
-                open: parseFloat(k[1]), 
-                high: parseFloat(k[2]), 
-                low: parseFloat(k[3]), 
-                close: parseFloat(k[4]), 
-                volume: parseFloat(k[5]) 
-            }));
+            return list.map(k => ({ time: parseInt(k[0])/1000, open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5]) }));
         }
-    } catch(e) {
-        console.warn(`[Bybit] ${symbol} ${interval}:`, e);
-    }
-
+    } catch(e) { console.warn(`[Bybit] ${symbol} ${interval}:`, e); }
     return [];
 }
 
 export async function fetchFundingRate(symbol) {
-    // 1. Tenta Binance
     try {
         const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`;
         const data = await fetchWithRetry(url);
-        if (data && data.length > 0) {
-            const fr = parseFloat(data[0].fundingRate);
-            return { rate: fr, time: data[0].fundingTime };
-        }
+        if (data && data.length > 0) return { rate: parseFloat(data[0].fundingRate), time: data[0].fundingTime };
     } catch(e) { /* ignore */ }
 
-    // 2. Fallback Bybit
     try {
         const url = `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`;
         const resp = await fetchWithRetry(url);
         if (resp && resp.result && resp.result.list && resp.result.list.length > 0) {
             const item = resp.result.list[0];
-            const fr = parseFloat(item.fundingRate);
-            return { rate: fr, time: parseInt(item.nextFundingTime) };
+            return { rate: parseFloat(item.fundingRate), time: parseInt(item.nextFundingTime) };
         }
     } catch(e) { console.warn('[FundingRate]', e); }
     return null;
 }
 
 export async function fetchOpenInterest(symbol) {
-    // 1. Tenta Binance
     try {
         const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=15m&limit=8`;
         const data = await fetchWithRetry(url);
         if (data && data.length >= 2) {
             const prev = parseFloat(data[0].sumOpenInterest);
             const curr = parseFloat(data[data.length - 1].sumOpenInterest);
-            const delta = ((curr - prev) / prev) * 100;
-            return { oi: curr, delta };
+            return { oi: curr, delta: ((curr - prev) / prev) * 100 };
         }
     } catch(e) { /* ignore */ }
 
-    // 2. Fallback Bybit
     try {
         const url = `https://api.bybit.com/v5/market/open-interest?category=linear&symbol=${symbol}&intervalTime=15min&limit=8`;
         const resp = await fetchWithRetry(url);
@@ -123,8 +94,7 @@ export async function fetchOpenInterest(symbol) {
             const list = resp.result.list;
             const curr = parseFloat(list[0].openInterest);
             const prev = parseFloat(list[list.length - 1].openInterest);
-            const delta = ((curr - prev) / prev) * 100;
-            return { oi: curr, delta };
+            return { oi: curr, delta: ((curr - prev) / prev) * 100 };
         }
     } catch(e) { console.warn('[OpenInterest]', e); }
     return null;
@@ -134,37 +104,12 @@ export async function fetchBasis(symbol = 'BTCUSDT') {
     try {
         const url = `https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`;
         const data = await fetchWithRetry(url);
-        if (data && data.basisRate !== undefined) {
-            return parseFloat(data.basisRate) * 100;
-        }
+        if (data && data.basisRate !== undefined) return parseFloat(data.basisRate) * 100;
     } catch(e) { console.warn('[Basis]', e); }
     return null;
 }
 
-// ===== Long/Short (CORS bloqueado) =====
-export async function fetchLSRatio(symbol = 'BTCUSDT') {
-    return null; 
-}
-
-// ===== CoinMetrics (via CoinGecko) =====
-export async function fetchCoinMetrics() {
-    try {
-        const gecko = await fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
-        if (gecko && gecko.bitcoin) {
-            const price = gecko.bitcoin.usd;
-            const result = { price, realized: null, netflow: 0, minerOutflow: 0 };
-            setCachedData('coinmetrics_fallback', result);
-            return result;
-        }
-    } catch(e) {
-        console.warn('[CoinMetrics] CoinGecko falhou, usando cache', e);
-        const cached = getCachedData('coinmetrics_fallback');
-        if (cached) return cached;
-    }
-    return { price: 0, realized: null, netflow: 0, minerOutflow: 0 };
-}
-
-// ===== Blockchair =====
+// ===== Blockchair (On-Chain Real) =====
 export async function fetchBlockchairStats() {
     try {
         const [btcResp, ethResp] = await Promise.all([
@@ -172,21 +117,27 @@ export async function fetchBlockchairStats() {
             fetchWithRetry('https://api.blockchair.com/ethereum/stats')
         ]);
         return {
-            activeAddresses: btcResp?.data?.addresses_count || 0,
+            blockHeight: btcResp?.data?.best_block_height || 0,
+            mempoolSize: btcResp?.data?.mempool_total_size || 0,
+            activeAddresses: btcResp?.data?.addresses_count_24h || 0,
             ethGas: (ethResp?.data?.gas_price || 0) / 1e9
         };
     } catch(e) { console.warn('[Blockchair]', e); }
     return null;
 }
 
-// ===== Mempool =====
-export async function fetchHashrate() {
+// ===== Mempool (On-Chain Real) =====
+export async function fetchMempoolStats() {
     try {
-        const data = await fetchWithRetry('https://mempool.space/api/v1/mining/hashrate/1w');
-        if (data && data.hashesPerSecond) {
-            return data.hashesPerSecond / 1e18;
-        }
-    } catch(e) { console.warn('[Hashrate]', e); }
+        const [hashResp, diffResp] = await Promise.all([
+            fetchWithRetry('https://mempool.space/api/v1/mining/hashrate/1w'),
+            fetchWithRetry('https://mempool.space/api/v1/difficulty-adjustment')
+        ]);
+        return {
+            hashrate: hashResp?.hashesPerSecond ? hashResp.hashesPerSecond / 1e18 : 0,
+            difficulty: diffResp?.currentDifficulty || 0
+        };
+    } catch(e) { console.warn('[Mempool]', e); }
     return null;
 }
 
@@ -202,18 +153,12 @@ export async function fetchETFData() {
             const data = await fetchWithRetry(url, {}, 2);
             if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
                 const meta = data.chart.result[0].meta;
-                const prev = meta.chartPreviousClose;
-                const curr = meta.regularMarketPrice;
-                return ((curr - prev) / prev) * 100;
+                return ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100;
             }
             return 0;
         };
 
-        const [btcChange, ethChange] = await Promise.all([
-            fetchYahooChange('IBIT'), 
-            fetchYahooChange('ETHA')  
-        ]);
-
+        const [btcChange, ethChange] = await Promise.all([fetchYahooChange('IBIT'), fetchYahooChange('ETHA')]);
         const result = { btcFlow: btcChange, ethFlow: ethChange };
         setCachedData('etf_fallback', result);
         return result;
@@ -247,46 +192,28 @@ export async function fetchDeFiData() {
             fetchWithRetry('https://api.llama.fi/charts')
         ]);
         let totalStable = 0;
-        if (stableData.peggedAssets) {
-            stableData.peggedAssets.forEach(a => totalStable += a.total || 0);
-        }
+        if (stableData.peggedAssets) stableData.peggedAssets.forEach(a => totalStable += a.total || 0);
         let tvl = 0, tvlChange = 0;
         if (tvlData && tvlData.length > 1) {
             tvl = tvlData[tvlData.length-1].totalLiquidityUSD;
             const prev = tvlData[tvlData.length-2].totalLiquidityUSD;
             tvlChange = ((tvl - prev) / prev) * 100;
         }
-        const result = { totalStable: totalStable / 1e9, tvl: tvl / 1e9, tvlChange };
-        setCachedData('defi_fallback', result);
-        return result;
-    } catch(e) {
-        console.warn('[DeFi]', e);
-        return getCachedData('defi_fallback') || null;
-    }
+        return { totalStable: totalStable / 1e9, tvl: tvl / 1e9, tvlChange };
+    } catch(e) { console.warn('[DeFi]', e); return null; }
 }
 
 // ===== Tether Premium (Real via CoinGecko) =====
 export async function fetchTetherPremium() {
-    const cached = getCachedData('tether_premium_fallback');
-    if (cached !== null) return cached;
-
     try {
         const [cryptoData, fiatData] = await Promise.all([
             fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=brl'),
             fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD')
         ]);
-
         const usdtBrl = cryptoData?.tether?.brl;
         const usdBrl = fiatData?.rates?.BRL;
-
-        if (usdtBrl && usdBrl) {
-            const premium = ((usdtBrl / usdBrl) - 1) * 100;
-            setCachedData('tether_premium_fallback', premium);
-            return premium;
-        }
-    } catch(e) {
-        console.warn('[TetherPremium]', e);
-    }
+        if (usdtBrl && usdBrl) return ((usdtBrl / usdBrl) - 1) * 100;
+    } catch(e) { console.warn('[TetherPremium]', e); }
     return null;
 }
 
@@ -294,8 +221,7 @@ export async function fetchTetherPremium() {
 export async function fetchFearGreed() {
     try {
         const data = await fetchWithRetry('https://api.alternative.me/fng/?limit=1');
-        const v = parseInt(data.data[0].value);
-        return { value: v, classification: data.data[0].value_classification };
+        return { value: parseInt(data.data[0].value), classification: data.data[0].value_classification };
     } catch(e) { console.warn('[FearGreed]', e); }
     return null;
 }
@@ -303,52 +229,29 @@ export async function fetchFearGreed() {
 // ===== MACRO (via Yahoo Finance) =====
 export async function fetchMacroStatic() {
     try {
-        const cached = getCachedData('macro_fallback');
-        if (cached) return cached;
-
         const proxy = CONFIG.PROXY_URL;
-        const tickers = {
-            dxy: 'DX-Y.NYB',
-            us10y: '^TNX',
-            vix: '^VIX',
-            sp: '^GSPC',
-            nasdaq: '^NDX'
-        };
-
         const fetchYahoo = async (ticker) => {
             const url = `${proxy}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`)}`;
             const data = await fetchWithRetry(url, {}, 2);
             if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
                 const meta = data.chart.result[0].meta;
-                const prev = meta.chartPreviousClose;
-                const curr = meta.regularMarketPrice;
-                return { current: curr, change: ((curr - prev) / prev) * 100 };
+                return { current: meta.regularMarketPrice, change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 };
             }
             return null;
         };
 
         const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
-            fetchYahoo(tickers.dxy),
-            fetchYahoo(tickers.us10y),
-            fetchYahoo(tickers.vix),
-            fetchYahoo(tickers.sp),
-            fetchYahoo(tickers.nasdaq)
+            fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), fetchYahoo('^GSPC'), fetchYahoo('^NDX')
         ]);
 
-        const result = {
+        return {
             dxy: dxy?.current || 0,
             us10y: us10y?.current || 0,
             vix: vix?.current || 0,
             spChange: sp?.change || 0,
             nasdaqChange: nasdaq?.change || 0
         };
-
-        setCachedData('macro_fallback', result);
-        return result;
-    } catch(e) { 
-        console.warn('[Macro]', e); 
-        return getCachedData('macro_fallback') || null;
-    }
+    } catch(e) { console.warn('[Macro]', e); return null; }
 }
 
 // ===== MTF Confluence =====
@@ -363,16 +266,10 @@ export async function getMTFConfluence(symbol) {
             const ema20 = calcEMA(closes, 20);
             const ema50 = calcEMA(closes, 50);
             const last = candles.length - 1;
-            if (ema20[last] > ema50[last] && candles[last].close > ema20[last]) {
-                directions.push({ tf, dir: 'BULL' });
-            } else if (ema20[last] < ema50[last] && candles[last].close < ema20[last]) {
-                directions.push({ tf, dir: 'BEAR' });
-            } else {
-                directions.push({ tf, dir: 'NEUTRO' });
-            }
-        } catch(e) {
-            directions.push({ tf, dir: 'ERROR' });
-        }
+            if (ema20[last] > ema50[last] && candles[last].close > ema20[last]) directions.push({ tf, dir: 'BULL' });
+            else if (ema20[last] < ema50[last] && candles[last].close < ema20[last]) directions.push({ tf, dir: 'BEAR' });
+            else directions.push({ tf, dir: 'NEUTRO' });
+        } catch(e) { directions.push({ tf, dir: 'ERROR' }); }
     }
     const bulls = directions.filter(d => d.dir === 'BULL').length;
     const bears = directions.filter(d => d.dir === 'BEAR').length;
