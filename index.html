@@ -672,6 +672,85 @@
             else { reasonEl.style.display = 'none'; }
         }
 
+        // NOVA FUNÇÃO: Atualiza o painel visual de força do sinal
+        function updateSignalStrengthPanel(symbol, scoreData, blockReason) {
+            if (symbol !== 'BTCUSDT') return;
+            const data = assetsData[symbol];
+            const score = scoreData.score;
+
+            const scoreValEl = document.getElementById('scoreValue');
+            const scoreLabelEl = document.getElementById('scoreLabel');
+            const scoreBarEl = document.getElementById('scoreBar');
+            if (scoreValEl) scoreValEl.textContent = score;
+            if (scoreBarEl) scoreBarEl.style.width = score + '%';
+            if (scoreLabelEl) {
+                scoreLabelEl.textContent = score >= 70 ? 'COMPRA FORTE' : score <= 30 ? 'VENDA FORTE' : 'NEUTRO';
+                scoreLabelEl.style.color = score >= 70 ? '#00e676' : score <= 30 ? '#ff1744' : '#8b949e';
+            }
+
+            const mtfBadgesEl = document.getElementById('mtfBadges');
+            if (mtfBadgesEl && data.mtfConfluence) {
+                mtfBadgesEl.innerHTML = '';
+                data.mtfConfluence.directions.forEach(d => {
+                    const span = document.createElement('span');
+                    span.className = `mtf-badge ${d.dir === 'BULL' ? 'mtf-bull' : d.dir === 'BEAR' ? 'mtf-bear' : 'mtf-neutral'}`;
+                    span.textContent = `${d.tf}: ${d.dir}`;
+                    mtfBadgesEl.appendChild(span);
+                });
+            }
+
+            const fundingEl = document.getElementById('fundingDisplay');
+            if (fundingEl) {
+                const fr = data.fundingRate || 0;
+                fundingEl.textContent = (fr >= 0 ? '+' : '') + (fr * 100).toFixed(4) + '%';
+                fundingEl.style.color = fr > 0.0001 ? '#ff5252' : fr < -0.0001 ? '#00e676' : '#8b949e';
+            }
+
+            const adxEl = document.getElementById('adxDisplay');
+            if (adxEl && data.candles1H.length > 0) {
+                const adxData = indicadores.calculateADX(data.candles1H, 14);
+                adxEl.textContent = adxData.adx.toFixed(2);
+                adxEl.style.color = adxData.adx > 25 ? '#58a6ff' : '#8b949e';
+            }
+
+            const reasonsEl = document.getElementById('scoreReasons');
+            if (reasonsEl) {
+                reasonsEl.innerHTML = '';
+                if (blockReason) {
+                    const span = document.createElement('span');
+                    span.className = 'reason-tag negative';
+                    span.textContent = `🚫 ${blockReason}`;
+                    reasonsEl.appendChild(span);
+                } else {
+                    if (data.mtfConfluence && data.mtfConfluence.alinhado) {
+                        const span = document.createElement('span');
+                        span.className = 'reason-tag positive';
+                        span.textContent = `MTF Alinhado (${data.mtfConfluence.confluencia})`;
+                        reasonsEl.appendChild(span);
+                    }
+                    if (data.currentBOS !== 'NEUTRAL') {
+                        const span = document.createElement('span');
+                        span.className = 'reason-tag positive';
+                        span.textContent = `BOS ${data.currentBOS}`;
+                        reasonsEl.appendChild(span);
+                    }
+                }
+            }
+
+            const mainSignalEl = document.getElementById('mainSignal');
+            if (mainSignalEl) {
+                if (blockReason) {
+                    mainSignalEl.innerHTML = `<div style="color:#ff5252;font-size:14px;font-weight:600;">🚫 BLOQUEADO: ${blockReason}</div>`;
+                } else if (scoreData.action === 'COMPRA') {
+                    mainSignalEl.innerHTML = `<div style="color:#00e676;font-size:16px;font-weight:700;">🟢 SINAL DE COMPRA (Score: ${score})</div>`;
+                } else if (scoreData.action === 'VENDA') {
+                    mainSignalEl.innerHTML = `<div style="color:#ff1744;font-size:16px;font-weight:700;">🔴 SINAL DE VENDA (Score: ${score})</div>`;
+                } else {
+                    mainSignalEl.innerHTML = `<div style="color:#8b949e;font-size:14px;font-weight:600;">⚪ AGUARDANDO CONFIRMAÇÃO (Score: ${score})</div>`;
+                }
+            }
+        }
+
         function updateActiveTradesUI() {
             CONFIG.ASSETS.forEach(symbol => {
                 const id = symbol.toLowerCase();
@@ -728,7 +807,7 @@
             if (data.currentBOS !== 'NEUTRAL') confidence += 15;
             if (data.rsi_1H > 30 && data.rsi_1H < 70) confidence += 10;
             confidence = Math.min(100, Math.round(confidence));
-            document.getElementById('confidence-score').textContent = confidence + '/100';
+            document.getElementById('confidence-score').textContent = confidence + '//100';
             document.getElementById('confidence-fill').style.width = confidence + '%';
             const mainScore = previousScores['BTCUSDT'] || 50;
             document.getElementById('entry-score').textContent = mainScore + '/100';
@@ -884,6 +963,7 @@
                 if (scoreHistory.length > 150) scoreHistory.shift();
                 if (symbol === 'BTCUSDT') {
                     updateMainScoreUI(scoreData, blockReason);
+                    updateSignalStrengthPanel(symbol, scoreData, blockReason); // CHAMADA ADICIONADA AQUI
                 }
                 const prevScore = previousScores[symbol] || 50;
                 if (!activePositions[symbol] && !blockReason && indicadores.isSafeToTrade(assetsData)) {
@@ -897,12 +977,12 @@
                             if (expCheck.blocked) return;
                             let stop, tp1, tp2, structLevel;
                             if (primaryDirection === 'LONG') {
-                                structLevel = Math.min(...data.swingLows) - (atr * 0.3);
+                                structLevel = data.swingLows.length > 0 ? Math.min(...data.swingLows) - (atr * 0.3) : data.price - atr * 1.5;
                                 stop = Math.min(structLevel, data.price - atr * 1.5);
                                 tp1 = data.price + (atr * 2);
                                 tp2 = data.price + (atr * 4);
                             } else {
-                                structLevel = Math.max(...data.swingHighs) + (atr * 0.3);
+                                structLevel = data.swingHighs.length > 0 ? Math.max(...data.swingHighs) + (atr * 0.3) : data.price + atr * 1.5;
                                 stop = Math.max(structLevel, data.price + atr * 1.5);
                                 tp1 = data.price - (atr * 2);
                                 tp2 = data.price - (atr * 4);
