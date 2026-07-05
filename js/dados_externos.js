@@ -68,7 +68,7 @@ const TIMEFRAME_TO_MINUTES = {
     '1d': 1440
 };
 
-// ===== FONTE PRIMÁRIA: COINGECKO (com suporte a CORS) =====
+// ===== FONTE PRIMÁRIA: COINGECKO =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     const cacheKey = `candles_${symbol}_${interval}_${limit}`;
     const cached = getCachedData(cacheKey, 120000);
@@ -82,8 +82,6 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
         return [];
     }
 
-    // CoinGecko OHLC endpoint (suporta CORS)
-    // days = limit * (minutos por candle) / 1440 (dias)
     const minutesPerCandle = TIMEFRAME_TO_MINUTES[interval] || 60;
     const days = Math.ceil((limit * minutesPerCandle) / 1440) + 1;
     
@@ -92,19 +90,14 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
         const data = await fetchWithRetry(url);
         
         if (data && data.length > 0) {
-            // CoinGecko retorna [timestamp, open, high, low, close]
-            // Timestamp está em milissegundos
             const candles = data.map(k => ({
                 time: k[0] / 1000,
                 open: parseFloat(k[1]),
                 high: parseFloat(k[2]),
                 low: parseFloat(k[3]),
                 close: parseFloat(k[4]),
-                volume: 0 // CoinGecko OHLC não fornece volume
+                volume: 0
             }));
-            
-            // Filtrar para o intervalo correto (CoinGecko retorna dados diários)
-            // Precisamos pegar os últimos 'limit' candles
             const filtered = candles.slice(-limit);
             setCachedData(cacheKey, filtered);
             return filtered;
@@ -113,7 +106,7 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
         console.warn(`[CoinGecko] ${symbol} ${interval}:`, e);
     }
 
-    // ===== FALLBACK: BYBIT (via proxy) =====
+    // ===== FALLBACK: BYBIT =====
     try {
         const intervalMap = { '15m': '15', '1h': '60', '4h': '240', '1d': 'D' };
         const bybitInterval = intervalMap[interval] || '60';
@@ -136,12 +129,11 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
         console.warn(`[Bybit Candles] ${symbol}:`, e);
     }
 
-    // ===== ÚLTIMO FALLBACK: cache antigo =====
     if (cached) return cached;
     return [];
 }
 
-// ===== DEMAIS FUNÇÕES (mantidas) =====
+// ===== DEMAIS FUNÇÕES =====
 export const fetchFundingRate = async (symbol) => {
     try {
         const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`;
@@ -265,14 +257,58 @@ export const fetchETFData = async () => {
     } catch(e) { console.warn('[ETF]', e); return null; }
 };
 
+// ===== FETCH FED RATE (CORRIGIDO) =====
 export const fetchFedRate = async () => {
+    const cacheKey = 'fedRate';
+    const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
+    if (cached && !cached.stale) {
+        return cached;
+    }
+
+    // Tenta direto (sem proxy)
     try {
-        const url = CONFIG.PROXY_URL + encodeURIComponent('https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS');
-        const resp = await fetchWithRetry(url, {}, 2);
-        const csv = await resp.text();
-        const lastLine = csv.trim().split('\n').pop();
-        return parseFloat(lastLine.split(',')[1]);
-    } catch(e) { console.warn('[FedRate]', e); return null; }
+        const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS';
+        const resp = await fetchWithTimeout(url, {}, 10000);
+        if (resp.ok) {
+            const csv = await resp.text();
+            const lastLine = csv.trim().split('\n').pop();
+            const rate = parseFloat(lastLine.split(',')[1]);
+            if (!isNaN(rate) && rate > 0) {
+                setCachedData(cacheKey, rate);
+                return rate;
+            }
+        }
+    } catch(e) {
+        console.warn('[FedRate] Chamada direta falhou:', e.message);
+    }
+
+    // Fallback com proxies
+    const proxies = [
+        'https://corsproxy.io/?url=',
+        'https://api.allorigins.win/raw?url='
+    ];
+    for (const proxy of proxies) {
+        try {
+            const url = proxy + encodeURIComponent('https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS');
+            const resp = await fetchWithTimeout(url, {}, 15000);
+            if (resp.ok) {
+                const csv = await resp.text();
+                const lastLine = csv.trim().split('\n').pop();
+                const rate = parseFloat(lastLine.split(',')[1]);
+                if (!isNaN(rate) && rate > 0) {
+                    setCachedData(cacheKey, rate);
+                    return rate;
+                }
+            }
+        } catch(e) {
+            console.warn(`[FedRate] Proxy ${proxy} falhou:`, e.message);
+        }
+    }
+
+    // Se tudo falhar, retorna cache velho ou fallback estático
+    if (cached) return cached;
+    console.warn('[FedRate] Todas as tentativas falharam, usando fallback estático (4.33%)');
+    return 4.33; // Valor realista para 2025
 };
 
 export const fetchPutCallRatio = async () => {
