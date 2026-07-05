@@ -34,37 +34,95 @@ export function setCachedData(key, data) {
     localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
 }
 
-// ===== Binance =====
+// ===== Binance (com Fallback Bybit) =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 200) {
+    const intervalMap = {
+        '15m': '15',
+        '1h': '60',
+        '4h': '240',
+        '1d': 'D'
+    };
+
+    // 1. Tenta Binance
     try {
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
         const data = await fetchWithRetry(url);
-        return data.map(k => ({ time: k[0]/1000, open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5]) }));
+        if (data && data.length > 0) {
+            return data.map(k => ({ time: k[0]/1000, open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5]) }));
+        }
     } catch(e) {
-        console.warn(`[Binance] ${symbol} ${interval}:`, e);
-        return [];
+        console.warn(`[Binance] ${symbol} ${interval} falhou. Tentando Bybit...`);
     }
+
+    // 2. Fallback Bybit
+    try {
+        const bybitInterval = intervalMap[interval] || '60';
+        const url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${symbol}&interval=${bybitInterval}&limit=${limit}`;
+        const resp = await fetchWithRetry(url);
+        if (resp && resp.result && resp.result.list && resp.result.list.length > 0) {
+            // Bybit retorna do mais novo para o mais velho, então inverte
+            const list = resp.result.list.reverse();
+            return list.map(k => ({ 
+                time: parseInt(k[0])/1000, 
+                open: parseFloat(k[1]), 
+                high: parseFloat(k[2]), 
+                low: parseFloat(k[3]), 
+                close: parseFloat(k[4]), 
+                volume: parseFloat(k[5]) 
+            }));
+        }
+    } catch(e) {
+        console.warn(`[Bybit] ${symbol} ${interval}:`, e);
+    }
+
+    return [];
 }
 
 export async function fetchFundingRate(symbol) {
+    // 1. Tenta Binance
     try {
         const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`;
         const data = await fetchWithRetry(url);
-        if (data.length > 0) {
+        if (data && data.length > 0) {
             const fr = parseFloat(data[0].fundingRate);
             return { rate: fr, time: data[0].fundingTime };
+        }
+    } catch(e) { /* ignore */ }
+
+    // 2. Fallback Bybit
+    try {
+        const url = `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`;
+        const resp = await fetchWithRetry(url);
+        if (resp && resp.result && resp.result.list && resp.result.list.length > 0) {
+            const item = resp.result.list[0];
+            const fr = parseFloat(item.fundingRate);
+            return { rate: fr, time: parseInt(item.nextFundingTime) };
         }
     } catch(e) { console.warn('[FundingRate]', e); }
     return null;
 }
 
 export async function fetchOpenInterest(symbol) {
+    // 1. Tenta Binance
     try {
         const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=15m&limit=8`;
         const data = await fetchWithRetry(url);
-        if (data.length >= 2) {
+        if (data && data.length >= 2) {
             const prev = parseFloat(data[0].sumOpenInterest);
             const curr = parseFloat(data[data.length - 1].sumOpenInterest);
+            const delta = ((curr - prev) / prev) * 100;
+            return { oi: curr, delta };
+        }
+    } catch(e) { /* ignore */ }
+
+    // 2. Fallback Bybit
+    try {
+        const url = `https://api.bybit.com/v5/market/open-interest?category=linear&symbol=${symbol}&intervalTime=15min&limit=8`;
+        const resp = await fetchWithRetry(url);
+        if (resp && resp.result && resp.result.list && resp.result.list.length >= 2) {
+            const list = resp.result.list;
+            const curr = parseFloat(list[0].openInterest);
+            const prev = parseFloat(list[list.length - 1].openInterest);
             const delta = ((curr - prev) / prev) * 100;
             return { oi: curr, delta };
         }
@@ -76,7 +134,7 @@ export async function fetchBasis(symbol = 'BTCUSDT') {
     try {
         const url = `https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`;
         const data = await fetchWithRetry(url);
-        if (data.basisRate !== undefined) {
+        if (data && data.basisRate !== undefined) {
             return parseFloat(data.basisRate) * 100;
         }
     } catch(e) { console.warn('[Basis]', e); }
@@ -85,7 +143,7 @@ export async function fetchBasis(symbol = 'BTCUSDT') {
 
 // ===== Long/Short (CORS bloqueado) =====
 export async function fetchLSRatio(symbol = 'BTCUSDT') {
-    return null; // Binance bloqueia CORS no browser para esse endpoint
+    return null; 
 }
 
 // ===== CoinMetrics (via CoinGecko) =====
@@ -94,7 +152,6 @@ export async function fetchCoinMetrics() {
         const gecko = await fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
         if (gecko && gecko.bitcoin) {
             const price = gecko.bitcoin.usd;
-            // Não usamos mais o cálculo fictício realized = price * 0.72
             const result = { price, realized: null, netflow: 0, minerOutflow: 0 };
             setCachedData('coinmetrics_fallback', result);
             return result;
@@ -153,8 +210,8 @@ export async function fetchETFData() {
         };
 
         const [btcChange, ethChange] = await Promise.all([
-            fetchYahooChange('IBIT'), // BlackRock BTC ETF
-            fetchYahooChange('ETHA')  // BlackRock ETH ETF
+            fetchYahooChange('IBIT'), 
+            fetchYahooChange('ETHA')  
         ]);
 
         const result = { btcFlow: btcChange, ethFlow: ethChange };
@@ -214,7 +271,6 @@ export async function fetchTetherPremium() {
     if (cached !== null) return cached;
 
     try {
-        // Busca preço real do USDT em BRL e do USD em BRL
         const [cryptoData, fiatData] = await Promise.all([
             fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=brl'),
             fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD')
