@@ -96,16 +96,16 @@ export function initCharts() {
         whaleChart = new Chart(ctxW, {
             type: 'bar',
             data: {
-                labels: ['BTC', 'ETH'],
+                labels: ['BTC', 'ETH', 'SOL'],
                 datasets: [
-                    { label: 'Acumulação', data: [0, 0], backgroundColor: 'rgba(0,217,142,0.7)', borderColor: 'rgb(0,217,142)', borderWidth: 2 },
-                    { label: 'Distribuição', data: [0, 0], backgroundColor: 'rgba(233,69,96,0.7)', borderColor: 'rgb(233,69,96)', borderWidth: 2 }
+                    { label: 'Acumulação (Buy)', data: [0, 0, 0], backgroundColor: 'rgba(0,217,142,0.7)', borderColor: 'rgb(0,217,142)', borderWidth: 2 },
+                    { label: 'Distribuição (Sell)', data: [0, 0, 0], backgroundColor: 'rgba(233,69,96,0.7)', borderColor: 'rgb(233,69,96)', borderWidth: 2 }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { labels: { color: COLORS.textLight } }, title: { display: true, text: 'Fluxo de Baleias', color: COLORS.textLight } },
+                plugins: { legend: { labels: { color: COLORS.textLight } }, title: { display: true, text: 'Fluxo de Baleias (Live WS)', color: COLORS.textLight } },
                 scales: {
                     y: { ticks: { color: COLORS.textMuted }, grid: { color: 'rgba(255,255,255,0.06)' }, title: { display: true, text: 'Volume (USD M)', color: COLORS.textLight } },
                     x: { ticks: { color: COLORS.textMuted }, grid: { color: 'rgba(255,255,255,0.06)' } }
@@ -158,6 +158,21 @@ export function updateAllocation(atrPct) {
     else if (atrPct > 3.0) { btcAlloc = 15; ethAlloc = 5; stableAlloc = 80; }
     allocationChart.data.datasets[0].data = [btcAlloc, ethAlloc, stableAlloc];
     allocationChart.update();
+}
+
+export function updateWhaleChart(trades) {
+    if (!whaleChart || !trades) return;
+    whaleChart.data.datasets[0].data = [
+        (trades['BTCUSDT']?.buys || 0) / 1e6,
+        (trades['ETHUSDT']?.buys || 0) / 1e6,
+        (trades['SOLUSDT']?.buys || 0) / 1e6
+    ];
+    whaleChart.data.datasets[1].data = [
+        (trades['BTCUSDT']?.sells || 0) / 1e6,
+        (trades['ETHUSDT']?.sells || 0) / 1e6,
+        (trades['SOLUSDT']?.sells || 0) / 1e6
+    ];
+    whaleChart.update('none');
 }
 
 export function initCandleChart(containerId, color = '#00e896') {
