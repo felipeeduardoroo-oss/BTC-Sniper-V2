@@ -243,7 +243,7 @@
                     <thead><tr><th>Indicador</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
                     <tbody>
                         <tr><td><strong>DXY</strong></td><td id="dxy-value">Carregando...</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source" id="dxy-source">Yahoo Finance</span></td></tr>
-                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">5.25% - 5.50%</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source" id="fed-source">Referência FED</span></td></tr>
+                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">Carregando...</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source" id="fed-source">FRED (St. Louis Fed)</span></td></tr>
                         <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">Carregando...</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source" id="us10y-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>VIX</strong></td><td id="vix-value">Carregando...</td><td id="vix-interp">ℹ️ Estresse de mercado</td><td><span class="data-source" id="vix-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>NASDAQ % (24h)</strong></td><td id="nasdaq-value">Carregando...</td><td>🔴 Tech</td><td><span class="data-source" id="nasdaq-source">Yahoo Finance</span></td></tr>
@@ -442,6 +442,10 @@
                 previousScores[symbol] = scoreData.score;
             });
             graficos.updateScoreChart(scoreHistory);
+            
+            // FIX 6: reset do acumulador de whale trades a cada ciclo
+            for (const symbol of CONFIG.ASSETS) { whaleTrades[symbol].buys = 0; whaleTrades[symbol].sells = 0; }
+            graficos.updateWhaleChart(whaleTrades);
         }
 
         function handleTradeUpdate(symbol, price, qty, isBuy) {
@@ -449,8 +453,7 @@
                 const prevPrice = assetsData[symbol].price;
                 assetsData[symbol].price = price;
                 if (prevPrice > 0) {
-                    assetsData[symbol].ema50_1H = indicadores.updateStatefulEMA(assetsData[symbol].ema50_1H, price, 50);
-                    assetsData[symbol].ema200_4H = indicadores.updateStatefulEMA(assetsData[symbol].ema200_4H, price, 200);
+                    // FIX 3: EMAs removidas daqui, só recalcularão no fechamento de barra
                     assetsData[symbol].rsiState = indicadores.updateStatefulRSI(assetsData[symbol].rsiState, price, prevPrice);
                     assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
                 }
@@ -530,6 +533,13 @@
                 const pcr = await dadosExternos.fetchPutCallRatio();
                 if (pcr !== null) { document.getElementById('put-call-ratio').textContent = pcr.toFixed(3); }
 
+                const basis = await dadosExternos.fetchBasis();
+                if (basis !== null) { document.getElementById('basis').textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%'; }
+
+                // FIX 5: Fed Rate atualizado
+                const fedRate = await dadosExternos.fetchFedRate();
+                if (fedRate !== null) document.getElementById('fed-rate').textContent = fedRate.toFixed(2) + '%';
+
                 const macro = await dadosExternos.fetchMacroStatic();
                 if (macro) {
                     document.getElementById('dxy-value').textContent = macro.dxy.toFixed(2);
@@ -573,15 +583,18 @@
                     const closes = c1H.map(c => c.close);
                     assetsData[symbol].price = closes[closes.length - 1];
                     assetsData[symbol].ema50_1H = closes.slice(-50).reduce((a,b)=>a+b,0) / 50;
-                    assetsData[symbol].ema200_4H = closes.slice(-200).reduce((a,b)=>a+b,0) / 200;
+                    
+                    // FIX 2: Calcular ema200_4H com dados de 4H
+                    const closes4H = c4H.map(c => c.close);
+                    assetsData[symbol].ema200_4H = closes4H.length >= 200
+                        ? closes4H.slice(-200).reduce((a,b)=>a+b,0) / 200
+                        : closes.slice(-200).reduce((a,b)=>a+b,0) / 200; 
+                        
                     assetsData[symbol].atr_1H = indicadores.calculateATR(c1H, 14);
                     assetsData[symbol].rsiState = { avgGain: 0, avgLoss: 0, rsi: 50 };
                     assetsData[symbol].htfStructure = indicadores.detectHTFStructure(assetsData[symbol], c4H);
                     
-                    // FIX: Setar os dados do candle no gráfico
-                    if (candleCharts[symbol]) {
-                        graficos.setCandleData(candleCharts[symbol], c1H);
-                    }
+                    if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
                 }
             }
 
@@ -590,13 +603,25 @@
             await evaluateMarkets();
 
             setInterval(updateExternalData, 120000);
+            
+            // FIX 1: Atualizar HTF e EMAs a cada 5 minutos
             setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
                     const c1H = await dadosExternos.fetchHistoricalCandles(symbol, '1h', 10);
                     if(c1H.length > 0) {
                         assetsData[symbol].candles1H = [...assetsData[symbol].candles1H.slice(0, -10), ...c1H];
+                        const closes1H = assetsData[symbol].candles1H.map(c => c.close);
+                        assetsData[symbol].ema50_1H = closes1H.slice(-50).reduce((a,b)=>a+b,0) / 50;
                         assetsData[symbol].atr_1H = indicadores.calculateATR(assetsData[symbol].candles1H, 14);
                         if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], assetsData[symbol].candles1H);
+                    }
+                    // Refresca candles 4H e recalcula o viés HTF
+                    const c4H = await dadosExternos.fetchHistoricalCandles(symbol, '4h', 210);
+                    if (c4H.length > 0) {
+                        assetsData[symbol].candles4H = c4H;
+                        const closes4H = c4H.map(c => c.close);
+                        assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a,b)=>a+b,0) / 200 : assetsData[symbol].ema200_4H;
+                        assetsData[symbol].htfStructure = indicadores.detectHTFStructure(assetsData[symbol], c4H);
                     }
                 }
                 await evaluateMarkets();
