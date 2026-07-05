@@ -644,6 +644,7 @@
                     const msg = JSON.parse(event.data);
                     const symbol = msg.data.s;
                     const price = parseFloat(msg.data.p);
+                    setCurrentPrice(symbol, price); // <-- ADICIONAR ESTA LINHA
                     if (assetsData[symbol]) {
                         const prevPrice = assetsData[symbol].price;
                         assetsData[symbol].price = price;
