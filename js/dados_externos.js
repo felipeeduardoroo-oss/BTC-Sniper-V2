@@ -107,6 +107,7 @@ const TIMEFRAME_TO_MINUTES = {
 };
 
 // ===== FONTE PRIMÁRIA: COINGECKO (COM POOL DE REQUISIÇÕES) =====
+// ===== FONTE PRIMÁRIA: BINANCE (CORS estável, sem API key, volume real) =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     const cacheKey = `candles_${symbol}_${interval}_${limit}`;
     const cached = getCachedData(cacheKey, 300000); // 5 min de cache
@@ -114,87 +115,74 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
         return cached;
     }
 
-    const coinId = SYMBOL_TO_COINGECKO[symbol];
-    if (!coinId) {
-        console.warn(`[CoinGecko] Símbolo ${symbol} não mapeado`);
-        return [];
-    }
-
-    const minutesPerCandle = TIMEFRAME_TO_MINUTES[interval] || 60;
-    let days = Math.ceil((limit * minutesPerCandle) / 1440) + 1;
-    days = Math.min(Math.max(days, 1), 90); // CoinGecko aceita 1-90
-
-    // Usando o pool de requisições para não exceder o rate limit
+    // 1) BINANCE (primário)
     try {
-        const data = await requestPool(async () => {
-            const url = `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
-            return await fetchWithRetry(url, {}, 3);
-        });
-        
-        if (data && data.length > 0) {
+        const intervalMap = { '15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d' };
+        const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${intervalMap[interval]}&limit=${limit}`;
+        const data = await fetchWithRetry(url, {}, 3);
+        if (data && Array.isArray(data) && data.length > 0) {
             const candles = data.map(k => ({
                 time: k[0] / 1000,
                 open: parseFloat(k[1]),
                 high: parseFloat(k[2]),
                 low: parseFloat(k[3]),
                 close: parseFloat(k[4]),
-                volume: 0
-            }));
-            const filtered = candles.slice(-limit);
-            setCachedData(cacheKey, filtered);
-            return filtered;
-        }
-    } catch(e) {
-        console.warn(`[CoinGecko] ${symbol} ${interval} falhou:`, e.message);
-    }
-
-    // ===== FALLBACK: BYBIT =====
-    try {
-        const intervalMap = { '15m': '15', '1h': '60', '4h': '240', '1d': 'D' };
-        const bybitInterval = intervalMap[interval] || '60';
-        const url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${symbol}&interval=${bybitInterval}&limit=${limit}`;
-        const resp = await fetchWithRetry(url, {}, 2);
-        if (resp && resp.result && resp.result.list && resp.result.list.length > 0) {
-            const list = resp.result.list.reverse();
-            const candles = list.map(k => ({
-                time: parseInt(k[0]) / 1000,
-                open: parseFloat(k[1]),
-                high: parseFloat(k[2]),
-                low: parseFloat(k[3]),
-                close: parseFloat(k[4]),
-                volume: parseFloat(k[5])
+                volume: parseFloat(k[5]) // volume real, não zerado
             }));
             setCachedData(cacheKey, candles);
             return candles;
         }
     } catch(e) {
-        console.warn(`[Bybit Candles] ${symbol}:`, e);
+        console.warn(`[Binance Candles] ${symbol} ${interval} falhou:`, e.message);
     }
 
-    // ===== ÚLTIMO FALLBACK: DADOS MOCKADOS =====
-    if (cached) {
-        console.warn(`[Candles] Usando cache antigo para ${symbol} ${interval}`);
-        return cached;
-    }
-
-    const price = getCurrentPrice(symbol);
-    if (price > 0) {
-        const mockCandles = [];
-        const now = Math.floor(Date.now() / 1000);
-        const step = minutesPerCandle * 60;
-        for (let i = 0; i < limit; i++) {
-            const time = now - (limit - i) * step;
-            const variation = (Math.random() - 0.5) * 0.02;
-            const open = price * (1 + variation);
-            const close = open * (1 + (Math.random() - 0.5) * 0.015);
-            const high = Math.max(open, close) * (1 + Math.random() * 0.005);
-            const low = Math.min(open, close) * (1 - Math.random() * 0.005);
-            mockCandles.push({ time, open, high, low, close, volume: 0 });
+    // 2) COINGECKO (fallback secundário)
+    const coinId = SYMBOL_TO_COINGECKO[symbol];
+    if (coinId) {
+        try {
+            const minutesPerCandle = TIMEFRAME_TO_MINUTES[interval] || 60;
+            let days = Math.ceil((limit * minutesPerCandle) / 1440) + 1;
+            days = Math.min(Math.max(days, 1), 90);
+            const data = await requestPool(async () => {
+                const url = `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
+                return await fetchWithRetry(url, {}, 2);
+            });
+            if (data && Array.isArray(data) && data.length > 0) {
+                const candles = data.map(k => ({
+                    time: k[0] / 1000, open: parseFloat(k[1]), high: parseFloat(k[2]),
+                    low: parseFloat(k[3]), close: parseFloat(k[4]), volume: 0 // CoinGecko OHLC não retorna volume
+                })).slice(-limit);
+                setCachedData(cacheKey, candles);
+                return candles;
+            }
+        } catch(e) {
+            console.warn(`[CoinGecko] ${symbol} ${interval} falhou:`, e.message);
         }
-        setCachedData(cacheKey, mockCandles);
-        return mockCandles;
     }
 
+    // 3) BYBIT (fallback terciário)
+    try {
+        const intervalMap = { '15m': '15', '1h': '60', '4h': '240', '1d': 'D' };
+        const url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${symbol}&interval=${intervalMap[interval]}&limit=${limit}`;
+        const resp = await fetchWithRetry(url, {}, 2);
+        if (resp && resp.result && resp.result.list && resp.result.list.length > 0) {
+            const candles = resp.result.list.reverse().map(k => ({
+                time: parseInt(k[0]) / 1000, open: parseFloat(k[1]), high: parseFloat(k[2]),
+                low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5])
+            }));
+            setCachedData(cacheKey, candles);
+            return candles;
+        }
+    } catch(e) {
+        console.warn(`[Bybit Candles] ${symbol} ${interval} falhou:`, e.message);
+    }
+
+    // 4) Último recurso: cache antigo (mesmo "stale") — NUNCA dados inventados
+    if (cached) {
+        console.warn(`[Candles] Todas as fontes falharam, usando cache antigo (stale) para ${symbol} ${interval}`);
+        return cached.stale ? cached.data : cached;
+    }
+    console.warn(`[Candles] Todas as fontes falharam e não há cache para ${symbol} ${interval} — retornando vazio`);
     return [];
 }
 
