@@ -100,14 +100,11 @@ export async function fetchOpenInterest(symbol) {
     return null;
 }
 
-// FIX 4: Corrigido para usar markPrice e indexPrice
 export async function fetchBasis(symbol = 'BTCUSDT') {
     try {
         const url = `https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`;
         const data = await fetchWithRetry(url);
-        if (data && data.markPrice && data.indexPrice) {
-            return ((parseFloat(data.markPrice) - parseFloat(data.indexPrice)) / parseFloat(data.indexPrice)) * 100;
-        }
+        if (data && data.basisRate !== undefined) return parseFloat(data.basisRate) * 100;
     } catch(e) { console.warn('[Basis]', e); }
     return null;
 }
@@ -169,17 +166,6 @@ export async function fetchETFData() {
         console.warn('[ETF]', e); 
         return getCachedData('etf_fallback') || { btcFlow: 0, ethFlow: 0 };
     }
-}
-
-// FIX 5: Fed Rate via FRED
-export async function fetchFedRate() {
-    try {
-        const url = CONFIG.PROXY_URL + encodeURIComponent('https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS');
-        const resp = await fetch(url);
-        const csv = await resp.text();
-        const lastLine = csv.trim().split('\n').pop();
-        return parseFloat(lastLine.split(',')[1]);
-    } catch(e) { console.warn('[FedRate]', e); return null; }
 }
 
 // ===== Deribit =====
