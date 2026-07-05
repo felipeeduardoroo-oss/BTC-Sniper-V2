@@ -342,14 +342,6 @@
         import * as banco from './js/banco_de_dados.js';
         import * as historico from './js/historicos_sinais.js';
 
-        // Importações explícitas do dadosExternos
-        const {
-            fetchHistoricalCandles, fetchFundingRate, fetchOpenInterest, fetchBasis,
-            fetchBlockchairStats, fetchMempoolStats, fetchETFData, fetchFedRate,
-            fetchPutCallRatio, fetchDeFiData, fetchTetherPremium, fetchFearGreed,
-            fetchMacroStatic, getMTFConfluence, fetchOrderBook, setCurrentPrice
-        } = dadosExternos;
-
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
             generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
@@ -360,6 +352,14 @@
             checkPortfolioExposure, checkMTFAlignment, computeScore, isSafeToTrade,
             KellyPositionSize
         } = indicadores;
+
+        const {
+            fetchHistoricalCandles, fetchFundingRate, fetchOpenInterest, fetchBasis,
+            fetchBlockchairStats, fetchMempoolStats, fetchETFData, fetchFedRate,
+            fetchPutCallRatio, fetchDeFiData, fetchTetherPremium, fetchFearGreed,
+            fetchMacroStatic, getMTFConfluence, fetchOrderBook, setCurrentPrice,
+            sleep
+        } = dadosExternos;
 
         // ===== STATE =====
         const assetsData = {};
@@ -430,7 +430,7 @@
             return '$' + Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
-        // ===== RENDER MINI ORDER BOOK (GENÉRICO) =====
+        // ===== RENDER MINI ORDER BOOK =====
         function renderMiniOrderBook(obData) {
             if (!obData) return '<span style="color:#8b949e;">N/A</span>';
             const maxQty = Math.max(...obData.bids.map(b => b.qty), ...obData.asks.map(a => a.qty));
@@ -600,10 +600,8 @@
                     trailingParams = generateTrailingStopParams(candles, indicators.close, scoreData.direction);
                 }
 
-                // Atualiza o painel do comitê
                 updateCommitteePanel(scoreData, mtfData, fundingData, adxData, obData, fgData);
 
-                // Atualiza o sinal principal do comitê
                 const signalEl = document.getElementById('committee-main-signal');
                 if (signalEl) {
                     if (canTrade) {
@@ -611,7 +609,20 @@
                         const color = dir === 'LONG' ? '#00e676' : '#ff1744';
                         let html = `<div style="color:${color};font-size:24px;font-weight:900;">${dir}</div>`;
                         html += `<div style="color:#8b949e;font-size:11px;">Score: ${scoreData.score}/100 — ${scoreData.label}</div>`;
-                        if (trailingParams) html += formatTrailingHTML(trailingParams, dir);
+                        if (trailingParams) {
+                            const color2 = dir === 'LONG' ? '#00e676' : '#ff1744';
+                            html += `
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;text-align:left;">
+                                    <span style="color:#888;">Stop Loss:</span><span style="color:#ff5252;font-weight:700;">$${trailingParams.stopLoss.toFixed(2)}</span>
+                                    <span style="color:#888;">TP1 (50%):</span><span style="color:${color2};font-weight:600;">$${trailingParams.tp1.toFixed(2)}</span>
+                                    <span style="color:#888;">TP2 (30%):</span><span style="color:${color2};font-weight:600;">$${trailingParams.tp2.toFixed(2)}</span>
+                                    <span style="color:#888;">TP3 (20%):</span><span style="color:${color2};font-weight:600;">$${trailingParams.tp3.toFixed(2)}</span>
+                                    <span style="color:#888;">Trailing Ativa:</span><span style="color:#ffc107;">$${trailingParams.trailingActivation.toFixed(2)}</span>
+                                    <span style="color:#888;">Trailing Dist:</span><span style="color:#ffc107;">$${trailingParams.trailingDistance.toFixed(2)}</span>
+                                    <span style="color:#888;">ATR:</span><span style="color:#aaa;">$${trailingParams.atr.toFixed(2)}</span>
+                                </div>
+                            `;
+                        }
                         if (fgFilt.multiplier !== 1) html += `<div style="margin-top:6px;color:#ffc107;font-size:10px;">Position Size: x${fgFilt.multiplier} (${fgFilt.reason})</div>`;
                         signalEl.innerHTML = html;
                     } else {
@@ -628,22 +639,6 @@
                 committeeRunning = false;
                 setTimeout(runCommittee, 15000);
             }
-        }
-
-        // ===== FORMAT TRAILING HTML =====
-        function formatTrailingHTML(params, direction) {
-            const color = direction === 'LONG' ? '#00e676' : '#ff1744';
-            return `
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;text-align:left;">
-                    <span style="color:#888;">Stop Loss:</span><span style="color:#ff5252;font-weight:700;">$${params.stopLoss.toFixed(2)}</span>
-                    <span style="color:#888;">TP1 (50%):</span><span style="color:${color};font-weight:600;">$${params.tp1.toFixed(2)}</span>
-                    <span style="color:#888;">TP2 (30%):</span><span style="color:${color};font-weight:600;">$${params.tp2.toFixed(2)}</span>
-                    <span style="color:#888;">TP3 (20%):</span><span style="color:${color};font-weight:600;">$${params.tp3.toFixed(2)}</span>
-                    <span style="color:#888;">Trailing Ativa:</span><span style="color:#ffc107;">$${params.trailingActivation.toFixed(2)}</span>
-                    <span style="color:#888;">Trailing Dist:</span><span style="color:#ffc107;">$${params.trailingDistance.toFixed(2)}</span>
-                    <span style="color:#888;">ATR:</span><span style="color:#aaa;">$${params.atr.toFixed(2)}</span>
-                </div>
-            `;
         }
 
         // ===== UI DO PAINEL "FORÇA DO SINAL" (LEGADO) =====
@@ -1234,5 +1229,6 @@
 
         init();
     </script>
+    
     </body>
 </html>
