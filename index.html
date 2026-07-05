@@ -287,6 +287,12 @@
                 <div class="score-box"><div class="score-label">Exit Score</div><div class="score-value" id="exit-score">--</div><div class="score-bar"><div class="score-fill" id="exit-fill" style="width:50%;background:var(--accent-red);"></div></div></div>
             </div>
         </section>
+        
+        <section>
+            <h2 class="section-title">🎯 CENÁRIOS &amp; MATRIZ DE APORTE</h2>
+            <div class="chart-wrapper"><canvas id="chart_scenarios"></canvas></div>
+            <div class="chart-wrapper"><canvas id="chart_allocation"></canvas></div>
+        </section>
 
         <footer>
             <div class="footer-content">
@@ -378,7 +384,6 @@
                     txEl.textContent = `${side} de $${(data.lastTx.value / 1e6).toFixed(2)}M @ $${data.lastTx.price.toFixed(2)}`;
                 }
             });
-            graficos.updateWhaleChart(whaleTrades);
         }
 
         function updateMainScoreUI(scoreData, blockReason) {
@@ -438,25 +443,34 @@
                 const data = assetsData[symbol];
                 indicadores.updateSwingPoints(data);
                 const scoreData = indicadores.computeScore(symbol, assetsData, liqMap);
-                if (symbol === 'BTCUSDT') { updateMainScoreUI(scoreData, scoreData.blockReason); updateSignalStrengthPanel(symbol, scoreData, scoreData.blockReason); }
+                if (symbol === 'BTCUSDT') {
+                    updateMainScoreUI(scoreData, scoreData.blockReason);
+                    updateSignalStrengthPanel(symbol, scoreData, scoreData.blockReason);
+                    
+                    // FIX 5: Atualizar gráficos de cenário e alocação dinamicamente
+                    if (data.atr_1H && data.price > 0) {
+                        graficos.updateScenarios(scoreData.score);
+                        graficos.updateAllocation((data.atr_1H / data.price) * 100);
+                    }
+                }
+                
+                // FIX 4: Gravar histórico de sinais quando há ação
+                if (scoreData.action === 'COMPRA' || scoreData.action === 'VENDA') {
+                    historico.addAlert(symbol, scoreData.action, scoreData.score, data.price);
+                }
+
                 previousScores[symbol] = scoreData.score;
             });
             graficos.updateScoreChart(scoreHistory);
             
-            // FIX 6: reset do acumulador de whale trades a cada ciclo
-            for (const symbol of CONFIG.ASSETS) { whaleTrades[symbol].buys = 0; whaleTrades[symbol].sells = 0; }
+            // FIX 1: desenha o acumulado do ciclo que terminou, e SÓ DEPOIS zera pro próximo ciclo
             graficos.updateWhaleChart(whaleTrades);
+            for (const symbol of CONFIG.ASSETS) { whaleTrades[symbol].buys = 0; whaleTrades[symbol].sells = 0; }
         }
 
         function handleTradeUpdate(symbol, price, qty, isBuy) {
             if (assetsData[symbol]) {
-                const prevPrice = assetsData[symbol].price;
                 assetsData[symbol].price = price;
-                if (prevPrice > 0) {
-                    // FIX 3: EMAs removidas daqui, só recalcularão no fechamento de barra
-                    assetsData[symbol].rsiState = indicadores.updateStatefulRSI(assetsData[symbol].rsiState, price, prevPrice);
-                    assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
-                }
                 updateLivePriceUI(symbol, price);
                 
                 // Rastreador de Baleias (>$100k)
@@ -481,7 +495,7 @@
                     const symbol = msg.data.s;
                     const price = parseFloat(msg.data.p);
                     const qty = parseFloat(msg.data.q);
-                    const isBuy = !msg.data.m; // true se buyer maker (vendedor taker) -> isBuy = false. Então !msg.data.m
+                    const isBuy = !msg.data.m;
                     handleTradeUpdate(symbol, price, qty, isBuy);
                 };
                 ws.onclose = () => { if(wsStatusEl) { wsStatusEl.textContent = '🔄 RECONNECTING...'; wsStatusEl.style.color = 'var(--accent-yellow)'; wsStatusEl.style.animation = 'none'; } connectBybit(); };
@@ -536,7 +550,6 @@
                 const basis = await dadosExternos.fetchBasis();
                 if (basis !== null) { document.getElementById('basis').textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%'; }
 
-                // FIX 5: Fed Rate atualizado
                 const fedRate = await dadosExternos.fetchFedRate();
                 if (fedRate !== null) document.getElementById('fed-rate').textContent = fedRate.toFixed(2) + '%';
 
@@ -584,14 +597,23 @@
                     assetsData[symbol].price = closes[closes.length - 1];
                     assetsData[symbol].ema50_1H = closes.slice(-50).reduce((a,b)=>a+b,0) / 50;
                     
-                    // FIX 2: Calcular ema200_4H com dados de 4H
                     const closes4H = c4H.map(c => c.close);
                     assetsData[symbol].ema200_4H = closes4H.length >= 200
                         ? closes4H.slice(-200).reduce((a,b)=>a+b,0) / 200
                         : closes.slice(-200).reduce((a,b)=>a+b,0) / 200; 
                         
                     assetsData[symbol].atr_1H = indicadores.calculateATR(c1H, 14);
-                    assetsData[symbol].rsiState = { avgGain: 0, avgLoss: 0, rsi: 50 };
+                    
+                    // FIX 2: Calculado baseado em barras fechadas na inicialização
+                    let gains = 0, losses = 0;
+                    for (let i = closes.length - 14; i < closes.length; i++) {
+                        const diff = closes[i] - closes[i-1];
+                        if (diff > 0) gains += diff; else losses += Math.abs(diff);
+                    }
+                    const avgGain = gains / 14, avgLoss = losses / 14;
+                    assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain/avgLoss)) };
+                    assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+
                     assetsData[symbol].htfStructure = indicadores.detectHTFStructure(assetsData[symbol], c4H);
                     
                     if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
@@ -604,7 +626,6 @@
 
             setInterval(updateExternalData, 120000);
             
-            // FIX 1: Atualizar HTF e EMAs a cada 5 minutos
             setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
                     const c1H = await dadosExternos.fetchHistoricalCandles(symbol, '1h', 10);
@@ -613,15 +634,25 @@
                         const closes1H = assetsData[symbol].candles1H.map(c => c.close);
                         assetsData[symbol].ema50_1H = closes1H.slice(-50).reduce((a,b)=>a+b,0) / 50;
                         assetsData[symbol].atr_1H = indicadores.calculateATR(assetsData[symbol].candles1H, 14);
+                        
+                        // FIX 2: RSI 1H real atualizado no loop
+                        let gains = 0, losses = 0;
+                        for (let i = closes1H.length - 14; i < closes1H.length; i++) {
+                            const diff = closes1H[i] - closes1H[i-1];
+                            if (diff > 0) gains += diff; else losses += Math.abs(diff);
+                        }
+                        const avgGain = gains / 14, avgLoss = losses / 14;
+                        assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain/avgLoss)) };
+                        assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+
                         if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], assetsData[symbol].candles1H);
                     }
-                    // Refresca candles 4H e recalcula o viés HTF
-                    const c4H = await dadosExternos.fetchHistoricalCandles(symbol, '4h', 210);
+                    const c4H = await dadosExternos.fetchHistoricalCandles(symbol, '4h', 20);
                     if (c4H.length > 0) {
-                        assetsData[symbol].candles4H = c4H;
-                        const closes4H = c4H.map(c => c.close);
+                        assetsData[symbol].candles4H = [...assetsData[symbol].candles4H.slice(0, -20), ...c4H];
+                        const closes4H = assetsData[symbol].candles4H.map(c => c.close);
                         assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a,b)=>a+b,0) / 200 : assetsData[symbol].ema200_4H;
-                        assetsData[symbol].htfStructure = indicadores.detectHTFStructure(assetsData[symbol], c4H);
+                        assetsData[symbol].htfStructure = indicadores.detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
                     }
                 }
                 await evaluateMarkets();
