@@ -352,7 +352,9 @@
             checkPortfolioExposure, checkMTFAlignment, computeScore, isSafeToTrade,
             KellyPositionSize
         } = indicadores;
-
+    fetchOpenInterest,
+    fetchBasis,
+} = dadosExternos;
         const {
             fetchHistoricalCandles, fetchFundingRate, fetchOpenInterest, fetchBasis,
             fetchBlockchairStats, fetchMempoolStats, fetchETFData, fetchFedRate,
