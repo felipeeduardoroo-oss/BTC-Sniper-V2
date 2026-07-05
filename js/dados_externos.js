@@ -321,7 +321,10 @@ export const fetchETFData = async () => {
 
 export const fetchFedRate = async () => {
     const cacheKey = 'fedRate';
-    const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
+    // FIX: cache de 12h em vez de CONFIG.CACHE_TTL_MS (10min) — o Fed Funds Rate
+    // não muda de um dia pro outro, então não vale a pena depender de proxy gratuito
+    // a cada ciclo. Uma vez que uma busca dá certo, ela fica valendo por 12h.
+    const cached = getCachedData(cacheKey, 12 * 60 * 60 * 1000);
     if (cached && !cached.stale) {
         return cached;
     }
@@ -415,13 +418,13 @@ export const fetchTetherPremium = async () => {
     }
 
     try {
-        // FIX: CoinGecko simple/price bloqueia CORS direto — precisa do mesmo proxy usado no FedRate
-        const cgUrl = CONFIG.PROXY_URL + encodeURIComponent('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=brl');
-        const [cryptoData, fiatData] = await Promise.all([
-            fetchWithRetry(cgUrl),
-            fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD') // esse já tem CORS liberado, não precisa de proxy
+        // FIX: Mercado Bitcoin (exchange brasileira) — endpoint público de ticker aceita CORS
+        // direto do navegador, sem precisar de proxy. Substitui CoinGecko simple/price.
+        const [mbData, fiatData] = await Promise.all([
+            fetchWithRetry('https://api.mercadobitcoin.net/api/v4/USDT-BRL/ticker'),
+            fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD')
         ]);
-        const usdtBrl = cryptoData?.tether?.brl;
+        const usdtBrl = parseFloat(mbData?.[0]?.last);
         const usdBrl = fiatData?.rates?.BRL;
         if (usdtBrl && usdBrl) {
             const premium = ((usdtBrl / usdBrl) - 1) * 100;
