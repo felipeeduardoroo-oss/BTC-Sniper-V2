@@ -247,7 +247,40 @@ export async function fetchFearGreed() {
     return null;
 }
 
-// ===== MACRO =====
+// ===== MACRO (Yahoo Finance via proxy CORS) =====
+export async function fetchYahoo(symbol) {
+    try {
+        const target = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=5d`;
+        const url = CONFIG.PROXY_URL + encodeURIComponent(target);
+        const data = await fetchWithRetry(url);
+        const result = data?.chart?.result?.[0];
+        if (!result) return null;
+        const meta = result.meta;
+        const price = meta.regularMarketPrice;
+        const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
+        const change = prevClose ? ((price - prevClose) / prevClose) * 100 : 0;
+        return { price, change };
+    } catch(e) { console.warn('[Yahoo]', symbol, e); }
+    return null;
+}
+
+// ===== FED Funds Rate (FRED, via proxy CORS) =====
+export async function fetchFedRate() {
+    try {
+        const target = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS';
+        const url = CONFIG.PROXY_URL + encodeURIComponent(target);
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const csv = await resp.text();
+        const lines = csv.trim().split('\n');
+        const lastLine = lines[lines.length - 1];
+        const value = parseFloat(lastLine.split(',')[1]);
+        return isNaN(value) ? null : value;
+    } catch(e) { console.warn('[FedRate]', e); }
+    return null;
+}
+
+// ===== MACRO fallback (usado apenas se Yahoo/proxy falhar) =====
 export async function fetchMacroStatic() {
     const cached = getCachedData('macro_fallback');
     if (cached) return cached;
