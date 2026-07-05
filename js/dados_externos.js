@@ -342,9 +342,10 @@ export const fetchFedRate = async () => {
         console.warn('[FedRate] Chamada direta falhou:', e.message);
     }
 
-    const proxies = [
+const proxies = [
         'https://corsproxy.io/?url=',
-        'https://api.allorigins.win/raw?url='
+        'https://api.allorigins.win/raw?url=',
+        'https://api.codetabs.com/v1/proxy?quest=' // 3º proxy de reserva (mais um serviço gratuito de CORS)
     ];
     for (const proxy of proxies) {
         try {
@@ -414,9 +415,11 @@ export const fetchTetherPremium = async () => {
     }
 
     try {
+        // FIX: CoinGecko simple/price bloqueia CORS direto — precisa do mesmo proxy usado no FedRate
+        const cgUrl = CONFIG.PROXY_URL + encodeURIComponent('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=brl');
         const [cryptoData, fiatData] = await Promise.all([
-            fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=brl'),
-            fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD')
+            fetchWithRetry(cgUrl),
+            fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD') // esse já tem CORS liberado, não precisa de proxy
         ]);
         const usdtBrl = cryptoData?.tether?.brl;
         const usdBrl = fiatData?.rates?.BRL;
