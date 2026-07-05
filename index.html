@@ -307,7 +307,7 @@
 
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
-    <script type="module">
+ <script type="module">
         import { CONFIG } from './js/config.js';
         import * as indicadores from './js/indicadores.js';
         import * as dadosExternos from './js/dados_externos.js';
@@ -316,7 +316,7 @@
         import * as banco from './js/banco_de_dados.js';
         import * as historico from './js/historicos_sinais.js';
 
-        // ===== IMPORTAÇÕES DO COMITÊ (NOVAS) =====
+        // ===== IMPORTAÇÕES DO COMITÊ =====
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
             generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
@@ -335,7 +335,9 @@
             fetchMacroStatic, getMTFConfluence, fetchOrderBook
         } = dadosExternos;
 
-        // ===== STATE =====
+        // ============================================================
+        //  STATE
+        // ============================================================
         const assetsData = {};
         CONFIG.ASSETS.forEach(symbol => {
             assetsData[symbol] = {
@@ -368,7 +370,9 @@
 
         function formatCurrency(value) { return '$' + Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-        // ===== UI HELPERS DO COMITÊ (NOVOS) =====
+        // ============================================================
+        //  UI HELPERS DO COMITÊ
+        // ============================================================
         function renderMiniOrderBook(obData) {
             if (!obData) return '<span style="color:#8b949e;">N/A</span>';
             const maxQty = Math.max(...obData.bids.map(b=>b.qty), ...obData.asks.map(a=>a.qty));
@@ -462,7 +466,9 @@
             if (obContainer) obContainer.innerHTML = renderMiniOrderBook(obData);
         }
 
-        // ===== MOTOR COMITÊ (NOVO) =====
+        // ============================================================
+        //  MOTOR COMITÊ
+        // ============================================================
         async function runSignalEngine() {
             const symbol = 'BTCUSDT';
             try {
@@ -574,13 +580,335 @@
             }
         }
 
-        // ===== FUNÇÕES LEGADO (mantidas) =====
-        // (Aqui vão todas as funções que já existiam: updateLivePriceUI, updateMainScoreUI, 
-        // evaluateMarkets, fetchHistoricalCandles, warmUpIndicators, initWebSockets, 
-        // fetchPrices, fetchFearGreed, etc. – eu as mantenho exatamente como estavam, 
-        // apenas adiciono a chamada ao runSignalEngine nos intervalos)
+        // ============================================================
+        //  FUNÇÕES LEGADO (WebSocket, avaliação, atualizações)
+        // ============================================================
 
-        // ===== INICIALIZAÇÃO MODIFICADA =====
+        // ---- WebSocket ----
+        function initWebSockets() {
+            const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
+            const streams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
+            const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+            ws.onopen = () => {
+                if(wsStatusEl) { wsStatusEl.textContent = '🔄 WEBSOCKET LIVE'; wsStatusEl.style.color = 'var(--accent-green)'; wsStatusEl.style.animation = 'pulse-dot 1.5s infinite'; }
+            };
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                const symbol = msg.data.s;
+                const price = parseFloat(msg.data.p);
+                if (assetsData[symbol]) {
+                    const prevPrice = assetsData[symbol].price;
+                    assetsData[symbol].price = price;
+                    if (prevPrice > 0) {
+                        assetsData[symbol].ema50_1H = updateStatefulEMA(assetsData[symbol].ema50_1H, price, 50);
+                        assetsData[symbol].ema200_4H = updateStatefulEMA(assetsData[symbol].ema200_4H, price, 200);
+                        assetsData[symbol].rsiState = updateStatefulRSI(assetsData[symbol].rsiState, price, prevPrice);
+                        assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+                    }
+                    checkPositionManagement(symbol, price);
+                    updateLivePriceUI(symbol, price);
+                }
+            };
+            ws.onerror = (e) => {
+                console.error("WS Error", e);
+                if(wsStatusEl) { wsStatusEl.textContent = '❌ WS OFFLINE'; wsStatusEl.style.color = 'var(--accent-red)'; wsStatusEl.style.animation = 'none'; }
+            };
+            ws.onclose = () => { 
+                if(wsStatusEl) { wsStatusEl.textContent = '🔄 RECONNECTING...'; wsStatusEl.style.color = 'var(--accent-yellow)'; wsStatusEl.style.animation = 'none'; }
+                setTimeout(initWebSockets, 3000); 
+            };
+            // Liquidações
+            const wsLiq = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
+            wsLiq.onmessage = (event) => {
+                const orders = JSON.parse(event.data);
+                orders.forEach(o => {
+                    const symbol = o.order.symbol;
+                    if (liqMap[symbol]) {
+                        const side = o.order.side;
+                        const price = parseFloat(o.order.price);
+                        const qty = parseFloat(o.order.origQty) * price;
+                        if (side === 'BUY') liqMap[symbol].longs += qty; 
+                        else liqMap[symbol].shorts += qty;
+                        if (!liquidationLevels[symbol]) liquidationLevels[symbol] = [];
+                        liquidationLevels[symbol].push(price);
+                        if (liquidationLevels[symbol].length > 100) liquidationLevels[symbol].shift();
+                    }
+                });
+            };
+            wsLiq.onclose = () => setTimeout(initWebSockets, 5000);
+            setInterval(() => { Object.keys(liqMap).forEach(k => liqMap[k] = { longs: 0, shorts: 0 }); }, 4 * 60 * 60 * 1000);
+        }
+
+        // ---- Atualizações de UI ----
+        function updateLivePriceUI(symbol, price) {
+            const prefix = symbol.replace('USDT', '').toLowerCase();
+            const el = DOM[`${prefix}-price`] || document.getElementById(`${prefix}-price`);
+            if (el) {
+                const oldPrice = parseFloat(el.textContent.replace(/[^0-9.-]/g, ''));
+                el.textContent = formatCurrency(price);
+                if (!isNaN(oldPrice) && price !== oldPrice) {
+                    el.style.transition = 'color 0.3s, background 0.3s';
+                    const color = price > oldPrice ? 'var(--accent-green)' : 'var(--accent-red)';
+                    el.style.color = color;
+                    el.style.background = price > oldPrice ? 'rgba(0, 232, 150, 0.1)' : 'rgba(255, 77, 109, 0.1)';
+                    setTimeout(() => { el.style.color = ''; el.style.background = ''; }, 300);
+                }
+            }
+        }
+
+        function updateMainScoreUI(scoreData, blockReason) {
+            const s = scoreData.score;
+            const c = scoreData.components;
+            const scoreEl = DOM['score-value'] || document.getElementById('score-value');
+            const barEl = DOM['score-bar'] || document.getElementById('score-bar');
+            if (scoreEl) scoreEl.textContent = s;
+            if (barEl) {
+                barEl.style.width = s + '%';
+                barEl.style.background = s >= 75 ? 'var(--accent-green)' : s <= 25 ? 'var(--accent-red)' : 'var(--accent-yellow)';
+            }
+            if (scoreEl) scoreEl.style.color = s >= 75 ? 'var(--accent-green)' : s <= 25 ? 'var(--accent-red)' : 'var(--accent-yellow)';
+            document.getElementById('score-trend').textContent = c.mtf;
+            document.getElementById('score-structure').textContent = c.smc;
+            document.getElementById('score-momentum').textContent = c.mom;
+            document.getElementById('score-volume').textContent = c.of;
+            document.getElementById('score-onchain').textContent = c.macro;
+            document.getElementById('score-oi').textContent = c.oi;
+            const reasonEl = document.getElementById('block-reason');
+            if (blockReason) { reasonEl.style.display = 'block'; reasonEl.textContent = '🚫 ' + blockReason; } 
+            else { reasonEl.style.display = 'none'; }
+        }
+
+        function updateActiveTradesUI() {
+            CONFIG.ASSETS.forEach(symbol => {
+                const id = symbol.toLowerCase();
+                const el = document.getElementById(`trade-${id}`);
+                if (!el) return;
+                const pos = activePositions[symbol];
+                if (pos) {
+                    const currentPrice = assetsData[symbol].price;
+                    let pnl = 0, pnlPercent = 0;
+                    if (pos.type === 'LONG') {
+                        pnl = (currentPrice - pos.entryPrice) * pos.sizeRemaining;
+                        pnlPercent = ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100;
+                    } else {
+                        pnl = (pos.entryPrice - currentPrice) * pos.sizeRemaining;
+                        pnlPercent = ((pos.entryPrice - currentPrice) / pos.entryPrice) * 100;
+                    }
+                    const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+                    const statusTxt = pos.partialTaken ? 'PARCIAL (50%)' : 'EM POSSE';
+                    el.className = `trade-item ${pos.type.toLowerCase()}`;
+                    el.innerHTML = `
+                        <div class="trade-title">${symbol} <span style="font-size:0.8em; opacity:0.7;">(${pos.type} - ${statusTxt})</span></div>
+                        <div class="trade-details">Entry: $${pos.entryPrice.toFixed(2)} | Trail: $${pos.trailingStop.toFixed(2)} | TP1: $${pos.tp1.toFixed(2)}</div>
+                        <div class="trade-pnl ${pnlClass}">PnL: $${pnl.toFixed(2)} (${pnlPercent.toFixed(2)}%)</div>
+                    `;
+                } else {
+                    el.className = 'trade-item';
+                    el.innerHTML = `<div class="trade-title">${symbol}</div><div class="trade-details">Aguardando sinal...</div>`;
+                }
+            });
+        }
+
+        // ---- Gerenciamento de posições ----
+        function checkPositionManagement(symbol, currentPrice) {
+            const pos = activePositions[symbol];
+            if (!pos) return;
+            const data = assetsData[symbol];
+            let updateUI = false;
+            if (pos.type === 'LONG') {
+                if (data.swingLows.length > 0) {
+                    const lastSwingLow = Math.min(...data.swingLows);
+                    let newTrail = lastSwingLow - (data.atr_1H * 0.2);
+                    if (data.atrHistory && data.atrHistory.length > 20) {
+                        const avgATR = data.atrHistory.slice(-20).reduce((a,b)=>a+b,0)/20;
+                        if (data.atr_1H > avgATR * 1.5) newTrail -= data.atr_1H * 0.1;
+                        else if (data.atr_1H < avgATR * 0.7) newTrail += data.atr_1H * 0.1;
+                    }
+                    if (newTrail > pos.trailingStop) {
+                        pos.trailingStop = newTrail;
+                        telegram.sendTelegramAlert(`📈 <b>TRAILING STOP AJUSTADO (${symbol})</b>\nNovo Stop: $${newTrail.toFixed(2)} (Swing Low + ATR Adaptativo)`);
+                    }
+                }
+                if (currentPrice >= pos.tp1 && !pos.partialTaken) {
+                    pos.partialTaken = true;
+                    pos.sizeRemaining = 0.5;
+                    pos.realizedPNL = (pos.tp1 - pos.entryPrice) * 0.5;
+                    pos.trailingStop = pos.entryPrice + (data.atr_1H * 0.1);
+                    pos.movedToBE = true;
+                    telegram.sendTelegramAlert(`🎯 <b>TP1 PARCIAL (${symbol})</b>\n50% realizado em $${pos.tp1.toFixed(2)}\nRestante com trailing ativo (BE+${(data.atr_1H*0.1).toFixed(2)})`);
+                    updateUI = true;
+                }
+                if (currentPrice >= pos.tp2) {
+                    closePosition(symbol, 'TP2 ATINGIDO', true);
+                    updateUI = true;
+                } else if (currentPrice <= pos.trailingStop) {
+                    const reason = pos.movedToBE ? 'Trailing Stop/Breakeven' : 'Stop Loss Inicial';
+                    closePosition(symbol, reason, pos.movedToBE);
+                    updateUI = true;
+                }
+            } else if (pos.type === 'SHORT') {
+                if (data.swingHighs.length > 0) {
+                    const lastSwingHigh = Math.max(...data.swingHighs);
+                    let newTrail = lastSwingHigh + (data.atr_1H * 0.2);
+                    if (data.atrHistory && data.atrHistory.length > 20) {
+                        const avgATR = data.atrHistory.slice(-20).reduce((a,b)=>a+b,0)/20;
+                        if (data.atr_1H > avgATR * 1.5) newTrail += data.atr_1H * 0.1;
+                        else if (data.atr_1H < avgATR * 0.7) newTrail -= data.atr_1H * 0.1;
+                    }
+                    if (newTrail < pos.trailingStop || pos.trailingStop === 0) {
+                        pos.trailingStop = newTrail;
+                        telegram.sendTelegramAlert(`📉 <b>TRAILING STOP AJUSTADO (${symbol})</b>\nNovo Stop: $${newTrail.toFixed(2)}`);
+                    }
+                }
+                if (currentPrice <= pos.tp1 && !pos.partialTaken) {
+                    pos.partialTaken = true;
+                    pos.sizeRemaining = 0.5;
+                    pos.realizedPNL = (pos.entryPrice - pos.tp1) * 0.5;
+                    pos.trailingStop = pos.entryPrice - (data.atr_1H * 0.1);
+                    pos.movedToBE = true;
+                    telegram.sendTelegramAlert(`🎯 <b>TP1 PARCIAL (${symbol})</b>\n50% realizado em $${pos.tp1.toFixed(2)}\nRestante com trailing ativo (BE-${(data.atr_1H*0.1).toFixed(2)})`);
+                    updateUI = true;
+                }
+                if (currentPrice <= pos.tp2) {
+                    closePosition(symbol, 'TP2 ATINGIDO', true);
+                    updateUI = true;
+                } else if (currentPrice >= pos.trailingStop) {
+                    const reason = pos.movedToBE ? 'Trailing Stop/Breakeven' : 'Stop Loss Inicial';
+                    closePosition(symbol, reason, pos.movedToBE);
+                    updateUI = true;
+                }
+            }
+            if (updateUI) updateActiveTradesUI();
+        }
+
+        function closePosition(symbol, reason, isWin) {
+            const pos = activePositions[symbol];
+            if (!pos) return;
+            const stats = banco.getTradeStats();
+            if (isWin) stats.wins++; else stats.losses++;
+            banco.setTradeStats(stats);
+            telegram.sendTelegramAlert(`${isWin ? '✅' : '❌'} <b>POSIÇÃO FECHADA (${symbol})</b>\nMotivo: ${reason}\nWinrate Atual: ${((stats.wins / (stats.wins+stats.losses))*100).toFixed(1)}%`);
+            delete activePositions[symbol];
+            updateActiveTradesUI();
+        }
+
+        // ---- Avaliação de mercado (legado) ----
+        function evaluateMarkets() {
+            CONFIG.ASSETS.forEach(symbol => {
+                const data = assetsData[symbol];
+                updateSwingPoints(data);
+                const scoreData = computeScore(symbol, assetsData, liqMap);
+                const score = scoreData.score;
+                const blockReason = scoreData.blockReason;
+                scoreHistory.push({ time: getCurrentTimestamp().split(' ')[1], symbol: symbol, score: score });
+                if (scoreHistory.length > 150) scoreHistory.shift();
+                if (symbol === 'BTCUSDT') updateMainScoreUI(scoreData, blockReason);
+                const prevScore = previousScores[symbol] || 50;
+                if (!activePositions[symbol] && !blockReason && isSafeToTrade()) {
+                    const now = Date.now();
+                    const cooldown = alertCooldowns[symbol] || 0;
+                    if (now - cooldown > 1800000) {
+                        const atr = data.atr_1H || (data.price * 0.02);
+                        const primaryDirection = (score >= 70) ? 'LONG' : (score <= 30 ? 'SHORT' : null);
+                        if (primaryDirection) {
+                            const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
+                            if (expCheck.blocked) return;
+                            let stop, tp1, tp2, structLevel;
+                            if (primaryDirection === 'LONG') {
+                                structLevel = Math.min(...data.swingLows) - (atr * 0.3);
+                                stop = Math.min(structLevel, data.price - atr * 1.5);
+                                tp1 = data.price + (atr * 2);
+                                tp2 = data.price + (atr * 4);
+                            } else {
+                                structLevel = Math.max(...data.swingHighs) + (atr * 0.3);
+                                stop = Math.max(structLevel, data.price + atr * 1.5);
+                                tp1 = data.price - (atr * 2);
+                                tp2 = data.price - (atr * 4);
+                            }
+                            const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
+                            if (rr1 < 1.5) return;
+                            if (primaryDirection === 'LONG' && findSMCSetup(data, 'LONG')) {
+                                const riskPct = KellyPositionSize(banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1), rr1);
+                                telegram.sendTradeAlert(symbol, 'long', score, data.price, stop, [{price: tp1, rr: rr1}, {price: tp2, rr: rr1*2}], `MTF Long + BOS Bullish + SMC Setup`, riskPct, null);
+                                activePositions[symbol] = { type: 'LONG', entryPrice: data.price, stop: stop, tp1: tp1, tp2: tp2, movedToBE: false, trailingStop: stop, partialTaken: false, sizeRemaining: 1, realizedPNL: 0 };
+                                updateActiveTradesUI();
+                            } else if (primaryDirection === 'SHORT' && findSMCSetup(data, 'SHORT')) {
+                                const riskPct = KellyPositionSize(banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1), rr1);
+                                telegram.sendTradeAlert(symbol, 'short', score, data.price, stop, [{price: tp1, rr: rr1}, {price: tp2, rr: rr1*2}], `MTF Short + BOS Bearish + SMC Setup`, riskPct, null);
+                                activePositions[symbol] = { type: 'SHORT', entryPrice: data.price, stop: stop, tp1: tp1, tp2: tp2, movedToBE: false, trailingStop: stop, partialTaken: false, sizeRemaining: 1, realizedPNL: 0 };
+                                updateActiveTradesUI();
+                            }
+                        }
+                    }
+                }
+                if (prevScore < 50 && score >= 50) telegram.sendTelegramAlert(`🔄 <b>TENDÊNCIA MUDOU (${symbol})</b>\nScore subiu para ${score}. Possível reversão Long.`);
+                if (prevScore > 50 && score <= 50) telegram.sendTelegramAlert(`🔄 <b>TENDÊNCIA MUDOU (${symbol})</b>\nScore caiu para ${score}. Possível reversão Short.`);
+                previousScores[symbol] = score;
+            });
+            graficos.updateScoreChart(scoreHistory);
+        }
+
+        // ---- Atualização de dados externos ----
+        async function updateExternalData() {
+            try {
+                const blockchair = await fetchBlockchairStats();
+                if (blockchair) {
+                    document.getElementById('block-height').textContent = blockchair.blockHeight.toLocaleString();
+                    document.getElementById('mempool-size').textContent = (blockchair.mempoolSize / 1e6).toFixed(2) + ' MB';
+                    document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
+                    document.getElementById('eth-gas').textContent = blockchair.ethGas.toFixed(2) + ' Gwei';
+                }
+                const mempool = await fetchMempoolStats();
+                if (mempool) {
+                    document.getElementById('btc-hashrate').textContent = mempool.hashrate.toFixed(2) + ' EH/s';
+                    document.getElementById('difficulty').textContent = mempool.difficulty.toExponential(2);
+                }
+
+                const etf = await fetchETFData();
+                if (etf) {
+                    document.getElementById('etf-btc-live').innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + etf.btcFlow.toFixed(2) + '%</strong>';
+                    document.getElementById('etf-eth-live').innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + etf.ethFlow.toFixed(2) + '%</strong>';
+                    graficos.updateETFChart(etf);
+                }
+
+                const premium = await fetchTetherPremium();
+                const tetherEl = document.getElementById('tether-premium');
+                if (tetherEl) { tetherEl.textContent = premium !== null ? ((premium >= 0 ? '+' : '') + premium.toFixed(2) + '%') : 'N/A'; tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative'); }
+
+                const pcr = await fetchPutCallRatio();
+                if (pcr !== null) { document.getElementById('put-call-ratio').textContent = pcr.toFixed(3); }
+
+                const basis = await fetchBasis();
+                if (basis !== null) { document.getElementById('basis').textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%'; }
+
+                const fedRate = await fetchFedRate();
+                if (fedRate !== null) document.getElementById('fed-rate').textContent = fedRate.toFixed(2) + '%';
+
+                const macro = await fetchMacroStatic();
+                if (macro) {
+                    document.getElementById('dxy-value').textContent = macro.dxy.toFixed(2);
+                    document.getElementById('us10y-value').textContent = macro.us10y.toFixed(2) + '%';
+                    document.getElementById('vix-value').textContent = macro.vix.toFixed(2);
+                    document.getElementById('nasdaq-value').textContent = (macro.nasdaqChange >= 0 ? '+' : '') + macro.nasdaqChange.toFixed(2) + '%';
+                    document.getElementById('sp500-value').textContent = (macro.spChange >= 0 ? '+' : '') + macro.spChange.toFixed(2) + '%';
+                    graficos.updateMacroChart(macro);
+                }
+
+                const defi = await fetchDeFiData();
+                if (defi) {
+                    document.getElementById('stablecoin-supply').textContent = '$' + defi.totalStable.toFixed(0) + 'B';
+                    document.getElementById('defi-tvl').textContent = '$' + defi.tvl.toFixed(1) + 'B';
+                    document.getElementById('defi-tvl-change').textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
+                }
+
+                const fg = await fetchFearGreed();
+                if (fg) { document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')'; document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH'; }
+            } catch(e) { console.warn('Erro ao atualizar dados externos:', e); }
+        }
+
+        // ============================================================
+        //  INICIALIZAÇÃO
+        // ============================================================
         async function init() {
             cacheDOM();
             graficos.initCharts();
@@ -602,14 +930,9 @@
                     const closes = c1H.map(c => c.close);
                     assetsData[symbol].price = closes[closes.length - 1];
                     assetsData[symbol].ema50_1H = closes.slice(-50).reduce((a,b)=>a+b,0) / 50;
-                    
                     const closes4H = c4H.map(c => c.close);
-                    assetsData[symbol].ema200_4H = closes4H.length >= 200
-                        ? closes4H.slice(-200).reduce((a,b)=>a+b,0) / 200
-                        : closes.slice(-200).reduce((a,b)=>a+b,0) / 200; 
-                        
+                    assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a,b)=>a+b,0) / 200 : closes.slice(-200).reduce((a,b)=>a+b,0) / 200;
                     assetsData[symbol].atr_1H = calculateATR(c1H, 14);
-                    
                     let gains = 0, losses = 0;
                     for (let i = closes.length - 14; i < closes.length; i++) {
                         const diff = closes[i] - closes[i-1];
@@ -618,20 +941,18 @@
                     const avgGain = gains / 14, avgLoss = losses / 14;
                     assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain/avgLoss)) };
                     assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
-
                     assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], c4H);
-                    
                     if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
                 }
             }
 
-            initWebSockets();
+            initWebSockets(); // <-- AGORA DEFINIDA ANTES
             await updateExternalData();
             await evaluateMarkets();
 
             setInterval(updateExternalData, 120000);
             
-            // ===== INTERVALO DO COMITÊ (ADICIONADO) =====
+            // Ciclo de 5 min para atualizar velas e rodar ambos os motores
             setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
                     const c1H = await fetchHistoricalCandles(symbol, '1h', 10);
@@ -640,7 +961,6 @@
                         const closes1H = assetsData[symbol].candles1H.map(c => c.close);
                         assetsData[symbol].ema50_1H = closes1H.slice(-50).reduce((a,b)=>a+b,0) / 50;
                         assetsData[symbol].atr_1H = calculateATR(assetsData[symbol].candles1H, 14);
-                        
                         let gains = 0, losses = 0;
                         for (let i = closes1H.length - 14; i < closes1H.length; i++) {
                             const diff = closes1H[i] - closes1H[i-1];
@@ -649,7 +969,6 @@
                         const avgGain = gains / 14, avgLoss = losses / 14;
                         assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain/avgLoss)) };
                         assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
-
                         if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], assetsData[symbol].candles1H);
                     }
                     const c4H = await fetchHistoricalCandles(symbol, '4h', 20);
@@ -661,13 +980,14 @@
                     }
                 }
                 await evaluateMarkets();
-                await runSignalEngine(); // <-- NOVO
+                await runSignalEngine(); // Motor Comitê
             }, 300000);
 
-            // ===== EXECUÇÃO RÁPIDA DO COMITÊ (NOVO) =====
+            // Execução rápida do Comitê
             setInterval(runSignalEngine, 15000);
             setTimeout(runSignalEngine, 1000);
 
+            // Botão de teste Telegram
             document.getElementById('test-telegram-btn').addEventListener('click', async function(e) {
                 this.disabled = true;
                 document.getElementById('test-btn-label').innerHTML = '<span class="spinner"></span> Enviando...';
@@ -677,9 +997,7 @@
             });
         }
 
-        // ===== FUNÇÕES AUXILIARES EXISTENTES (updateExternalData, evaluateMarkets, etc.) =====
-        // (mantidas exatamente como estavam, sem alterações)
-
+        // Iniciar
         init();
     </script>
     </body>
