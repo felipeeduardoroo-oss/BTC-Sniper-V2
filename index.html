@@ -177,33 +177,35 @@
                 <div id="mainSignal" style="margin-top:12px;padding:10px;background:#0d1117;border-radius:8px;border:1px solid #30363d;text-align:center;"><div style="color:#8b949e;font-size:14px;">Aguardando dados...</div></div>
             </div>
         </section>
-<!-- PAINEL DO COMITÊ (NOVO, SEPARADO) -->
-<section>
-    <div id="committeePanel" style="background: linear-gradient(135deg, #0d1117 0%, #161b22 100%); border: 1px solid #30363d; border-radius: 12px; padding: 16px; margin: 12px 0 32px 0; font-family: 'Segoe UI', system-ui, sans-serif;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <span style="color:#8b949e;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Comitê (RSI+EMA+ADX) — 15m</span>
-            <span id="committee-label" style="font-size:13px;font-weight:800;padding:3px 10px;border-radius:20px;background:rgba(139,148,158,0.15);color:#8b949e;border:1px solid #8b949e;">NEUTRO</span>
-        </div>
-        <div style="position:relative;height:28px;background:#21262d;border-radius:14px;overflow:hidden;margin-bottom:10px;">
-            <div id="committee-bar" style="height:100%;width:50%;border-radius:14px;transition:width 0.6s ease, background 0.6s ease;background:linear-gradient(90deg,#ff1744,#ffc107,#00e676);"></div>
-            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-weight:800;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,0.8);">
-                <span id="committee-score">50</span>/100
+
+        <!-- PAINEL DO COMITÊ (NOVO, SEPARADO) -->
+        <section>
+            <div id="committeePanel" style="background: linear-gradient(135deg, #0d1117 0%, #161b22 100%); border: 1px solid #30363d; border-radius: 12px; padding: 16px; margin: 12px 0 32px 0; font-family: 'Segoe UI', system-ui, sans-serif;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <span style="color:#8b949e;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Comitê (RSI+EMA+ADX) — 15m</span>
+                    <span id="committee-label" style="font-size:13px;font-weight:800;padding:3px 10px;border-radius:20px;background:rgba(139,148,158,0.15);color:#8b949e;border:1px solid #8b949e;">NEUTRO</span>
+                </div>
+                <div style="position:relative;height:28px;background:#21262d;border-radius:14px;overflow:hidden;margin-bottom:10px;">
+                    <div id="committee-bar" style="height:100%;width:50%;border-radius:14px;transition:width 0.6s ease, background 0.6s ease;background:linear-gradient(90deg,#ff1744,#ffc107,#00e676);"></div>
+                    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-weight:800;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,0.8);">
+                        <span id="committee-score">50</span>/100
+                    </div>
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:10px;" id="committee-mtf-badges"></div>
+                <div id="committee-reasons" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+                <div style="margin-top:10px;padding-top:10px;border-top:1px solid #21262d;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                    <span style="color:#8b949e;font-size:11px;">Funding Rate</span>
+                    <span id="committee-funding" style="font-size:12px;font-weight:700;">--</span>
+                    <span style="color:#8b949e;font-size:11px;">ADX</span>
+                    <span id="committee-adx" style="font-size:12px;font-weight:700;">--</span>
+                </div>
+                <div id="committee-ob" style="margin-top:8px;padding-top:8px;border-top:1px solid #21262d;font-size:10px;font-family:var(--font-mono);"></div>
+                <div id="committee-main-signal" style="margin-top:12px;padding:10px;background:#0d1117;border-radius:8px;border:1px solid #30363d;text-align:center;">
+                    <div style="color:#8b949e;font-size:14px;">Aguardando dados...</div>
+                </div>
             </div>
-        </div>
-        <div style="display:flex;gap:6px;margin-bottom:10px;" id="committee-mtf-badges"></div>
-        <div id="committee-reasons" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
-        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #21262d;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <span style="color:#8b949e;font-size:11px;">Funding Rate</span>
-            <span id="committee-funding" style="font-size:12px;font-weight:700;">--</span>
-            <span style="color:#8b949e;font-size:11px;">ADX</span>
-            <span id="committee-adx" style="font-size:12px;font-weight:700;">--</span>
-        </div>
-        <div id="committee-ob" style="margin-top:8px;padding-top:8px;border-top:1px solid #21262d;font-size:10px;font-family:var(--font-mono);"></div>
-        <div id="committee-main-signal" style="margin-top:12px;padding:10px;background:#0d1117;border-radius:8px;border:1px solid #30363d;text-align:center;">
-            <div style="color:#8b949e;font-size:14px;">Aguardando dados...</div>
-        </div>
-    </div>
-</section>
+        </section>
+
         <section>
             <h2 class="section-title">🎯 POSIÇÕES ATIVAS & GESTÃO</h2>
             <div class="active-trades-panel" id="active-trades-panel">
@@ -368,6 +370,7 @@
         import * as banco from './js/banco_de_dados.js';
         import * as historico from './js/historicos_sinais.js';
 
+        // Desestruturação única
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
             generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
@@ -409,7 +412,7 @@
             fetchCQActiveAddresses,
             fetchCQDifficulty,
             fetchCQHashrate,
-            // FRED Macro (para uso futuro)
+            // FRED Macro
             fetchFREDVIX,
             fetchFREDUS10Y,
             fetchFREDDXY
@@ -1167,4 +1170,216 @@
                     document.getElementById('exchange-netflow-interp').textContent = netflow > 0 ? '⚠️ Entrada' : '✅ Saída';
                 }
                 if (minerOutflow !== null) {
-                    document.getElementById('miner-outflow').textContent = minerOutflow.toFixed(2) + '
+                    document.getElementById('miner-outflow').textContent = minerOutflow.toFixed(2) + ' BTC';
+                    document.getElementById('miner-outflow-interp').textContent = minerOutflow > 1000 ? '⚠️ Vendendo' : 'ℹ️ Normal';
+                }
+                if (cqActive !== null) {
+                    document.getElementById('active-addresses').textContent = cqActive.toLocaleString();
+                }
+                if (cqDiff !== null) {
+                    document.getElementById('difficulty').textContent = cqDiff.toExponential(2);
+                }
+                if (cqHashrate !== null) {
+                    document.getElementById('btc-hashrate').textContent = (cqHashrate / 1e18).toFixed(2) + ' EH/s';
+                }
+
+                // ===== BLOCKCHAIR (fallback) =====
+                const blockchair = await fetchBlockchairStats();
+                if (blockchair) {
+                    document.getElementById('block-height').textContent = blockchair.blockHeight.toLocaleString();
+                    document.getElementById('mempool-size').textContent = (blockchair.mempoolSize / 1e6).toFixed(2) + ' MB';
+                    if (cqActive === null) {
+                        document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
+                    }
+                }
+
+                // ===== ETH GAS =====
+                const ethGas = await fetchEthGasPrice();
+                if (ethGas !== null) {
+                    document.getElementById('eth-gas').textContent = ethGas.toFixed(2) + ' Gwei';
+                }
+
+                // ===== ETF =====
+                const etf = await fetchETFData();
+                if (etf) {
+                    document.getElementById('etf-btc-live').innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + etf.btcFlow.toFixed(2) + '%</strong>';
+                    document.getElementById('etf-eth-live').innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + etf.ethFlow.toFixed(2) + '%</strong>';
+                    graficos.updateETFChart(etf);
+                }
+
+                // ===== TETHER =====
+                const premium = await fetchTetherPremium();
+                const tetherEl = document.getElementById('tether-premium');
+                if (tetherEl) {
+                    tetherEl.textContent = premium !== null ? ((premium >= 0 ? '+' : '') + premium.toFixed(2) + '%') : 'N/A';
+                    tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
+                }
+
+                // ===== PUT/CALL =====
+                const pcr = await fetchPutCallRatio();
+                if (pcr !== null) { document.getElementById('put-call-ratio').textContent = pcr.toFixed(3); }
+
+                // ===== BASIS =====
+                const basis = await fetchBasis();
+                if (basis !== null) { document.getElementById('basis').textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%'; }
+
+                // ===== FED RATE =====
+                const fedRate = await fetchFedRate();
+                if (fedRate !== null) document.getElementById('fed-rate').textContent = fedRate.toFixed(2) + '%';
+
+                // ===== MACRO =====
+                const macro = await fetchMacroStatic();
+                if (macro) {
+                    document.getElementById('dxy-value').textContent = macro.dxy.toFixed(2);
+                    document.getElementById('us10y-value').textContent = macro.us10y.toFixed(2) + '%';
+                    document.getElementById('vix-value').textContent = macro.vix.toFixed(2);
+                    document.getElementById('nasdaq-value').textContent = (macro.nasdaqChange >= 0 ? '+' : '') + macro.nasdaqChange.toFixed(2) + '%';
+                    document.getElementById('sp500-value').textContent = (macro.spChange >= 0 ? '+' : '') + macro.spChange.toFixed(2) + '%';
+                    graficos.updateMacroChart(macro);
+                }
+
+                // ===== DEFI =====
+                const defi = await fetchDeFiData();
+                if (defi) {
+                    document.getElementById('stablecoin-supply').textContent = '$' + defi.totalStable.toFixed(0) + 'B';
+                    document.getElementById('defi-tvl').textContent = '$' + defi.tvl.toFixed(1) + 'B';
+                    document.getElementById('defi-tvl-change').textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
+                }
+
+                // ===== FEAR & GREED =====
+                const fg = await fetchFearGreed();
+                if (fg) {
+                    document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
+                    document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
+                }
+            } catch (e) {
+                console.warn('Erro ao atualizar dados externos:', e);
+            } finally {
+                externalUpdating = false;
+                setTimeout(updateExternalData, 120000);
+            }
+        }
+
+        // ===== BOOTSTRAP =====
+        async function init() {
+            cacheDOM();
+            warmupBackend();
+            graficos.initCharts();
+            const candleBTC = graficos.initCandleChart('candle-btc', '#00e896');
+            const candleETH = graficos.initCandleChart('candle-eth', '#00b4d8');
+            const candleSOL = graficos.initCandleChart('candle-sol', '#ffd60a');
+            const candleCharts = { 'BTCUSDT': candleBTC, 'ETHUSDT': candleETH, 'SOLUSDT': candleSOL };
+
+            for (const symbol of CONFIG.ASSETS) {
+                const [c1H, c4H, c1D] = await Promise.all([
+                    fetchHistoricalCandles(symbol, '1h', 200),
+                    fetchHistoricalCandles(symbol, '4h', 210),
+                    fetchHistoricalCandles(symbol, '1d', 210)
+                ]);
+                assetsData[symbol].candles1H = c1H;
+                assetsData[symbol].candles4H = c4H;
+                assetsData[symbol].candles1D = c1D;
+                if (c1H.length > 0) {
+                    const closes = c1H.map(c => c.close);
+                    assetsData[symbol].price = closes[closes.length - 1];
+                    assetsData[symbol].ema50_1H = closes.slice(-50).reduce((a, b) => a + b, 0) / 50;
+                    const closes4H = c4H.map(c => c.close);
+                    assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : closes.slice(-200).reduce((a, b) => a + b, 0) / 200;
+                    assetsData[symbol].atr_1H = calculateATR(c1H, 14);
+                    let gains = 0, losses = 0;
+                    for (let i = closes.length - 14; i < closes.length; i++) {
+                        const diff = closes[i] - closes[i - 1];
+                        if (diff > 0) gains += diff; else losses += Math.abs(diff);
+                    }
+                    const avgGain = gains / 14, avgLoss = losses / 14;
+                    assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
+                    assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+                    assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], c4H);
+                    if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
+                }
+            }
+
+            initWebSockets();
+            await updateExternalData();
+            await updateMTFAndOI();
+            await evaluateMarkets();
+
+            setTimeout(runCommittee, 1000);
+
+            setInterval(async () => {
+                for (const symbol of CONFIG.ASSETS) {
+                    const c1H = await fetchHistoricalCandles(symbol, '1h', 10);
+                    if (c1H.length > 0) {
+                        assetsData[symbol].candles1H = [...assetsData[symbol].candles1H.slice(0, -10), ...c1H];
+                        const closes1H = assetsData[symbol].candles1H.map(c => c.close);
+                        assetsData[symbol].ema50_1H = closes1H.slice(-50).reduce((a, b) => a + b, 0) / 50;
+                        assetsData[symbol].atr_1H = calculateATR(assetsData[symbol].candles1H, 14);
+                        let gains = 0, losses = 0;
+                        for (let i = closes1H.length - 14; i < closes1H.length; i++) {
+                            const diff = closes1H[i] - closes1H[i - 1];
+                            if (diff > 0) gains += diff; else losses += Math.abs(diff);
+                        }
+                        const avgGain = gains / 14, avgLoss = losses / 14;
+                        assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
+                        assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+                        if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], assetsData[symbol].candles1H);
+                    }
+                    const c4H = await fetchHistoricalCandles(symbol, '4h', 20);
+                    if (c4H.length > 0) {
+                        assetsData[symbol].candles4H = [...assetsData[symbol].candles4H.slice(0, -20), ...c4H];
+                        const closes4H = assetsData[symbol].candles4H.map(c => c.close);
+                        assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : assetsData[symbol].ema200_4H;
+                        assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
+                    }
+                }
+                await updateMTFAndOI();
+                evaluateMarkets();
+            }, 300000);
+
+            document.getElementById('test-telegram-btn').addEventListener('click', async function (e) {
+                this.disabled = true;
+                document.getElementById('test-btn-label').innerHTML = '<span class="spinner"></span> Enviando...';
+                const ok = await telegram.sendTelegramAlert('🔔 <b>TESTE DE CONEXÃO V2</b>\n⚛️ Motor Institucional Ativo!\n⏰ ' + getCurrentTimestamp());
+                document.getElementById('test-btn-label').textContent = ok ? '✅ Enviado!' : '❌ Falha';
+                setTimeout(() => {
+                    document.getElementById('test-btn-label').textContent = '📨 Testar Alerta';
+                    this.disabled = false;
+                }, 3000);
+            });
+
+            setInterval(() => {
+                const ts = getCurrentTimestamp();
+                const headerEl = DOM['header-timestamp'] || document.getElementById('header-timestamp');
+                if (headerEl) headerEl.textContent = '📅 ' + ts;
+                const lastEl = DOM['last-update'] || document.getElementById('last-update');
+                if (lastEl) lastEl.textContent = ts;
+                document.getElementById('live-update-time').textContent = ts;
+                const badge = document.getElementById('status-badge');
+                if (badge) { badge.textContent = '✅ LIVE'; badge.className = 'status-badge live'; }
+
+                const backendBadge = document.getElementById('backend-status');
+                if (backendBadge) {
+                    const s = getBackendStatus();
+                    if (s === 'online') {
+                        backendBadge.textContent = '✅ BACKEND: ATIVO';
+                        backendBadge.className = 'status-badge live';
+                    } else if (s === 'sleeping') {
+                        backendBadge.textContent = '💤 BACKEND: DORMINDO (fallback ativo)';
+                        backendBadge.className = 'status-badge';
+                    } else {
+                        backendBadge.textContent = '⏳ BACKEND: VERIFICANDO';
+                        backendBadge.className = 'status-badge';
+                    }
+                }
+            }, 1000);
+
+            setInterval(() => {
+                graficos.updateWhaleChart(whaleTrades);
+                updateWhaleUI();
+            }, 30000);
+        }
+
+        init();
+    </script>
+</body>
+</html>
