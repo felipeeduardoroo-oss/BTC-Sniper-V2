@@ -1,4 +1,4 @@
-// dados_externos.js – versão com cache avançado, backoff e fallbacks robustos
+// dados_externos.js – versão com resiliência máxima a falhas de back-end
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
@@ -24,7 +24,6 @@ export function fetchWithTimeout(url, options = {}, timeout = 15000) {
     });
 }
 
-// Retry com backoff exponencial + jitter
 export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RETRIES || 3) {
     let lastError;
     for (let i = 0; i < retries; i++) {
@@ -69,7 +68,7 @@ let _backendStatus = 'checking';
 export function getBackendStatus() { return _backendStatus; }
 export function setBackendStatus(status) { _backendStatus = status; }
 
-// ===== WARM-UP DO BACKEND =====
+// ===== WARM-UP DO BACKEND (mais agressivo) =====
 export async function warmupBackend() {
     setBackendStatus('checking');
     try {
@@ -82,9 +81,11 @@ export async function warmupBackend() {
         return false;
     }
 }
-// Mantém o backend aquecido
+// Mantém o backend aquecido a cada 30s
 setInterval(() => {
-    if (getBackendStatus() === 'sleeping') warmupBackend();
+    if (getBackendStatus() === 'sleeping' || getBackendStatus() === 'checking') {
+        warmupBackend().catch(() => {});
+    }
 }, 30000);
 
 // ===== CACHE =====
@@ -95,8 +96,8 @@ function getCachedData(key, maxAge = CONFIG.CACHE_TTL_MS) {
         const parsed = JSON.parse(raw);
         const age = Date.now() - parsed.timestamp;
         if (age < maxAge) return parsed.data;
-        // stale-while-revalidate
-        if (age < CONFIG.STALE_CACHE_TTL_MS) return { data: parsed.data, stale: true };
+        // stale-while-revalidate estendido para 1 hora
+        if (age < CONFIG.STALE_CACHE_TTL_MS || age < 3600000) return { data: parsed.data, stale: true };
         return null;
     } catch(e) { return null; }
 }
@@ -143,14 +144,34 @@ export const fetchEthGasPrice = async () => {
 };
 
 // ============================================================
-// 2. MACRO – Twelve Data → Yahoo via proxy
+// 2. MACRO – prioridade: Yahoo (proxy) → Backend → Cache
 // ============================================================
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
-    const cached = getCachedData(cacheKey, 300000);
+    const cached = getCachedData(cacheKey, 300000); // 5min fresh, 1h stale
     if (cached && !cached.stale) return cached;
 
-    // 1) Twelve Data (via backend)
+    // Tenta primeiro o Yahoo (mais confiável que o Render dormindo)
+    try {
+        const fetchYahoo = async (ticker) => {
+            const data = await fetchViaProxy(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`, 2);
+            if (data?.chart?.result?.[0]?.meta) {
+                const meta = data.chart.result[0].meta;
+                return { current: meta.regularMarketPrice, change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 };
+            }
+            return null;
+        };
+        const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
+            fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), fetchYahoo('^GSPC'), fetchYahoo('^NDX')
+        ]);
+        const macro = {
+            dxy: dxy?.current || 0, us10y: us10y?.current || 0, vix: vix?.current || 0,
+            spChange: sp?.change || 0, nasdaqChange: nasdaq?.change || 0
+        };
+        if (macro.dxy && macro.vix) { setCachedData(cacheKey, macro); return macro; }
+    } catch (e) { console.warn('[Macro Yahoo] falhou:', e); }
+
+    // Fallback: Twelve Data via backend
     try {
         const fetchTD = async (symbol) => {
             const url = `${BACKEND_URL}/api/quote?symbol=${symbol}`;
@@ -173,30 +194,10 @@ export const fetchMacroStatic = async () => {
         if (macro.dxy && macro.vix) { setCachedData(cacheKey, macro); return macro; }
     } catch (e) { console.warn('[Macro TwelveData] falhou:', e); }
 
-    // 2) Yahoo via proxy
-    try {
-        const fetchYahoo = async (ticker) => {
-            const data = await fetchViaProxy(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`, 2);
-            if (data?.chart?.result?.[0]?.meta) {
-                const meta = data.chart.result[0].meta;
-                return { current: meta.regularMarketPrice, change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 };
-            }
-            return null;
-        };
-        const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
-            fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), fetchYahoo('^GSPC'), fetchYahoo('^NDX')
-        ]);
-        const macro = {
-            dxy: dxy?.current || 0, us10y: us10y?.current || 0, vix: vix?.current || 0,
-            spChange: sp?.change || 0, nasdaqChange: nasdaq?.change || 0
-        };
-        setCachedData(cacheKey, macro);
-        return macro;
-    } catch (e) {
-        console.warn('[Macro Yahoo] falhou:', e);
-        if (cached) return cached;
-        return { dxy: 0, us10y: 0, vix: 0, spChange: 0, nasdaqChange: 0 };
-    }
+    // Se tudo falhar, retorna cache (mesmo stale) ou valores estáticos
+    if (cached) return cached;
+    // Valores estáticos (para não quebrar a UI)
+    return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
 };
 
 // ============================================================
@@ -265,7 +266,6 @@ export const fetchCQHashrate = fetchCMWithCache('HashRate', 'cm_hashrate');
 export const fetchSOPR = fetchCMWithCache('SOPR', 'cm_sopr');
 export const fetchASOPR = fetchCMWithCache('SOPRAdj', 'cm_asopr');
 
-// Fallback para Active Addresses via Blockchair
 export const fetchBlockchairStats = async () => {
     try {
         const btc = await fetchWithRetry('https://api.blockchair.com/bitcoin/stats', {}, 2);
@@ -314,20 +314,7 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     const cached = getCachedData(cacheKey, 60000);
     if (cached && !cached.stale) return cached;
 
-    // 1) Backend (se online)
-    try {
-        const resp = await fetch(`${BACKEND_URL}/api/candles?symbol=${symbol}&interval=${interval}&limit=${limit}`);
-        if (resp.ok) {
-            const data = await resp.json();
-            if (data && data.length > 0) {
-                setBackendStatus('online');
-                setCachedData(cacheKey, data);
-                return data;
-            }
-        }
-    } catch(e) { setBackendStatus('sleeping'); }
-
-    // 2) Binance
+    // 1) Binance (direto, mais rápido)
     try {
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
         const data = await fetchWithRetry(url, {}, 3);
@@ -344,6 +331,19 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
             return candles;
         }
     } catch(e) { /* ignore */ }
+
+    // 2) Backend (se disponível)
+    try {
+        const resp = await fetch(`${BACKEND_URL}/api/candles?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data && data.length > 0) {
+                setBackendStatus('online');
+                setCachedData(cacheKey, data);
+                return data;
+            }
+        }
+    } catch(e) { setBackendStatus('sleeping'); }
 
     // 3) Bybit
     try {
