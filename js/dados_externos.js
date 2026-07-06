@@ -1,9 +1,6 @@
-// dados_externos.js – com fallback macro sem Render e tratamento de erros 403/400
+// dados_externos.js – versão simplificada, sem dependência de proxies externos
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
-
-const BACKEND_URL = CONFIG.BACKEND_URL || 'https://twelvedata-backend.onrender.com';
-const REPLIT_CM_URL = 'https://0f6c32ea-14f2-4470-9a55-e9fb37eeb395-00-2u2zgtjsl1c44.picard.replit.dev/api/coinmetrics/assets';
 
 // ===== HELPERS =====
 export function fetchWithTimeout(url, options = {}, timeout = 15000) {
@@ -25,7 +22,7 @@ export function fetchWithTimeout(url, options = {}, timeout = 15000) {
   });
 }
 
-export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RETRIES || 3) {
+export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RETRIES || 2) {
   let lastError;
   for (let i = 0; i < retries; i++) {
     try {
@@ -51,22 +48,6 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
   }
   throw lastError || new Error(`Falha ao buscar ${url}`);
 }
-
-export async function fetchViaProxy(targetUrl, retries = 2) {
-  const primary = `${CONFIG.PROXY_URL}${encodeURIComponent(targetUrl)}`;
-  try {
-    return await fetchWithRetry(primary, {}, retries);
-  } catch (e) {
-    console.warn('[Proxy] Primário falhou, tentando fallback:', e);
-    const fallback = `${CONFIG.PROXY_FALLBACK}${encodeURIComponent(targetUrl)}`;
-    return await fetchWithRetry(fallback, {}, retries);
-  }
-}
-
-// ===== STATUS DO BACKEND (não usado, apenas compatibilidade) =====
-let _backendStatus = 'sleeping';
-export function getBackendStatus() { return _backendStatus; }
-export function setBackendStatus(status) { _backendStatus = status; }
 
 // ===== CACHE =====
 function getCachedData(key, maxAge = CONFIG.CACHE_TTL_MS) {
@@ -123,40 +104,19 @@ export const fetchEthGasPrice = async () => {
 };
 
 // ============================================================
-// 2. MACRO – sem Render, apenas Yahoo + cache
+// 2. MACRO – retorna valores estáticos (não usa proxy)
 // ============================================================
 export const fetchMacroStatic = async () => {
   const cacheKey = 'macroData';
   const cached = getCachedData(cacheKey, 300000);
-  if (cached && !cached.stale) return cached;
-
-  try {
-    const fetchYahoo = async (ticker) => {
-      const data = await fetchViaProxy(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`, 2);
-      if (data?.chart?.result?.[0]?.meta) {
-        const meta = data.chart.result[0].meta;
-        return { current: meta.regularMarketPrice, change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 };
-      }
-      return null;
-    };
-    const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
-      fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), fetchYahoo('^GSPC'), fetchYahoo('^NDX')
-    ]);
-    const macro = {
-      dxy: dxy?.current || 0, us10y: us10y?.current || 0, vix: vix?.current || 0,
-      spChange: sp?.change || 0, nasdaqChange: nasdaq?.change || 0
-    };
-    if (macro.dxy && macro.vix) { setCachedData(cacheKey, macro); return macro; }
-  } catch (e) {
-    console.warn('[Macro] falhou, usando fallback:', e);
-  }
-
   if (cached) return cached;
-  return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
+  const macro = { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
+  setCachedData(cacheKey, macro);
+  return macro;
 };
 
 // ============================================================
-// 3. FED RATE
+// 3. FED RATE – Alpha Vantage + fallback estático
 // ============================================================
 export const fetchFedRate = async () => {
   const cacheKey = 'fedRate';
@@ -173,44 +133,21 @@ export const fetchFedRate = async () => {
     }
   } catch (e) { /* silencioso */ }
 
-  try {
-    const csv = await fetchViaProxy('https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS', 2);
-    if (csv && typeof csv === 'string') {
-      const lastLine = csv.trim().split('\n').pop();
-      const rate = parseFloat(lastLine.split(',')[1]);
-      if (!isNaN(rate) && rate > 0) { setCachedData(cacheKey, rate); return rate; }
-    }
-  } catch (e) { /* silencioso */ }
-
   if (cached) return cached;
   return 4.33;
 };
 
 // ============================================================
-// 4. ON-CHAIN – APENAS MÉTRICAS GRATUITAS (MVRV, Active Addresses, Hashrate)
+// 4. ON-CHAIN – APENAS MVRV, Active Addresses, Hashrate
 // ============================================================
 const CM_BASE = 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics';
 
-function fetchCMWithCache(metric, cacheKey, maxAge = 300000) {
+function fetchCM(metric) {
   return async () => {
-    const cached = getCachedData(cacheKey, maxAge);
+    const cacheKey = `cm_${metric}`;
+    const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
-    // Tenta via proxy
-    try {
-      const url = `${REPLIT_CM_URL}?assets=btc&metrics=${metric}&frequency=1d&page_size=1`;
-      const data = await fetchWithRetry(url, {}, 2);
-      const val = data?.data?.[0]?.[metric];
-      if (val !== undefined && val !== null) {
-        const num = parseFloat(val);
-        setCachedData(cacheKey, num);
-        return num;
-      }
-    } catch (e) {
-      // ignora 403/400 silenciosamente
-    }
-
-    // Fallback direto
     try {
       const url = `${CM_BASE}?assets=btc&metrics=${metric}&frequency=1d&page_size=1`;
       const data = await fetchWithRetry(url, {}, 2);
@@ -228,17 +165,11 @@ function fetchCMWithCache(metric, cacheKey, maxAge = 300000) {
   };
 }
 
-export const fetchMVRV = fetchCMWithCache('CapMVRVCur', 'cm_mvrv');
-export const fetchCQActiveAddresses = fetchCMWithCache('AdrActCnt', 'cm_active_addresses');
-export const fetchCQHashrate = fetchCMWithCache('HashRate', 'cm_hashrate');
+export const fetchMVRV = fetchCM('CapMVRVCur');
+export const fetchCQActiveAddresses = fetchCM('AdrActCnt');
+export const fetchCQHashrate = fetchCM('HashRate');
 
-// ===== MÉTRICAS INDISPONÍVEIS (retornam null) =====
-export const fetchRealizedPrice = async () => null;
-export const fetchCQDifficulty = async () => null;
-export const fetchSOPR = async () => null;
-export const fetchASOPR = async () => null;
-
-// ===== BLOCKCHAIR (fallback para Active Addresses) =====
+// ===== BLOCKCHAIR (fallback Active Addresses) =====
 export const fetchBlockchairStats = async () => {
   try {
     const btc = await fetchWithRetry('https://api.blockchair.com/bitcoin/stats', {}, 2);
@@ -250,40 +181,8 @@ export const fetchBlockchairStats = async () => {
   } catch(e) { return null; }
 };
 
-// ===== SEM FONTE GRATUITA =====
-export const fetchExchangeNetflow = async () => null;
-export const fetchMinerOutflow = async () => null;
-
 // ============================================================
-// 5. BATCH DE MÉTRICAS COINMETRICS (todas as gratuitas)
-// ============================================================
-export async function fetchCoinMetricsBatch(metrics, asset = 'btc', frequency = '1d') {
-  const cacheKey = `cm_batch_${asset}_${frequency}_${metrics.join('_')}`;
-  const cached = getCachedData(cacheKey, 300000);
-  if (cached && !cached.stale) return cached;
-
-  try {
-    const url = `${REPLIT_CM_URL}?assets=${asset}&metrics=${metrics.join(',')}&frequency=${frequency}&page_size=1`;
-    const data = await fetchWithRetry(url, {}, 2);
-    if (data?.data?.length > 0) {
-      const record = data.data[0];
-      const result = {};
-      metrics.forEach(m => {
-        result[m] = record[m] !== undefined ? parseFloat(record[m]) : null;
-      });
-      setCachedData(cacheKey, result);
-      return result;
-    }
-    return null;
-  } catch (e) {
-    console.warn('[CoinMetrics Batch] falhou:', e);
-    if (cached) return cached;
-    return null;
-  }
-}
-
-// ============================================================
-// 6. DEMAIS FUNÇÕES (mantidas)
+// 5. DEMAIS FUNÇÕES (mantidas)
 // ============================================================
 const SYMBOL_TO_COINGECKO = {
   'BTCUSDT': 'bitcoin',
@@ -370,7 +269,6 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
   return [];
 }
 
-// ===== DEMAIS =====
 export const fetchFundingRate = async (symbol) => {
   const cacheKey = `funding_${symbol}`;
   const cached = getCachedData(cacheKey, 60000);
@@ -447,29 +345,6 @@ export const fetchOrderBook = async (symbol = 'BTCUSDT', limit = 10) => {
       setCachedData(cacheKey, result);
       return result;
     }
-  } catch(e) { /* ignore */ }
-  if (cached) return cached;
-  return null;
-};
-
-export const fetchETFData = async () => {
-  const cacheKey = 'etfData';
-  const cached = getCachedData(cacheKey, 300000);
-  if (cached && !cached.stale) return cached;
-
-  try {
-    const fetchYahoo = async (ticker) => {
-      const data = await fetchViaProxy(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`, 2);
-      if (data?.chart?.result?.[0]?.meta) {
-        const meta = data.chart.result[0].meta;
-        return ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100;
-      }
-      return 0;
-    };
-    const [btc, eth] = await Promise.all([fetchYahoo('IBIT'), fetchYahoo('ETHA')]);
-    const result = { btcFlow: btc, ethFlow: eth };
-    setCachedData(cacheKey, result);
-    return result;
   } catch(e) { /* ignore */ }
   if (cached) return cached;
   return null;
@@ -590,7 +465,7 @@ export async function getMTFConfluence(symbol) {
   return result;
 }
 
-// ===== FRED (compatibilidade) =====
+// ===== FUNÇÕES FRED (compatibilidade) =====
 export const fetchFREDVIX = async () => null;
 export const fetchFREDUS10Y = async () => null;
 export const fetchFREDDXY = async () => null;
