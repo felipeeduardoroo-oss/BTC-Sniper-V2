@@ -134,6 +134,8 @@
                     <div class="badge">⚡ STATUS: SMC+MTF ENGINE</div>
                     <span class="live-indicator" id="ws-status">🔄 WEBSOCKET</span>
                     <span class="status-badge" id="status-badge">📋 ESTÁTICO</span>
+                    <!-- NOVO BADGE DO BACKEND -->
+                    <span class="status-badge" id="backend-status">⏳ BACKEND: VERIFICANDO</span>
                     <span class="telegram-badge" id="telegram-badge"><span class="telegram-status" id="telegram-status-dot"></span> 📨 TELEGRAM</span>
                 </div>
             </div>
@@ -373,7 +375,9 @@
             getMTFConfluence,
             fetchOrderBook,
             setCurrentPrice,
-            sleep
+            sleep,
+            warmupBackend,       // <-- NOVO
+            getBackendStatus     // <-- NOVO
         } = dadosExternos;
 
         // ===== STATE =====
@@ -652,7 +656,7 @@
                 console.error('Committee engine error:', e);
             } finally {
                 committeeRunning = false;
-                setTimeout(runCommittee, 15000);
+                setTimeout(runCommittee, 60000); // AGORA 60 SEGUNDOS
             }
         }
 
@@ -1012,6 +1016,24 @@
             updateActiveTradesUI();
         }
 
+        // ===== NOVA FUNÇÃO: ATUALIZA MTF E OI =====
+        async function updateMTFAndOI() {
+            await Promise.all(CONFIG.ASSETS.map(async (symbol) => {
+                try {
+                    const [mtf, oi] = await Promise.all([
+                        getMTFConfluence(symbol),
+                        fetchOpenInterest(symbol)
+                    ]);
+                    assetsData[symbol].mtfConfluence = mtf;
+                    if (oi && typeof oi.delta === 'number') {
+                        assetsData[symbol].oiDelta = oi.delta;
+                    }
+                } catch (e) {
+                    console.warn(`[MTF/OI] Falha ao atualizar ${symbol}:`, e);
+                }
+            }));
+        }
+
         // ===== AVALIAÇÃO DE MERCADO (LEGADO) =====
         function evaluateMarkets() {
             CONFIG.ASSETS.forEach(symbol => {
@@ -1143,6 +1165,7 @@
         // ===== INICIALIZAÇÃO =====
         async function init() {
             cacheDOM();
+            warmupBackend(); // fire-and-forget
             graficos.initCharts();
             const candleBTC = graficos.initCandleChart('candle-btc', '#00e896');
             const candleETH = graficos.initCandleChart('candle-eth', '#00b4d8');
@@ -1180,6 +1203,7 @@
 
             initWebSockets();
             await updateExternalData();
+            await updateMTFAndOI(); // ← NOVO
             await evaluateMarkets();
 
             setTimeout(runCommittee, 1000);
@@ -1210,6 +1234,7 @@
                         assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
                     }
                 }
+                await updateMTFAndOI(); // ← NOVO
                 evaluateMarkets();
             }, 300000);
 
@@ -1233,6 +1258,22 @@
                 document.getElementById('live-update-time').textContent = ts;
                 const badge = document.getElementById('status-badge');
                 if (badge) { badge.textContent = '✅ LIVE'; badge.className = 'status-badge live'; }
+
+                // Atualiza badge do backend
+                const backendBadge = document.getElementById('backend-status');
+                if (backendBadge) {
+                    const s = getBackendStatus();
+                    if (s === 'online') {
+                        backendBadge.textContent = '✅ BACKEND: ATIVO';
+                        backendBadge.className = 'status-badge live';
+                    } else if (s === 'sleeping') {
+                        backendBadge.textContent = '💤 BACKEND: DORMINDO (fallback ativo)';
+                        backendBadge.className = 'status-badge';
+                    } else {
+                        backendBadge.textContent = '⏳ BACKEND: VERIFICANDO';
+                        backendBadge.className = 'status-badge';
+                    }
+                }
             }, 1000);
 
             // Atualiza gráfico de whale a cada 30s
