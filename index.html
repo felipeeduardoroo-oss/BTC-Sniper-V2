@@ -10,6 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
+        /* ===== CSS COMPLETO (mesmo da versão anterior) ===== */
         :root {
             --bg-dark: #08090d; --bg-card: #0f1117; --bg-card-hover: #14171f; --primary: #0f1117; --secondary: #1a1d29;
             --border: rgba(255, 255, 255, 0.06); --border-active: rgba(0, 180, 216, 0.5);
@@ -123,6 +124,7 @@
     </style>
 </head>
 <body>
+    <!-- ===== HTML COMPLETO (mesmo da versão anterior) ===== -->
     <div class="container">
         <header>
             <div class="header-content">
@@ -140,6 +142,7 @@
             </div>
         </header>
 
+        <!-- Score Card -->
         <section>
             <div class="score-card">
                 <div class="score-label">Score Institucional (BTC Benchmark)</div>
@@ -158,6 +161,7 @@
             </div>
         </section>
 
+        <!-- Força do Sinal (Legado) -->
         <section>
             <div id="signalStrengthPanel">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -178,7 +182,7 @@
             </div>
         </section>
 
-        <!-- PAINEL DO COMITÊ (NOVO, SEPARADO) -->
+        <!-- PAINEL DO COMITÊ (NOVO) -->
         <section>
             <div id="committeePanel" style="background: linear-gradient(135deg, #0d1117 0%, #161b22 100%); border: 1px solid #30363d; border-radius: 12px; padding: 16px; margin: 12px 0 32px 0; font-family: 'Segoe UI', system-ui, sans-serif;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -246,23 +250,22 @@
                 <table>
                     <thead><tr><th>Métrica</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
                     <tbody>
-                        <tr><td><strong>MVRV (BTC)</strong></td><td id="mvrv">Carregando...</td><td id="mvrv-interp">--</td><td><span class="data-source" id="mvrv-source">CryptoQuant</span></td></tr>
-                        <tr><td><strong>MVRV STH (BTC)</strong></td><td id="mvrv-sth">Carregando...</td><td id="mvrv-sth-interp">--</td><td><span class="data-source" id="mvrv-sth-source">CryptoQuant</span></td></tr>
-                        <tr><td><strong>SOPR</strong></td><td id="sopr">Carregando...</td><td id="sopr-interp">--</td><td><span class="data-source" id="sopr-source">CryptoQuant</span></td></tr>
-                        <tr><td><strong>aSOPR 7D</strong></td><td id="asopr">Carregando...</td><td id="asopr-interp">--</td><td><span class="data-source" id="asopr-source">CryptoQuant</span></td></tr>
-                        <tr><td><strong>Realized Price (BTC)</strong></td><td id="realized-price">Carregando...</td><td>ℹ️ Preço médio</td><td><span class="data-source" id="realized-price-source">CryptoQuant</span></td></tr>
+                        <tr><td><strong>MVRV (BTC)</strong></td><td id="mvrv">Carregando...</td><td id="mvrv-interp">--</td><td><span class="data-source" id="mvrv-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>SOPR</strong></td><td id="sopr">Carregando...</td><td id="sopr-interp">--</td><td><span class="data-source" id="sopr-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>aSOPR 7D</strong></td><td id="asopr">Carregando...</td><td id="asopr-interp">--</td><td><span class="data-source" id="asopr-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Realized Price (BTC)</strong></td><td id="realized-price">Carregando...</td><td>ℹ️ Preço médio</td><td><span class="data-source" id="realized-price-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>ETF Flows (BTC)</strong></td><td id="etf-btc-live"><strong>Carregando...</strong></td><td id="etf-btc-interp">--</td><td><span class="data-source" id="etf-btc-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>ETF Flows (ETH)</strong></td><td id="etf-eth-live"><strong>Carregando...</strong></td><td id="etf-eth-interp">--</td><td><span class="data-source" id="etf-eth-source">Yahoo Finance</span></td></tr>
-                        <tr><td><strong>Exchange Netflow</strong></td><td id="exchange-netflow">Carregando...</td><td id="exchange-netflow-interp">--</td><td><span class="data-source" id="exchange-netflow-source">CryptoQuant</span></td></tr>
+                        <tr><td><strong>Exchange Netflow</strong></td><td id="exchange-netflow">INDISPONÍVEL</td><td id="exchange-netflow-interp">--</td><td><span class="data-source" id="exchange-netflow-source">N/A</span></td></tr>
                         <tr><td><strong>Funding Rate (atual)</strong></td><td id="funding-rate">Carregando...</td><td id="funding-rate-interp">ℹ️ Neutro</td><td><span class="data-source" id="funding-rate-source">Binance/Bybit</span></td></tr>
                         <tr><td><strong>Open Interest</strong></td><td id="open-interest">Carregando...</td><td id="open-interest-interp">ℹ️ Volume em aberto</td><td><span class="data-source" id="open-interest-source">Binance/Bybit</span></td></tr>
                         <tr><td><strong>OI Delta (24h)</strong></td><td id="oi-delta">Carregando...</td><td id="oi-delta-interp">--</td><td><span class="data-source" id="oi-delta-source">Binance/Bybit</span></td></tr>
                         <tr><td><strong>Basis (perp vs spot)</strong></td><td id="basis">Carregando...</td><td>ℹ️ Prêmio/Deságio</td><td><span class="data-source" id="basis-source">Binance</span></td></tr>
                         <tr><td><strong>BTC Put/Call Ratio</strong></td><td id="put-call-ratio">Carregando...</td><td id="put-call-interp">--</td><td><span class="data-source" id="put-call-source">Deribit</span></td></tr>
-                        <tr><td><strong>BTC Hashrate</strong></td><td id="btc-hashrate">Carregando...</td><td>✅ Elevado</td><td><span class="data-source" id="hashrate-source">CryptoQuant</span></td></tr>
-                        <tr><td><strong>Miner Outflow</strong></td><td id="miner-outflow">Carregando...</td><td id="miner-outflow-interp">--</td><td><span class="data-source" id="miner-outflow-source">CryptoQuant</span></td></tr>
-                        <tr><td><strong>Active Addresses</strong></td><td id="active-addresses">Carregando...</td><td>ℹ️ Moderado</td><td><span class="data-source" id="active-addresses-source">CryptoQuant</span></td></tr>
-                        <tr><td><strong>ETH Gas Price</strong></td><td id="eth-gas">Carregando...</td><td>✅ Baixo</td><td><span class="data-source" id="gas-source">Etherscan</span></td></tr>
+                        <tr><td><strong>BTC Hashrate</strong></td><td id="btc-hashrate">Carregando...</td><td>✅ Elevado</td><td><span class="data-source" id="hashrate-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Miner Outflow</strong></td><td id="miner-outflow">INDISPONÍVEL</td><td id="miner-outflow-interp">--</td><td><span class="data-source" id="miner-outflow-source">N/A</span></td></tr>
+                        <tr><td><strong>Active Addresses</strong></td><td id="active-addresses">Carregando...</td><td>ℹ️ Moderado</td><td><span class="data-source" id="active-addresses-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>ETH Gas Price</strong></td><td id="eth-gas">Carregando...</td><td>✅ Baixo</td><td><span class="data-source" id="gas-source">Etherscan / RPC</span></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -289,10 +292,10 @@
                 <table>
                     <thead><tr><th>Indicador</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
                     <tbody>
-                        <tr><td><strong>DXY</strong></td><td id="dxy-value">Carregando...</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source" id="dxy-source">FRED (DTWEXBGS)</span></td></tr>
-                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">Carregando...</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source" id="fed-source">FRED API (FEDFUNDS)</span></td></tr>
-                        <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">Carregando...</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source" id="us10y-source">FRED (DGS10)</span></td></tr>
-                        <tr><td><strong>VIX</strong></td><td id="vix-value">Carregando...</td><td id="vix-interp">ℹ️ Estresse de mercado</td><td><span class="data-source" id="vix-source">FRED (VIXCLS)</span></td></tr>
+                        <tr><td><strong>DXY</strong></td><td id="dxy-value">Carregando...</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source" id="dxy-source">Twelve Data</span></td></tr>
+                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">Carregando...</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source" id="fed-source">Alpha Vantage</span></td></tr>
+                        <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">Carregando...</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source" id="us10y-source">Twelve Data</span></td></tr>
+                        <tr><td><strong>VIX</strong></td><td id="vix-value">Carregando...</td><td id="vix-interp">ℹ️ Estresse de mercado</td><td><span class="data-source" id="vix-source">Twelve Data</span></td></tr>
                         <tr><td><strong>NASDAQ % (24h)</strong></td><td id="nasdaq-value">Carregando...</td><td>🔴 Tech</td><td><span class="data-source" id="nasdaq-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>S&amp;P 500 % (24h)</strong></td><td id="sp500-value">Carregando...</td><td>ℹ️ Broad market</td><td><span class="data-source" id="sp500-source">Yahoo Finance</span></td></tr>
                     </tbody>
@@ -352,7 +355,7 @@
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>📋 Metodologia V2 + Comitê</h4>
-                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados 100% reais e atualizados</strong> via FRED API, Etherscan, CryptoQuant, Twelve Data, Binance, Bybit, CoinGecko, DefiLlama, Deribit.</p>
+                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados 100% reais e atualizados</strong> via CoinMetrics, Twelve Data, Alpha Vantage, Etherscan, Binance, Bybit, CoinGecko, DefiLlama, Deribit.</p>
                     <p><strong>Última atualização bem‑sucedida:</strong> <span id="live-update-time">--</span></p>
                 </div>
             </div>
@@ -370,7 +373,6 @@
         import * as banco from './js/banco_de_dados.js';
         import * as historico from './js/historicos_sinais.js';
 
-        // Desestruturação única
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
             generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
@@ -402,7 +404,7 @@
             sleep,
             warmupBackend,
             getBackendStatus,
-            // CryptoQuant
+            // CryptoQuant -> agora CoinMetrics (mesmos nomes)
             fetchMVRV,
             fetchSOPR,
             fetchASOPR,
@@ -411,11 +413,7 @@
             fetchMinerOutflow,
             fetchCQActiveAddresses,
             fetchCQDifficulty,
-            fetchCQHashrate,
-            // FRED Macro
-            fetchFREDVIX,
-            fetchFREDUS10Y,
-            fetchFREDDXY
+            fetchCQHashrate
         } = dadosExternos;
 
         // ===== STATE =====
@@ -485,6 +483,18 @@
 
         function formatCurrency(value) {
             return '$' + Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // ===== FUNÇÃO AUXILIAR "SET TEXT OR N/A" =====
+        function setTextOrNA(id, value, prefix = '', suffix = '') {
+            const el = document.getElementById(id);
+            if (el) {
+                if (value !== null && value !== undefined && !isNaN(value)) {
+                    el.textContent = prefix + value + suffix;
+                } else {
+                    el.textContent = 'INDISPONÍVEL';
+                }
+            }
         }
 
         // ===== RENDER MINI ORDER BOOK =====
@@ -1134,7 +1144,7 @@
             if (externalUpdating) return;
             externalUpdating = true;
             try {
-                // ===== CRYPTOQUANT =====
+                // ===== ON-CHAIN (CoinMetrics) =====
                 const [
                     mvrv, sopr, asopr, realizedPrice,
                     netflow, minerOutflow, cqActive, cqDiff, cqHashrate
@@ -1150,38 +1160,34 @@
                     fetchCQHashrate()
                 ]);
 
-                if (mvrv !== null) {
-                    document.getElementById('mvrv').textContent = mvrv.toFixed(2);
+                setTextOrNA('mvrv', mvrv);
+                // Interpretação MVRV
+                if (mvrv !== null && !isNaN(mvrv)) {
                     document.getElementById('mvrv-interp').textContent = mvrv > 1.0 ? '⚠️ Acima de 1.0' : 'ℹ️ Abaixo de 1.0';
+                } else {
+                    document.getElementById('mvrv-interp').textContent = '--';
                 }
-                if (sopr !== null) {
-                    document.getElementById('sopr').textContent = sopr.toFixed(2);
+
+                setTextOrNA('sopr', sopr);
+                if (sopr !== null && !isNaN(sopr)) {
                     document.getElementById('sopr-interp').textContent = sopr < 1.0 ? '🔴 Weakness' : '🟢 Strength';
+                } else {
+                    document.getElementById('sopr-interp').textContent = '--';
                 }
-                if (asopr !== null) {
-                    document.getElementById('asopr').textContent = asopr.toFixed(2);
+
+                setTextOrNA('asopr', asopr);
+                if (asopr !== null && !isNaN(asopr)) {
                     document.getElementById('asopr-interp').textContent = asopr < 1.0 ? '⚠️ Ajustado fraco' : 'ℹ️ Ajustado neutro';
+                } else {
+                    document.getElementById('asopr-interp').textContent = '--';
                 }
-                if (realizedPrice !== null) {
-                    document.getElementById('realized-price').textContent = '$' + realizedPrice.toLocaleString('en-US', { maximumFractionDigits: 0 });
-                }
-                if (netflow !== null) {
-                    document.getElementById('exchange-netflow').textContent = (netflow > 0 ? '+' : '') + netflow.toFixed(0) + ' BTC';
-                    document.getElementById('exchange-netflow-interp').textContent = netflow > 0 ? '⚠️ Entrada' : '✅ Saída';
-                }
-                if (minerOutflow !== null) {
-                    document.getElementById('miner-outflow').textContent = minerOutflow.toFixed(2) + ' BTC';
-                    document.getElementById('miner-outflow-interp').textContent = minerOutflow > 1000 ? '⚠️ Vendendo' : 'ℹ️ Normal';
-                }
-                if (cqActive !== null) {
-                    document.getElementById('active-addresses').textContent = cqActive.toLocaleString();
-                }
-                if (cqDiff !== null) {
-                    document.getElementById('difficulty').textContent = cqDiff.toExponential(2);
-                }
-                if (cqHashrate !== null) {
-                    document.getElementById('btc-hashrate').textContent = (cqHashrate / 1e18).toFixed(2) + ' EH/s';
-                }
+
+                setTextOrNA('realized-price', realizedPrice, '$', '');
+                setTextOrNA('exchange-netflow', netflow);
+                setTextOrNA('miner-outflow', minerOutflow);
+                setTextOrNA('active-addresses', cqActive);
+                setTextOrNA('difficulty', cqDiff);
+                setTextOrNA('btc-hashrate', cqHashrate !== null ? (cqHashrate / 1e18).toFixed(2) + ' EH/s' : null);
 
                 // ===== BLOCKCHAIR (fallback) =====
                 const blockchair = await fetchBlockchairStats();
@@ -1195,9 +1201,7 @@
 
                 // ===== ETH GAS =====
                 const ethGas = await fetchEthGasPrice();
-                if (ethGas !== null) {
-                    document.getElementById('eth-gas').textContent = ethGas.toFixed(2) + ' Gwei';
-                }
+                setTextOrNA('eth-gas', ethGas, '', ' Gwei');
 
                 // ===== ETF =====
                 const etf = await fetchETFData();
@@ -1217,24 +1221,24 @@
 
                 // ===== PUT/CALL =====
                 const pcr = await fetchPutCallRatio();
-                if (pcr !== null) { document.getElementById('put-call-ratio').textContent = pcr.toFixed(3); }
+                setTextOrNA('put-call-ratio', pcr);
 
                 // ===== BASIS =====
                 const basis = await fetchBasis();
-                if (basis !== null) { document.getElementById('basis').textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%'; }
+                setTextOrNA('basis', basis !== null ? (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%' : null);
 
                 // ===== FED RATE =====
                 const fedRate = await fetchFedRate();
-                if (fedRate !== null) document.getElementById('fed-rate').textContent = fedRate.toFixed(2) + '%';
+                setTextOrNA('fed-rate', fedRate, '', '%');
 
                 // ===== MACRO =====
                 const macro = await fetchMacroStatic();
                 if (macro) {
-                    document.getElementById('dxy-value').textContent = macro.dxy.toFixed(2);
-                    document.getElementById('us10y-value').textContent = macro.us10y.toFixed(2) + '%';
-                    document.getElementById('vix-value').textContent = macro.vix.toFixed(2);
-                    document.getElementById('nasdaq-value').textContent = (macro.nasdaqChange >= 0 ? '+' : '') + macro.nasdaqChange.toFixed(2) + '%';
-                    document.getElementById('sp500-value').textContent = (macro.spChange >= 0 ? '+' : '') + macro.spChange.toFixed(2) + '%';
+                    setTextOrNA('dxy-value', macro.dxy);
+                    setTextOrNA('us10y-value', macro.us10y, '', '%');
+                    setTextOrNA('vix-value', macro.vix);
+                    setTextOrNA('nasdaq-value', macro.nasdaqChange, '', '%');
+                    setTextOrNA('sp500-value', macro.spChange, '', '%');
                     graficos.updateMacroChart(macro);
                 }
 
