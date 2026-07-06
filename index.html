@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        /* ===== CSS COMPLETO (mesmo da versão anterior) ===== */
+        /* ===== CSS COMPLETO ===== */
         :root {
             --bg-dark: #08090d; --bg-card: #0f1117; --bg-card-hover: #14171f; --primary: #0f1117; --secondary: #1a1d29;
             --border: rgba(255, 255, 255, 0.06); --border-active: rgba(0, 180, 216, 0.5);
@@ -256,9 +256,9 @@
                     <thead><tr><th>Métrica</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
                     <tbody>
                         <tr><td><strong>MVRV (BTC)</strong></td><td id="mvrv">Carregando...</td><td id="mvrv-interp">--</td><td><span class="data-source" id="mvrv-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>SOPR</strong></td><td id="sopr">Carregando...</td><td id="sopr-interp">--</td><td><span class="data-source" id="sopr-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>aSOPR 7D</strong></td><td id="asopr">Carregando...</td><td id="asopr-interp">--</td><td><span class="data-source" id="asopr-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Realized Price (BTC)</strong></td><td id="realized-price">Carregando...</td><td>ℹ️ Preço médio</td><td><span class="data-source" id="realized-price-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>SOPR</strong></td><td id="sopr">INDISPONÍVEL</td><td id="sopr-interp">--</td><td><span class="data-source" id="sopr-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>aSOPR 7D</strong></td><td id="asopr">INDISPONÍVEL</td><td id="asopr-interp">--</td><td><span class="data-source" id="asopr-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Realized Price (BTC)</strong></td><td id="realized-price">INDISPONÍVEL</td><td>ℹ️ Preço médio</td><td><span class="data-source" id="realized-price-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>ETF Flows (BTC)</strong></td><td id="etf-btc-live"><strong>Carregando...</strong></td><td id="etf-btc-interp">--</td><td><span class="data-source" id="etf-btc-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>ETF Flows (ETH)</strong></td><td id="etf-eth-live"><strong>Carregando...</strong></td><td id="etf-eth-interp">--</td><td><span class="data-source" id="etf-eth-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>Exchange Netflow</strong></td><td id="exchange-netflow">INDISPONÍVEL</td><td id="exchange-netflow-interp">--</td><td><span class="data-source" id="exchange-netflow-source">N/A</span></td></tr>
@@ -319,8 +319,7 @@
                 </table>
             </div>
         </section>
-
-        <section>
+                <section>
             <h2 class="section-title">✅ PAINEL DE CONFIRMAÇÃO DE FUNDO</h2>
             <div class="confirmation-panel">
                 <div class="confirmation-grid">
@@ -451,16 +450,9 @@
             fetchOrderBook,
             setCurrentPrice,
             sleep,
-            warmupBackend,
             getBackendStatus,
             fetchMVRV,
-            fetchSOPR,
-            fetchASOPR,
-            fetchRealizedPrice,
-            fetchExchangeNetflow,
-            fetchMinerOutflow,
             fetchCQActiveAddresses,
-            fetchCQDifficulty,
             fetchCQHashrate,
             fetchCoinMetricsBatch
         } = dadosExternos;
@@ -1192,19 +1184,10 @@
             if (externalUpdating) return;
             externalUpdating = true;
             try {
-                // ===== ON-CHAIN (CoinMetrics) =====
-                const [
-                    mvrv, sopr, asopr, realizedPrice,
-                    netflow, minerOutflow, cqActive, cqDiff, cqHashrate
-                ] = await Promise.all([
+                // ===== ON-CHAIN – APENAS MVRV, ACTIVE ADDRESSES, HASHRATE =====
+                const [mvrv, cqActive, cqHashrate] = await Promise.all([
                     fetchMVRV(),
-                    fetchSOPR(),
-                    fetchASOPR(),
-                    fetchRealizedPrice(),
-                    fetchExchangeNetflow(),
-                    fetchMinerOutflow(),
                     fetchCQActiveAddresses(),
-                    fetchCQDifficulty(),
                     fetchCQHashrate()
                 ]);
 
@@ -1215,32 +1198,12 @@
                     document.getElementById('mvrv-interp').textContent = '--';
                 }
 
-                setTextOrNA('sopr', sopr);
-                if (sopr !== null && !isNaN(sopr)) {
-                    document.getElementById('sopr-interp').textContent = sopr < 1.0 ? '🔴 Weakness' : '🟢 Strength';
-                } else {
-                    document.getElementById('sopr-interp').textContent = '--';
-                }
-
-                setTextOrNA('asopr', asopr);
-                if (asopr !== null && !isNaN(asopr)) {
-                    document.getElementById('asopr-interp').textContent = asopr < 1.0 ? '⚠️ Ajustado fraco' : 'ℹ️ Ajustado neutro';
-                } else {
-                    document.getElementById('asopr-interp').textContent = '--';
-                }
-
-                setTextOrNA('realized-price', realizedPrice, '$', '');
-                setTextOrNA('exchange-netflow', netflow);
-                setTextOrNA('miner-outflow', minerOutflow);
                 setTextOrNA('active-addresses', cqActive);
-                setTextOrNA('difficulty', cqDiff);
                 setTextOrNA('btc-hashrate', cqHashrate !== null ? (cqHashrate / 1e18).toFixed(2) + ' EH/s' : null);
 
-                // ===== BLOCKCHAIR (fallback) =====
+                // ===== BLOCKCHAIR (fallback para Active Addresses) =====
                 const blockchair = await fetchBlockchairStats();
                 if (blockchair) {
-                    document.getElementById('block-height').textContent = blockchair.blockHeight.toLocaleString();
-                    document.getElementById('mempool-size').textContent = (blockchair.mempoolSize / 1e6).toFixed(2) + ' MB';
                     if (cqActive === null) {
                         document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
                     }
@@ -1489,17 +1452,11 @@
 
                 const backendBadge = document.getElementById('backend-status');
                 if (backendBadge) {
-                    const s = getBackendStatus();
-                    if (s === 'online') {
-                        backendBadge.textContent = '✅ BACKEND: ATIVO';
-                        backendBadge.className = 'status-badge live';
-                    } else {
-                        // Exibe apenas "DADOS CACHE" sem alarme
-                        backendBadge.textContent = '💤 BACKEND: DORMINDO (fallback)';
-                        backendBadge.className = 'status-badge';
-                        backendBadge.style.borderColor = 'var(--accent-yellow)';
-                        backendBadge.style.color = 'var(--accent-yellow)';
-                    }
+                    // Exibe apenas "DADOS CACHE" sem alarme
+                    backendBadge.textContent = '💤 BACKEND: DORMINDO (fallback)';
+                    backendBadge.className = 'status-badge';
+                    backendBadge.style.borderColor = 'var(--accent-yellow)';
+                    backendBadge.style.color = 'var(--accent-yellow)';
                 }
             }, 1000);
 
