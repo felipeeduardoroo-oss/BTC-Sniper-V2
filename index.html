@@ -287,10 +287,10 @@
                 <table>
                     <thead><tr><th>Indicador</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
                     <tbody>
-                        <tr><td><strong>DXY</strong></td><td id="dxy-value">Carregando...</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source" id="dxy-source">Yahoo Finance</span></td></tr>
-                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">Carregando...</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source" id="fed-source">FRED API</span></td></tr>
-                        <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">Carregando...</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source" id="us10y-source">Yahoo Finance</span></td></tr>
-                        <tr><td><strong>VIX</strong></td><td id="vix-value">Carregando...</td><td id="vix-interp">ℹ️ Estresse de mercado</td><td><span class="data-source" id="vix-source">Yahoo Finance</span></td></tr>
+                        <tr><td><strong>DXY</strong></td><td id="dxy-value">Carregando...</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source" id="dxy-source">FRED (DTWEXBGS)</span></td></tr>
+                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">Carregando...</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source" id="fed-source">FRED API (FEDFUNDS)</span></td></tr>
+                        <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">Carregando...</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source" id="us10y-source">FRED (DGS10)</span></td></tr>
+                        <tr><td><strong>VIX</strong></td><td id="vix-value">Carregando...</td><td id="vix-interp">ℹ️ Estresse de mercado</td><td><span class="data-source" id="vix-source">FRED (VIXCLS)</span></td></tr>
                         <tr><td><strong>NASDAQ % (24h)</strong></td><td id="nasdaq-value">Carregando...</td><td>🔴 Tech</td><td><span class="data-source" id="nasdaq-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>S&amp;P 500 % (24h)</strong></td><td id="sp500-value">Carregando...</td><td>ℹ️ Broad market</td><td><span class="data-source" id="sp500-source">Yahoo Finance</span></td></tr>
                     </tbody>
@@ -350,7 +350,7 @@
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>📋 Metodologia V2 + Comitê</h4>
-                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados 100% reais e atualizados</strong> via CoinGecko, Blockchair, Binance, Bybit, Deribit, DefiLlama, CryptoQuant, FRED API, Etherscan, Twelve Data.</p>
+                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados 100% reais e atualizados</strong> via FRED API, Etherscan, CryptoQuant, Twelve Data, Binance, Bybit, CoinGecko, DefiLlama, Deribit.</p>
                     <p><strong>Última atualização bem‑sucedida:</strong> <span id="live-update-time">--</span></p>
                 </div>
             </div>
@@ -408,7 +408,11 @@
             fetchMinerOutflow,
             fetchCQActiveAddresses,
             fetchCQDifficulty,
-            fetchCQHashrate
+            fetchCQHashrate,
+            // FRED Macro (para uso futuro)
+            fetchFREDVIX,
+            fetchFREDUS10Y,
+            fetchFREDDXY
         } = dadosExternos;
 
         // ===== STATE =====
@@ -1163,216 +1167,4 @@
                     document.getElementById('exchange-netflow-interp').textContent = netflow > 0 ? '⚠️ Entrada' : '✅ Saída';
                 }
                 if (minerOutflow !== null) {
-                    document.getElementById('miner-outflow').textContent = minerOutflow.toFixed(2) + ' BTC';
-                    document.getElementById('miner-outflow-interp').textContent = minerOutflow > 1000 ? '⚠️ Vendendo' : 'ℹ️ Normal';
-                }
-                if (cqActive !== null) {
-                    document.getElementById('active-addresses').textContent = cqActive.toLocaleString();
-                }
-                if (cqDiff !== null) {
-                    document.getElementById('difficulty').textContent = cqDiff.toExponential(2);
-                }
-                if (cqHashrate !== null) {
-                    document.getElementById('btc-hashrate').textContent = (cqHashrate / 1e18).toFixed(2) + ' EH/s';
-                }
-
-                // ===== BLOCKCHAIR (fallback) =====
-                const blockchair = await fetchBlockchairStats();
-                if (blockchair) {
-                    document.getElementById('block-height').textContent = blockchair.blockHeight.toLocaleString();
-                    document.getElementById('mempool-size').textContent = (blockchair.mempoolSize / 1e6).toFixed(2) + ' MB';
-                    if (cqActive === null) {
-                        document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
-                    }
-                }
-
-                // ===== ETH GAS (Etherscan) =====
-                const ethGas = await fetchEthGasPrice();
-                if (ethGas !== null) {
-                    document.getElementById('eth-gas').textContent = ethGas.toFixed(2) + ' Gwei';
-                }
-
-                // ===== ETF =====
-                const etf = await fetchETFData();
-                if (etf) {
-                    document.getElementById('etf-btc-live').innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + etf.btcFlow.toFixed(2) + '%</strong>';
-                    document.getElementById('etf-eth-live').innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + etf.ethFlow.toFixed(2) + '%</strong>';
-                    graficos.updateETFChart(etf);
-                }
-
-                // ===== TETHER =====
-                const premium = await fetchTetherPremium();
-                const tetherEl = document.getElementById('tether-premium');
-                if (tetherEl) {
-                    tetherEl.textContent = premium !== null ? ((premium >= 0 ? '+' : '') + premium.toFixed(2) + '%') : 'N/A';
-                    tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
-                }
-
-                // ===== PUT/CALL =====
-                const pcr = await fetchPutCallRatio();
-                if (pcr !== null) { document.getElementById('put-call-ratio').textContent = pcr.toFixed(3); }
-
-                // ===== BASIS =====
-                const basis = await fetchBasis();
-                if (basis !== null) { document.getElementById('basis').textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%'; }
-
-                // ===== FED RATE =====
-                const fedRate = await fetchFedRate();
-                if (fedRate !== null) document.getElementById('fed-rate').textContent = fedRate.toFixed(2) + '%';
-
-                // ===== MACRO =====
-                const macro = await fetchMacroStatic();
-                if (macro) {
-                    document.getElementById('dxy-value').textContent = macro.dxy.toFixed(2);
-                    document.getElementById('us10y-value').textContent = macro.us10y.toFixed(2) + '%';
-                    document.getElementById('vix-value').textContent = macro.vix.toFixed(2);
-                    document.getElementById('nasdaq-value').textContent = (macro.nasdaqChange >= 0 ? '+' : '') + macro.nasdaqChange.toFixed(2) + '%';
-                    document.getElementById('sp500-value').textContent = (macro.spChange >= 0 ? '+' : '') + macro.spChange.toFixed(2) + '%';
-                    graficos.updateMacroChart(macro);
-                }
-
-                // ===== DEFI =====
-                const defi = await fetchDeFiData();
-                if (defi) {
-                    document.getElementById('stablecoin-supply').textContent = '$' + defi.totalStable.toFixed(0) + 'B';
-                    document.getElementById('defi-tvl').textContent = '$' + defi.tvl.toFixed(1) + 'B';
-                    document.getElementById('defi-tvl-change').textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
-                }
-
-                // ===== FEAR & GREED =====
-                const fg = await fetchFearGreed();
-                if (fg) {
-                    document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
-                    document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
-                }
-            } catch (e) {
-                console.warn('Erro ao atualizar dados externos:', e);
-            } finally {
-                externalUpdating = false;
-                setTimeout(updateExternalData, 120000);
-            }
-        }
-
-        // ===== INICIALIZAÇÃO =====
-        async function init() {
-            cacheDOM();
-            warmupBackend();
-            graficos.initCharts();
-            const candleBTC = graficos.initCandleChart('candle-btc', '#00e896');
-            const candleETH = graficos.initCandleChart('candle-eth', '#00b4d8');
-            const candleSOL = graficos.initCandleChart('candle-sol', '#ffd60a');
-            const candleCharts = { 'BTCUSDT': candleBTC, 'ETHUSDT': candleETH, 'SOLUSDT': candleSOL };
-
-            for (const symbol of CONFIG.ASSETS) {
-                const [c1H, c4H, c1D] = await Promise.all([
-                    fetchHistoricalCandles(symbol, '1h', 200),
-                    fetchHistoricalCandles(symbol, '4h', 210),
-                    fetchHistoricalCandles(symbol, '1d', 210)
-                ]);
-                assetsData[symbol].candles1H = c1H;
-                assetsData[symbol].candles4H = c4H;
-                assetsData[symbol].candles1D = c1D;
-                if (c1H.length > 0) {
-                    const closes = c1H.map(c => c.close);
-                    assetsData[symbol].price = closes[closes.length - 1];
-                    assetsData[symbol].ema50_1H = closes.slice(-50).reduce((a, b) => a + b, 0) / 50;
-                    const closes4H = c4H.map(c => c.close);
-                    assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : closes.slice(-200).reduce((a, b) => a + b, 0) / 200;
-                    assetsData[symbol].atr_1H = calculateATR(c1H, 14);
-                    let gains = 0, losses = 0;
-                    for (let i = closes.length - 14; i < closes.length; i++) {
-                        const diff = closes[i] - closes[i - 1];
-                        if (diff > 0) gains += diff; else losses += Math.abs(diff);
-                    }
-                    const avgGain = gains / 14, avgLoss = losses / 14;
-                    assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
-                    assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
-                    assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], c4H);
-                    if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
-                }
-            }
-
-            initWebSockets();
-            await updateExternalData();
-            await updateMTFAndOI();
-            await evaluateMarkets();
-
-            setTimeout(runCommittee, 1000);
-
-            setInterval(async () => {
-                for (const symbol of CONFIG.ASSETS) {
-                    const c1H = await fetchHistoricalCandles(symbol, '1h', 10);
-                    if (c1H.length > 0) {
-                        assetsData[symbol].candles1H = [...assetsData[symbol].candles1H.slice(0, -10), ...c1H];
-                        const closes1H = assetsData[symbol].candles1H.map(c => c.close);
-                        assetsData[symbol].ema50_1H = closes1H.slice(-50).reduce((a, b) => a + b, 0) / 50;
-                        assetsData[symbol].atr_1H = calculateATR(assetsData[symbol].candles1H, 14);
-                        let gains = 0, losses = 0;
-                        for (let i = closes1H.length - 14; i < closes1H.length; i++) {
-                            const diff = closes1H[i] - closes1H[i - 1];
-                            if (diff > 0) gains += diff; else losses += Math.abs(diff);
-                        }
-                        const avgGain = gains / 14, avgLoss = losses / 14;
-                        assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
-                        assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
-                        if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], assetsData[symbol].candles1H);
-                    }
-                    const c4H = await fetchHistoricalCandles(symbol, '4h', 20);
-                    if (c4H.length > 0) {
-                        assetsData[symbol].candles4H = [...assetsData[symbol].candles4H.slice(0, -20), ...c4H];
-                        const closes4H = assetsData[symbol].candles4H.map(c => c.close);
-                        assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : assetsData[symbol].ema200_4H;
-                        assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
-                    }
-                }
-                await updateMTFAndOI();
-                evaluateMarkets();
-            }, 300000);
-
-            document.getElementById('test-telegram-btn').addEventListener('click', async function (e) {
-                this.disabled = true;
-                document.getElementById('test-btn-label').innerHTML = '<span class="spinner"></span> Enviando...';
-                const ok = await telegram.sendTelegramAlert('🔔 <b>TESTE DE CONEXÃO V2</b>\n⚛️ Motor Institucional Ativo!\n⏰ ' + getCurrentTimestamp());
-                document.getElementById('test-btn-label').textContent = ok ? '✅ Enviado!' : '❌ Falha';
-                setTimeout(() => {
-                    document.getElementById('test-btn-label').textContent = '📨 Testar Alerta';
-                    this.disabled = false;
-                }, 3000);
-            });
-
-            setInterval(() => {
-                const ts = getCurrentTimestamp();
-                const headerEl = DOM['header-timestamp'] || document.getElementById('header-timestamp');
-                if (headerEl) headerEl.textContent = '📅 ' + ts;
-                const lastEl = DOM['last-update'] || document.getElementById('last-update');
-                if (lastEl) lastEl.textContent = ts;
-                document.getElementById('live-update-time').textContent = ts;
-                const badge = document.getElementById('status-badge');
-                if (badge) { badge.textContent = '✅ LIVE'; badge.className = 'status-badge live'; }
-
-                const backendBadge = document.getElementById('backend-status');
-                if (backendBadge) {
-                    const s = getBackendStatus();
-                    if (s === 'online') {
-                        backendBadge.textContent = '✅ BACKEND: ATIVO';
-                        backendBadge.className = 'status-badge live';
-                    } else if (s === 'sleeping') {
-                        backendBadge.textContent = '💤 BACKEND: DORMINDO (fallback ativo)';
-                        backendBadge.className = 'status-badge';
-                    } else {
-                        backendBadge.textContent = '⏳ BACKEND: VERIFICANDO';
-                        backendBadge.className = 'status-badge';
-                    }
-                }
-            }, 1000);
-
-            setInterval(() => {
-                graficos.updateWhaleChart(whaleTrades);
-                updateWhaleUI();
-            }, 30000);
-        }
-
-        init();
-    </script>
-</body>
-</html>
+                    document.getElementById('miner-outflow').textContent = minerOutflow.toFixed(2) + '
