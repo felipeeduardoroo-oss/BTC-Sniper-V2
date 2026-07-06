@@ -161,6 +161,62 @@ export async function fetchCQHashrate() {
     } catch (e) { console.warn('[CryptoQuant] Hashrate falhou:', e); return null; }
 }
 
+// ===== FRED API HELPER =====
+async function fetchFREDSeries(seriesId, limit = 1) {
+    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${CONFIG.FRED_API_KEY}&file_type=json&sort_order=desc&limit=${limit}`;
+    const resp = await fetchWithTimeout(url, {}, 10000);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (data.observations && data.observations.length > 0) {
+        const latest = data.observations[0];
+        return latest.value ? parseFloat(latest.value) : null;
+    }
+    return null;
+}
+
+// ===== FRED MACRO INDICATORS =====
+export async function fetchFREDVIX() {
+    const cacheKey = 'fred_vix';
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) return cached;
+    try {
+        const value = await fetchFREDSeries('VIXCLS');
+        if (value !== null) setCachedData(cacheKey, value);
+        return value;
+    } catch (e) {
+        console.warn('[FRED VIX] falhou:', e);
+        return null;
+    }
+}
+
+export async function fetchFREDUS10Y() {
+    const cacheKey = 'fred_us10y';
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) return cached;
+    try {
+        const value = await fetchFREDSeries('DGS10');
+        if (value !== null) setCachedData(cacheKey, value);
+        return value;
+    } catch (e) {
+        console.warn('[FRED US10Y] falhou:', e);
+        return null;
+    }
+}
+
+export async function fetchFREDDXY() {
+    const cacheKey = 'fred_dxy';
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) return cached;
+    try {
+        const value = await fetchFREDSeries('DTWEXBGS');
+        if (value !== null) setCachedData(cacheKey, value);
+        return value;
+    } catch (e) {
+        console.warn('[FRED DXY] falhou:', e);
+        return null;
+    }
+}
+
 // ===== CACHE =====
 function getCachedData(key, maxAge = CONFIG.CACHE_TTL_MS) {
     try {
@@ -339,14 +395,56 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     return [];
 }
 
-// ===== FETCH MACRO (Yahoo via proxy) =====
+// ===== FETCH MACRO (FRED primário, Yahoo fallback) =====
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
     const cached = getCachedData(cacheKey, 300000);
-    if (cached && !cached.stale) {
-        return cached;
+    if (cached && !cached.stale) return cached;
+
+    // 1) FRED API (primário, sem proxy)
+    try {
+        const [dxy, us10y, vix] = await Promise.all([
+            fetchFREDDXY(),
+            fetchFREDUS10Y(),
+            fetchFREDVIX()
+        ]);
+
+        const macro = {
+            dxy: dxy || 0,
+            us10y: us10y || 0,
+            vix: vix || 0,
+            spChange: 0,
+            nasdaqChange: 0
+        };
+
+        // Tenta buscar changes via Yahoo (apenas para SP e Nasdaq)
+        try {
+            const fetchYahooChange = async (ticker) => {
+                const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`;
+                const data = await fetchViaProxy(url, 2);
+                if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
+                    const meta = data.chart.result[0].meta;
+                    return ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100;
+                }
+                return 0;
+            };
+            const [spChange, nasdaqChange] = await Promise.all([
+                fetchYahooChange('^GSPC'),
+                fetchYahooChange('^NDX')
+            ]);
+            macro.spChange = spChange || 0;
+            macro.nasdaqChange = nasdaqChange || 0;
+        } catch (e) {
+            console.warn('[Macro] Yahoo change fallback falhou:', e);
+        }
+
+        setCachedData(cacheKey, macro);
+        return macro;
+    } catch (e) {
+        console.warn('[Macro FRED] falhou, tentando fallback Yahoo...', e);
     }
 
+    // 2) Fallback Yahoo (via proxy)
     try {
         const fetchYahoo = async (ticker) => {
             const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`;
@@ -358,7 +456,11 @@ export const fetchMacroStatic = async () => {
             return null;
         };
         const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
-            fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), fetchYahoo('^GSPC'), fetchYahoo('^NDX')
+            fetchYahoo('DX-Y.NYB'),
+            fetchYahoo('^TNX'),
+            fetchYahoo('^VIX'),
+            fetchYahoo('^GSPC'),
+            fetchYahoo('^NDX')
         ]);
         const macro = {
             dxy: dxy?.current || 0,
@@ -369,54 +471,34 @@ export const fetchMacroStatic = async () => {
         };
         setCachedData(cacheKey, macro);
         return macro;
-    } catch(e) {
+    } catch (e) {
         console.warn('[Macro Yahoo] falhou:', e);
     }
 
-    // Fallback Twelve Data
-    if (getBackendStatus() === 'online') {
-        try {
-            const resp = await fetch(`${BACKEND_URL}/api/macro`);
-            if (resp.ok) {
-                const macro = await resp.json();
-                setCachedData(cacheKey, macro);
-                return macro;
-            }
-        } catch(e) { /* ignore */ }
+    if (cached) {
+        console.warn('[Macro] Usando cache antigo');
+        return cached;
     }
-
-    if (cached) return cached;
     return { dxy: 0, us10y: 0, vix: 0, spChange: 0, nasdaqChange: 0 };
 };
 
-// ===== FETCH FED RATE (via FRED API oficial) =====
+// ===== FETCH FED RATE (via FRED API) =====
 export const fetchFedRate = async () => {
     const cacheKey = 'fedRate';
     const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
-    if (cached && !cached.stale) {
-        return cached;
-    }
+    if (cached && !cached.stale) return cached;
 
-    // 1) FRED API oficial
     try {
-        const url = `https://api.stlouisfed.org/fred/series/observations?series_id=FEDFUNDS&api_key=${CONFIG.FRED_API_KEY}&file_type=json&sort_order=desc&limit=1`;
-        const resp = await fetchWithTimeout(url, {}, 10000);
-        if (resp.ok) {
-            const data = await resp.json();
-            const latest = data.observations && data.observations.length > 0 ? data.observations[0] : null;
-            if (latest && latest.value) {
-                const rate = parseFloat(latest.value);
-                if (!isNaN(rate) && rate > 0) {
-                    setCachedData(cacheKey, rate);
-                    return rate;
-                }
-            }
+        const value = await fetchFREDSeries('FEDFUNDS');
+        if (value !== null) {
+            setCachedData(cacheKey, value);
+            return value;
         }
-    } catch(e) {
-        console.warn('[FRED API] falhou, tentando fallback...', e);
+    } catch (e) {
+        console.warn('[FRED FedRate] falhou:', e);
     }
 
-    // 2) FRED CSV via proxy (fallback)
+    // Fallback CSV (via proxy)
     try {
         const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS';
         const csv = await fetchViaProxy(url, 2);
@@ -428,7 +510,7 @@ export const fetchFedRate = async () => {
                 return rate;
             }
         }
-    } catch(e) {
+    } catch (e) {
         console.warn('[FRED CSV fallback] falhou:', e);
     }
 
@@ -443,9 +525,7 @@ export const fetchFedRate = async () => {
 export const fetchEthGasPrice = async () => {
     const cacheKey = 'ethGas';
     const cached = getCachedData(cacheKey, 60000);
-    if (cached && !cached.stale) {
-        return cached;
-    }
+    if (cached && !cached.stale) return cached;
 
     try {
         const url = `https://api.etherscan.io/api?module=gastracker&action=gasoracle&apikey=${CONFIG.ETHERSCAN_API_KEY}`;
@@ -458,27 +538,25 @@ export const fetchEthGasPrice = async () => {
                 return gasPrice;
             }
         }
-    } catch(e) {
+    } catch (e) {
         console.warn('[Etherscan] falhou:', e);
     }
 
-    // Fallback: Blockchair
+    // Fallback Blockchair
     try {
         const stats = await fetchBlockchairStats();
         if (stats && stats.ethGas) {
             setCachedData(cacheKey, stats.ethGas);
             return stats.ethGas;
         }
-    } catch(e) {
-        console.warn('[Etherscan fallback] Blockchair falhou:', e);
-    }
+    } catch (e) { /* ignore */ }
 
     if (cached) return cached;
     console.warn('[ETH Gas] Falhou, retornando 5 Gwei (fallback)');
     return 5;
 };
 
-// ===== ETF DATA =====
+// ===== ETF DATA (Yahoo via proxy) =====
 export async function fetchETFData() {
     try {
         const fetchYahooChange = async (ticker) => {
@@ -622,9 +700,7 @@ export const fetchDeFiData = async () => {
 export const fetchTetherPremium = async () => {
     const cacheKey = 'tetherPremium';
     const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
-    if (cached && !cached.stale) {
-        return cached;
-    }
+    if (cached && !cached.stale) return cached;
 
     try {
         const [cryptoData, fiatData] = await Promise.all([
