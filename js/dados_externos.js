@@ -1,8 +1,6 @@
-// dados_externos.js
+// dados_externos.js – VERSÃO ESTÁVEL (sem FRED/Etherscan/CryptoQuant)
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
-
-const BACKEND_URL = CONFIG.BACKEND_URL || 'https://twelvedata-backend.onrender.com';
 
 // ===== HELPERS =====
 export function fetchWithTimeout(url, options = {}, timeout = 15000) {
@@ -51,172 +49,6 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
     throw lastError || new Error(`Falha ao buscar ${url}`);
 }
 
-// ===== PROXY COM FALLBACK REAL =====
-export async function fetchViaProxy(targetUrl, retries = 2) {
-    const primary = `${CONFIG.PROXY_URL}${encodeURIComponent(targetUrl)}`;
-    try {
-        return await fetchWithRetry(primary, {}, retries);
-    } catch (e) {
-        console.warn('[Proxy] Primário (corsproxy.io) falhou, tentando fallback (allorigins.win):', e);
-        const fallback = `${CONFIG.PROXY_FALLBACK}${encodeURIComponent(targetUrl)}`;
-        return await fetchWithRetry(fallback, {}, retries);
-    }
-}
-
-// ===== STATUS DO BACKEND =====
-let _backendStatus = 'checking';
-export function getBackendStatus() { return _backendStatus; }
-export function setBackendStatus(status) { _backendStatus = status; }
-
-// ===== WARM-UP DO BACKEND =====
-export async function warmupBackend() {
-    setBackendStatus('checking');
-    try {
-        await fetchWithTimeout(`${BACKEND_URL}/`, {}, 5000);
-        setBackendStatus('online');
-        return true;
-    } catch (e) {
-        console.warn('[Backend] Warm-up falhou (Render pode estar dormindo):', e);
-        setBackendStatus('sleeping');
-        return false;
-    }
-}
-
-// ===== CRYPTOQUANT =====
-const CQ_API_KEY = CONFIG.CRYPTOQUANT_API_KEY;
-const CQ_BASE = 'https://api.cryptoquant.com/v1';
-
-async function fetchCryptoQuant(endpoint, params = {}) {
-    const url = new URL(`${CQ_BASE}${endpoint}`);
-    url.searchParams.set('limit', '1');
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-    const resp = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${CQ_API_KEY}` }
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status} - ${resp.statusText}`);
-    const data = await resp.json();
-    return data && data.length > 0 ? data[0] : null;
-}
-
-export async function fetchMVRV() {
-    try {
-        const result = await fetchCryptoQuant('/btc/market-indicator/mvrv');
-        return result ? parseFloat(result.value) : null;
-    } catch (e) { console.warn('[CryptoQuant] MVRV falhou:', e); return null; }
-}
-
-export async function fetchSOPR() {
-    try {
-        const result = await fetchCryptoQuant('/btc/market-indicator/sopr');
-        return result ? parseFloat(result.value) : null;
-    } catch (e) { console.warn('[CryptoQuant] SOPR falhou:', e); return null; }
-}
-
-export async function fetchASOPR() {
-    try {
-        const result = await fetchCryptoQuant('/btc/market-indicator/asopr');
-        return result ? parseFloat(result.value) : null;
-    } catch (e) { console.warn('[CryptoQuant] aSOPR falhou:', e); return null; }
-}
-
-export async function fetchRealizedPrice() {
-    try {
-        const result = await fetchCryptoQuant('/btc/network-data/realized-price');
-        return result ? parseFloat(result.value) : null;
-    } catch (e) { console.warn('[CryptoQuant] Realized Price falhou:', e); return null; }
-}
-
-export async function fetchExchangeNetflow() {
-    try {
-        const result = await fetchCryptoQuant('/btc/exchange-flows/netflow');
-        return result ? parseFloat(result.value) : null;
-    } catch (e) { console.warn('[CryptoQuant] Exchange Netflow falhou:', e); return null; }
-}
-
-export async function fetchMinerOutflow() {
-    try {
-        const result = await fetchCryptoQuant('/btc/miner-flows/outflow');
-        return result ? parseFloat(result.value) : null;
-    } catch (e) { console.warn('[CryptoQuant] Miner Outflow falhou:', e); return null; }
-}
-
-export async function fetchCQActiveAddresses() {
-    try {
-        const result = await fetchCryptoQuant('/btc/network-data/active-addresses');
-        return result ? parseInt(result.value) : null;
-    } catch (e) { console.warn('[CryptoQuant] Active Addresses falhou:', e); return null; }
-}
-
-export async function fetchCQDifficulty() {
-    try {
-        const result = await fetchCryptoQuant('/btc/network-data/difficulty');
-        return result ? parseFloat(result.value) : null;
-    } catch (e) { console.warn('[CryptoQuant] Difficulty falhou:', e); return null; }
-}
-
-export async function fetchCQHashrate() {
-    try {
-        const result = await fetchCryptoQuant('/btc/network-data/hashrate');
-        return result ? parseFloat(result.value) : null;
-    } catch (e) { console.warn('[CryptoQuant] Hashrate falhou:', e); return null; }
-}
-
-// ===== FRED API HELPER =====
-async function fetchFREDSeries(seriesId, limit = 1) {
-    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${CONFIG.FRED_API_KEY}&file_type=json&sort_order=desc&limit=${limit}`;
-    const resp = await fetchWithTimeout(url, {}, 10000);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    if (data.observations && data.observations.length > 0) {
-        const latest = data.observations[0];
-        return latest.value ? parseFloat(latest.value) : null;
-    }
-    return null;
-}
-
-// ===== FRED MACRO INDICATORS =====
-export async function fetchFREDVIX() {
-    const cacheKey = 'fred_vix';
-    const cached = getCachedData(cacheKey, 300000);
-    if (cached && !cached.stale) return cached;
-    try {
-        const value = await fetchFREDSeries('VIXCLS');
-        if (value !== null) setCachedData(cacheKey, value);
-        return value;
-    } catch (e) {
-        console.warn('[FRED VIX] falhou:', e);
-        return null;
-    }
-}
-
-export async function fetchFREDUS10Y() {
-    const cacheKey = 'fred_us10y';
-    const cached = getCachedData(cacheKey, 300000);
-    if (cached && !cached.stale) return cached;
-    try {
-        const value = await fetchFREDSeries('DGS10');
-        if (value !== null) setCachedData(cacheKey, value);
-        return value;
-    } catch (e) {
-        console.warn('[FRED US10Y] falhou:', e);
-        return null;
-    }
-}
-
-export async function fetchFREDDXY() {
-    const cacheKey = 'fred_dxy';
-    const cached = getCachedData(cacheKey, 300000);
-    if (cached && !cached.stale) return cached;
-    try {
-        const value = await fetchFREDSeries('DTWEXBGS');
-        if (value !== null) setCachedData(cacheKey, value);
-        return value;
-    } catch (e) {
-        console.warn('[FRED DXY] falhou:', e);
-        return null;
-    }
-}
-
 // ===== CACHE =====
 function getCachedData(key, maxAge = CONFIG.CACHE_TTL_MS) {
     try {
@@ -234,40 +66,6 @@ function setCachedData(key, data) {
     try {
         localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
     } catch(e) { /* ignore */ }
-}
-
-// ===== POOL DE REQUISIÇÕES =====
-let activeRequests = 0;
-const MAX_CONCURRENT = 1;
-const requestQueue = [];
-let lastRequestTime = 0;
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-async function runNextRequest() {
-    if (requestQueue.length === 0 || activeRequests >= MAX_CONCURRENT) return;
-    const { fn, resolve, reject } = requestQueue.shift();
-    activeRequests++;
-    const now = Date.now();
-    const wait = Math.max(0, 500 - (now - lastRequestTime));
-    if (wait > 0) await sleep(wait);
-    lastRequestTime = Date.now();
-    try {
-        const result = await fn();
-        resolve(result);
-    } catch(e) {
-        reject(e);
-    } finally {
-        activeRequests--;
-        runNextRequest();
-    }
-}
-
-function requestPool(fn) {
-    return new Promise((resolve, reject) => {
-        requestQueue.push({ fn, resolve, reject });
-        runNextRequest();
-    });
 }
 
 // ===== MAPEAMENTO =====
@@ -292,35 +90,16 @@ export function getCurrentPrice(symbol) {
     return _currentPrices[symbol] || 0;
 }
 
-// ===== FETCH CANDLES =====
+// ===== FETCH CANDLES (Binance → CoinGecko → Bybit) =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     const cacheKey = `candles_${symbol}_${interval}_${limit}`;
     const cached = getCachedData(cacheKey, 300000);
-    if (cached && !cached.stale) {
-        return cached;
-    }
+    if (cached && !cached.stale) return cached;
 
-    // 1) Backend
-    try {
-        const resp = await fetch(
-            `${BACKEND_URL}/api/candles?symbol=${symbol}&interval=${interval}&limit=${limit}`
-        );
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
-        if (data && data.length > 0) {
-            setBackendStatus('online');
-            setCachedData(cacheKey, data);
-            return data;
-        }
-    } catch(e) {
-        console.warn('[Backend] Candles falhou:', e);
-        setBackendStatus('sleeping');
-    }
-
-    // 2) Binance
+    // 1) Binance
     try {
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-        const data = await requestPool(async () => await fetchWithRetry(url, {}, 3));
+        const data = await fetchWithRetry(url, {}, 3);
         if (data && data.length > 0) {
             const candles = data.map(k => ({
                 time: k[0]/1000,
@@ -333,11 +112,9 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
             setCachedData(cacheKey, candles);
             return candles;
         }
-    } catch(e) {
-        console.warn(`[Binance] ${symbol} ${interval} falhou:`, e.message);
-    }
+    } catch(e) { console.warn(`[Binance] ${symbol} ${interval} falhou:`, e.message); }
 
-    // 3) CoinGecko
+    // 2) CoinGecko (sem volume)
     try {
         const coinId = SYMBOL_TO_COINGECKO[symbol];
         if (coinId) {
@@ -345,7 +122,7 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
             let days = Math.ceil((limit * minutesPerCandle) / 1440) + 1;
             days = Math.min(Math.max(days, 1), 90);
             const url = `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
-            const data = await requestPool(async () => await fetchWithRetry(url, {}, 2));
+            const data = await fetchWithRetry(url, {}, 2);
             if (data && data.length > 0) {
                 const candles = data.map(k => ({
                     time: k[0]/1000,
@@ -360,11 +137,9 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
                 return filtered;
             }
         }
-    } catch(e) {
-        console.warn(`[CoinGecko] ${symbol} ${interval} falhou:`, e.message);
-    }
+    } catch(e) { console.warn(`[CoinGecko] ${symbol} ${interval} falhou:`, e.message); }
 
-    // 4) Bybit
+    // 3) Bybit
     try {
         const intervalMap = { '15m': '15', '1h': '60', '4h': '240', '1d': 'D' };
         const bybitInterval = intervalMap[interval] || '60';
@@ -383,72 +158,23 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
             setCachedData(cacheKey, candles);
             return candles;
         }
-    } catch(e) {
-        console.warn(`[Bybit] ${symbol} ${interval} falhou:`, e.message);
-    }
+    } catch(e) { console.warn(`[Bybit] ${symbol} ${interval} falhou:`, e.message); }
 
-    if (cached) {
-        console.warn(`[Candles] Usando cache antigo para ${symbol} ${interval}`);
-        return cached;
-    }
-    console.warn(`[Candles] Sem dados para ${symbol} ${interval}`);
+    if (cached) return cached;
     return [];
 }
 
-// ===== FETCH MACRO (FRED primário, Yahoo fallback) =====
+// ===== MACRO (Yahoo via proxy) =====
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
     const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
-    // 1) FRED API (primário, sem proxy)
-    try {
-        const [dxy, us10y, vix] = await Promise.all([
-            fetchFREDDXY(),
-            fetchFREDUS10Y(),
-            fetchFREDVIX()
-        ]);
-
-        const macro = {
-            dxy: dxy || 0,
-            us10y: us10y || 0,
-            vix: vix || 0,
-            spChange: 0,
-            nasdaqChange: 0
-        };
-
-        // Tenta buscar changes via Yahoo (apenas para SP e Nasdaq)
-        try {
-            const fetchYahooChange = async (ticker) => {
-                const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`;
-                const data = await fetchViaProxy(url, 2);
-                if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
-                    const meta = data.chart.result[0].meta;
-                    return ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100;
-                }
-                return 0;
-            };
-            const [spChange, nasdaqChange] = await Promise.all([
-                fetchYahooChange('^GSPC'),
-                fetchYahooChange('^NDX')
-            ]);
-            macro.spChange = spChange || 0;
-            macro.nasdaqChange = nasdaqChange || 0;
-        } catch (e) {
-            console.warn('[Macro] Yahoo change fallback falhou:', e);
-        }
-
-        setCachedData(cacheKey, macro);
-        return macro;
-    } catch (e) {
-        console.warn('[Macro FRED] falhou, tentando fallback Yahoo...', e);
-    }
-
-    // 2) Fallback Yahoo (via proxy)
+    const proxy = CONFIG.PROXY_URL || 'https://corsproxy.io/?url=';
     try {
         const fetchYahoo = async (ticker) => {
-            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`;
-            const data = await fetchViaProxy(url, 2);
+            const url = `${proxy}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`)}`;
+            const data = await fetchWithRetry(url, {}, 2);
             if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
                 const meta = data.chart.result[0].meta;
                 return { current: meta.regularMarketPrice, change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 };
@@ -456,11 +182,7 @@ export const fetchMacroStatic = async () => {
             return null;
         };
         const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
-            fetchYahoo('DX-Y.NYB'),
-            fetchYahoo('^TNX'),
-            fetchYahoo('^VIX'),
-            fetchYahoo('^GSPC'),
-            fetchYahoo('^NDX')
+            fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), fetchYahoo('^GSPC'), fetchYahoo('^NDX')
         ]);
         const macro = {
             dxy: dxy?.current || 0,
@@ -471,37 +193,23 @@ export const fetchMacroStatic = async () => {
         };
         setCachedData(cacheKey, macro);
         return macro;
-    } catch (e) {
-        console.warn('[Macro Yahoo] falhou:', e);
+    } catch(e) {
+        console.warn('[Macro] falhou:', e);
+        if (cached) return cached;
+        return { dxy: 0, us10y: 0, vix: 0, spChange: 0, nasdaqChange: 0 };
     }
-
-    if (cached) {
-        console.warn('[Macro] Usando cache antigo');
-        return cached;
-    }
-    return { dxy: 0, us10y: 0, vix: 0, spChange: 0, nasdaqChange: 0 };
 };
 
-// ===== FETCH FED RATE (via FRED API) =====
+// ===== FED RATE (FRED via proxy) =====
 export const fetchFedRate = async () => {
     const cacheKey = 'fedRate';
     const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
     if (cached && !cached.stale) return cached;
 
     try {
-        const value = await fetchFREDSeries('FEDFUNDS');
-        if (value !== null) {
-            setCachedData(cacheKey, value);
-            return value;
-        }
-    } catch (e) {
-        console.warn('[FRED FedRate] falhou:', e);
-    }
-
-    // Fallback CSV (via proxy)
-    try {
-        const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS';
-        const csv = await fetchViaProxy(url, 2);
+        const proxy = CONFIG.PROXY_URL || 'https://corsproxy.io/?url=';
+        const url = `${proxy}${encodeURIComponent('https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS')}`;
+        const csv = await fetchWithRetry(url, {}, 2);
         if (csv && typeof csv === 'string') {
             const lastLine = csv.trim().split('\n').pop();
             const rate = parseFloat(lastLine.split(',')[1]);
@@ -510,80 +218,10 @@ export const fetchFedRate = async () => {
                 return rate;
             }
         }
-    } catch (e) {
-        console.warn('[FRED CSV fallback] falhou:', e);
-    }
+    } catch(e) { console.warn('[FedRate] falhou:', e); }
 
     if (cached) return cached;
-    console.warn('[FedRate] Todas as tentativas falharam, usando fallback estático (4.33%)');
-    const fallback = 4.33;
-    setCachedData(cacheKey, fallback);
-    return fallback;
-};
-
-// ===== ETH GAS PRICE (via Etherscan API) =====
-export const fetchEthGasPrice = async () => {
-    const cacheKey = 'ethGas';
-    const cached = getCachedData(cacheKey, 60000);
-    if (cached && !cached.stale) return cached;
-
-    try {
-        const url = `https://api.etherscan.io/api?module=gastracker&action=gasoracle&apikey=${CONFIG.ETHERSCAN_API_KEY}`;
-        const resp = await fetchWithTimeout(url, {}, 10000);
-        if (resp.ok) {
-            const data = await resp.json();
-            if (data.status === '1' && data.result) {
-                const gasPrice = parseFloat(data.result.ProposeGasPrice) / 10;
-                setCachedData(cacheKey, gasPrice);
-                return gasPrice;
-            }
-        }
-    } catch (e) {
-        console.warn('[Etherscan] falhou:', e);
-    }
-
-    // Fallback Blockchair
-    try {
-        const stats = await fetchBlockchairStats();
-        if (stats && stats.ethGas) {
-            setCachedData(cacheKey, stats.ethGas);
-            return stats.ethGas;
-        }
-    } catch (e) { /* ignore */ }
-
-    if (cached) return cached;
-    console.warn('[ETH Gas] Falhou, retornando 5 Gwei (fallback)');
-    return 5;
-};
-
-// ===== ETF DATA (Yahoo via proxy) =====
-export async function fetchETFData() {
-    try {
-        const fetchYahooChange = async (ticker) => {
-            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`;
-            const data = await fetchViaProxy(url, 2);
-            if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
-                const meta = data.chart.result[0].meta;
-                return ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100;
-            }
-            return 0;
-        };
-        const [btcChange, ethChange] = await Promise.all([fetchYahooChange('IBIT'), fetchYahooChange('ETHA')]);
-        return { btcFlow: btcChange, ethFlow: ethChange };
-    } catch(e) { console.warn('[ETF]', e); return null; }
-}
-
-// ===== BLOCKCHAIR (fallback) =====
-export const fetchBlockchairStats = async () => {
-    try {
-        const btcResp = await fetchWithRetry('https://api.blockchair.com/bitcoin/stats');
-        return {
-            blockHeight: btcResp?.data?.best_block_height || 0,
-            mempoolSize: btcResp?.data?.mempool_total_size || 0,
-            activeAddresses: btcResp?.data?.addresses_count_24h || 0,
-            ethGas: null // removido, agora via Etherscan
-        };
-    } catch(e) { console.warn('[Blockchair]', e); return null; }
+    return 4.33;
 };
 
 // ===== DEMAIS FUNÇÕES (mantidas) =====
@@ -596,22 +234,9 @@ export const fetchFundingRate = async (symbol) => {
             let interpretacao = 'EQUILIBRADO';
             if (rate > 0.01) interpretacao = 'LONGS SOBRE-APOSTADOS';
             else if (rate < -0.01) interpretacao = 'SHORTS SOBRE-APOSTADOS';
-            return { rate, time: data[0].fundingTime, interpretacao };
+            return { rate, interpretacao };
         }
     } catch(e) { console.warn('[Binance FR]', e); }
-
-    try {
-        const url = `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`;
-        const resp = await fetchWithRetry(url);
-        if (resp && resp.result && resp.result.list && resp.result.list.length > 0) {
-            const item = resp.result.list[0];
-            const rate = parseFloat(item.fundingRate);
-            let interpretacao = 'EQUILIBRADO';
-            if (rate > 0.01) interpretacao = 'LONGS SOBRE-APOSTADOS';
-            else if (rate < -0.01) interpretacao = 'SHORTS SOBRE-APOSTADOS';
-            return { rate, time: parseInt(item.nextFundingTime), interpretacao };
-        }
-    } catch(e) { console.warn('[Bybit FR]', e); }
     return null;
 };
 
@@ -625,17 +250,6 @@ export const fetchOpenInterest = async (symbol) => {
             return { oi: curr, delta: ((curr - prev) / prev) * 100 };
         }
     } catch(e) { console.warn('[Binance OI]', e); }
-
-    try {
-        const url = `https://api.bybit.com/v5/market/open-interest?category=linear&symbol=${symbol}&intervalTime=15min&limit=8`;
-        const resp = await fetchWithRetry(url);
-        if (resp && resp.result && resp.result.list && resp.result.list.length >= 2) {
-            const list = resp.result.list;
-            const curr = parseFloat(list[0].openInterest);
-            const prev = parseFloat(list[list.length - 1].openInterest);
-            return { oi: curr, delta: ((curr - prev) / prev) * 100 };
-        }
-    } catch(e) { console.warn('[Bybit OI]', e); }
     return null;
 };
 
@@ -663,6 +277,47 @@ export const fetchOrderBook = async (symbol = 'BTCUSDT', limit = 10) => {
             imbalance: ((bidTotal - askTotal) / (bidTotal + askTotal) * 100)
         };
     } catch(e) { console.warn('[OrderBook]', e); return null; }
+};
+
+export const fetchBlockchairStats = async () => {
+    try {
+        const btcResp = await fetchWithRetry('https://api.blockchair.com/bitcoin/stats');
+        return {
+            blockHeight: btcResp?.data?.best_block_height || 0,
+            mempoolSize: btcResp?.data?.mempool_total_size || 0,
+            activeAddresses: btcResp?.data?.addresses_count_24h || 0
+        };
+    } catch(e) { console.warn('[Blockchair]', e); return null; }
+};
+
+export const fetchMempoolStats = async () => {
+    try {
+        const [hashResp, diffResp] = await Promise.all([
+            fetchWithRetry('https://mempool.space/api/v1/mining/hashrate/1w'),
+            fetchWithRetry('https://mempool.space/api/v1/difficulty-adjustment')
+        ]);
+        return {
+            hashrate: hashResp?.hashesPerSecond ? hashResp.hashesPerSecond / 1e18 : 0,
+            difficulty: diffResp?.currentDifficulty || 0
+        };
+    } catch(e) { console.warn('[Mempool]', e); return null; }
+};
+
+export const fetchETFData = async () => {
+    try {
+        const proxy = CONFIG.PROXY_URL || 'https://corsproxy.io/?url=';
+        const fetchYahooChange = async (ticker) => {
+            const url = `${proxy}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`)}`;
+            const data = await fetchWithRetry(url, {}, 2);
+            if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
+                const meta = data.chart.result[0].meta;
+                return ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100;
+            }
+            return 0;
+        };
+        const [btcChange, ethChange] = await Promise.all([fetchYahooChange('IBIT'), fetchYahooChange('ETHA')]);
+        return { btcFlow: btcChange, ethFlow: ethChange };
+    } catch(e) { console.warn('[ETF]', e); return null; }
 };
 
 export const fetchPutCallRatio = async () => {
@@ -714,12 +369,9 @@ export const fetchTetherPremium = async () => {
             setCachedData(cacheKey, premium);
             return premium;
         }
-    } catch(e) {
-        console.warn('[TetherPremium]', e);
-    }
+    } catch(e) { console.warn('[TetherPremium]', e); }
 
     if (cached) return cached;
-    console.warn('[TetherPremium] Falhou, retornando 0%');
     return 0;
 };
 
@@ -737,7 +389,6 @@ export const fetchFearGreed = async () => {
     } catch(e) { console.warn('[FearGreed]', e); return null; }
 };
 
-// ===== MTF Confluence =====
 export async function getMTFConfluence(symbol) {
     const timeframes = ['15m', '1h', '4h'];
     const directions = [];
