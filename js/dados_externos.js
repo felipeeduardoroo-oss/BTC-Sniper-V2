@@ -51,7 +51,7 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
     throw lastError || new Error(`Falha ao buscar ${url}`);
 }
 
-// ===== PROXY COM FALLBACK REAL (NOVO) =====
+// ===== PROXY COM FALLBACK REAL =====
 export async function fetchViaProxy(targetUrl, retries = 2) {
     const primary = `${CONFIG.PROXY_URL}${encodeURIComponent(targetUrl)}`;
     try {
@@ -63,12 +63,12 @@ export async function fetchViaProxy(targetUrl, retries = 2) {
     }
 }
 
-// ===== STATUS DO BACKEND (NOVO) =====
+// ===== STATUS DO BACKEND =====
 let _backendStatus = 'checking'; // 'checking' | 'online' | 'sleeping' | 'offline'
 export function getBackendStatus() { return _backendStatus; }
 export function setBackendStatus(status) { _backendStatus = status; }
 
-// ===== WARM-UP DO BACKEND (NOVO) =====
+// ===== WARM-UP DO BACKEND =====
 export async function warmupBackend() {
     setBackendStatus('checking');
     try {
@@ -80,6 +80,88 @@ export async function warmupBackend() {
         setBackendStatus('sleeping');
         return false;
     }
+}
+
+// ===== CRYPTOQUANT (NOVO) =====
+const CQ_API_KEY = CONFIG.CRYPTOQUANT_API_KEY;
+const CQ_BASE = 'https://api.cryptoquant.com/v1';
+
+async function fetchCryptoQuant(endpoint, params = {}) {
+    const url = new URL(`${CQ_BASE}${endpoint}`);
+    url.searchParams.set('limit', '1');
+    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+    const resp = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${CQ_API_KEY}` }
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} - ${resp.statusText}`);
+    const data = await resp.json();
+    // A CryptoQuant retorna um array de dados com 'value' e 'timestamp'
+    return data && data.length > 0 ? data[0] : null;
+}
+
+// ===== MÉTRICAS ON-CHAIN (CRYPTOQUANT) =====
+
+export async function fetchMVRV() {
+    try {
+        const result = await fetchCryptoQuant('/btc/market-indicator/mvrv');
+        return result ? parseFloat(result.value) : null;
+    } catch (e) { console.warn('[CryptoQuant] MVRV falhou:', e); return null; }
+}
+
+export async function fetchSOPR() {
+    try {
+        const result = await fetchCryptoQuant('/btc/market-indicator/sopr');
+        return result ? parseFloat(result.value) : null;
+    } catch (e) { console.warn('[CryptoQuant] SOPR falhou:', e); return null; }
+}
+
+export async function fetchASOPR() {
+    try {
+        const result = await fetchCryptoQuant('/btc/market-indicator/asopr');
+        return result ? parseFloat(result.value) : null;
+    } catch (e) { console.warn('[CryptoQuant] aSOPR falhou:', e); return null; }
+}
+
+export async function fetchRealizedPrice() {
+    try {
+        const result = await fetchCryptoQuant('/btc/network-data/realized-price');
+        return result ? parseFloat(result.value) : null;
+    } catch (e) { console.warn('[CryptoQuant] Realized Price falhou:', e); return null; }
+}
+
+export async function fetchExchangeNetflow() {
+    try {
+        const result = await fetchCryptoQuant('/btc/exchange-flows/netflow');
+        return result ? parseFloat(result.value) : null;
+    } catch (e) { console.warn('[CryptoQuant] Exchange Netflow falhou:', e); return null; }
+}
+
+export async function fetchMinerOutflow() {
+    try {
+        const result = await fetchCryptoQuant('/btc/miner-flows/outflow');
+        return result ? parseFloat(result.value) : null;
+    } catch (e) { console.warn('[CryptoQuant] Miner Outflow falhou:', e); return null; }
+}
+
+export async function fetchCQActiveAddresses() {
+    try {
+        const result = await fetchCryptoQuant('/btc/network-data/active-addresses');
+        return result ? parseInt(result.value) : null;
+    } catch (e) { console.warn('[CryptoQuant] Active Addresses falhou:', e); return null; }
+}
+
+export async function fetchCQDifficulty() {
+    try {
+        const result = await fetchCryptoQuant('/btc/network-data/difficulty');
+        return result ? parseFloat(result.value) : null;
+    } catch (e) { console.warn('[CryptoQuant] Difficulty falhou:', e); return null; }
+}
+
+export async function fetchCQHashrate() {
+    try {
+        const result = await fetchCryptoQuant('/btc/network-data/hashrate');
+        return result ? parseFloat(result.value) : null;
+    } catch (e) { console.warn('[CryptoQuant] Hashrate falhou:', e); return null; }
 }
 
 // ===== CACHE =====
@@ -174,13 +256,13 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         if (data && data.length > 0) {
-            setBackendStatus('online');           // ← NOVO
+            setBackendStatus('online');
             setCachedData(cacheKey, data);
             return data;
         }
     } catch(e) {
         console.warn('[Backend] Candles falhou, usando fallback local:', e);
-        setBackendStatus('sleeping');             // ← NOVO
+        setBackendStatus('sleeping');
     }
 
     // 2) Binance (fallback principal)
@@ -270,7 +352,7 @@ export const fetchMacroStatic = async () => {
         return cached;
     }
 
-    // 1) Yahoo Finance via proxy (primário) — usando fetchViaProxy
+    // 1) Yahoo Finance via proxy (primário)
     try {
         const fetchYahoo = async (ticker) => {
             const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`;
@@ -297,7 +379,7 @@ export const fetchMacroStatic = async () => {
         console.warn('[Macro Yahoo] falhou, tentando Twelve Data...', e);
     }
 
-    // 2) Twelve Data (fallback) – só se o backend estiver online
+    // 2) Twelve Data (fallback)
     if (getBackendStatus() === 'online') {
         try {
             const resp = await fetch(`${BACKEND_URL}/api/macro`);
@@ -340,7 +422,7 @@ export const fetchFedRate = async () => {
         console.warn('[Backend] FedRate falhou:', e);
     }
 
-    // 2) FRED via proxy (fallback)
+    // 2) FRED via proxy
     try {
         const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS';
         const csv = await fetchViaProxy(url, 2);
@@ -459,6 +541,7 @@ export const fetchOrderBook = async (symbol = 'BTCUSDT', limit = 10) => {
     } catch(e) { console.warn('[OrderBook]', e); return null; }
 };
 
+// ===== BLOCKCHAIR (fallback para métricas que a CryptoQuant não cobre) =====
 export const fetchBlockchairStats = async () => {
     try {
         const [btcResp, ethResp] = await Promise.all([
@@ -474,6 +557,7 @@ export const fetchBlockchairStats = async () => {
     } catch(e) { console.warn('[Blockchair]', e); return null; }
 };
 
+// ===== MEMPOOL (fallback para hashrate/difficulty) =====
 export const fetchMempoolStats = async () => {
     try {
         const [hashResp, diffResp] = await Promise.all([
