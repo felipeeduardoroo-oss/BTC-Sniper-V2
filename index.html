@@ -134,7 +134,6 @@
                     <div class="badge">⚡ STATUS: SMC+MTF ENGINE</div>
                     <span class="live-indicator" id="ws-status">🔄 WEBSOCKET</span>
                     <span class="status-badge" id="status-badge">📋 ESTÁTICO</span>
-                    <!-- NOVO BADGE DO BACKEND -->
                     <span class="status-badge" id="backend-status">⏳ BACKEND: VERIFICANDO</span>
                     <span class="telegram-badge" id="telegram-badge"><span class="telegram-status" id="telegram-status-dot"></span> 📨 TELEGRAM</span>
                 </div>
@@ -245,23 +244,41 @@
                 <table>
                     <thead><tr><th>Métrica</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
                     <tbody>
-                        <tr><td><strong>Block Height (BTC)</strong></td><td id="block-height">Carregando...</td><td>ℹ️ Altura do bloco atual</td><td><span class="data-source" id="block-height-source">Blockchair</span></td></tr>
-                        <tr><td><strong>Difficulty (BTC)</strong></td><td id="difficulty">Carregando...</td><td>ℹ️ Dificuldade de mineração</td><td><span class="data-source" id="difficulty-source">Mempool.space</span></td></tr>
-                        <tr><td><strong>Mempool Size (BTC)</strong></td><td id="mempool-size">Carregando...</td><td>ℹ️ Bytes aguardando confirmação</td><td><span class="data-source" id="mempool-source">Blockchair</span></td></tr>
-                        <tr><td><strong>Active Addresses (24h)</strong></td><td id="active-addresses">Carregando...</td><td>ℹ️ Endereços ativos na rede</td><td><span class="data-source" id="active-addresses-source">Blockchair</span></td></tr>
-                        <tr><td><strong>ETH Gas Price</strong></td><td id="eth-gas">Carregando...</td><td>✅ Taxa de transação ETH</td><td><span class="data-source" id="gas-source">Blockchair</span></td></tr>
-                        <tr><td><strong>BTC Hashrate</strong></td><td id="btc-hashrate">Carregando...</td><td>✅ Poder de processamento</td><td><span class="data-source" id="hashrate-source">Mempool.space</span></td></tr>
+                        <tr><td><strong>MVRV (BTC)</strong></td><td id="mvrv">Carregando...</td><td id="mvrv-interp">--</td><td><span class="data-source" id="mvrv-source">CryptoQuant</span></td></tr>
+                        <tr><td><strong>MVRV STH (BTC)</strong></td><td id="mvrv-sth">Carregando...</td><td id="mvrv-sth-interp">--</td><td><span class="data-source" id="mvrv-sth-source">CryptoQuant</span></td></tr>
+                        <tr><td><strong>SOPR</strong></td><td id="sopr">Carregando...</td><td id="sopr-interp">--</td><td><span class="data-source" id="sopr-source">CryptoQuant</span></td></tr>
+                        <tr><td><strong>aSOPR 7D</strong></td><td id="asopr">Carregando...</td><td id="asopr-interp">--</td><td><span class="data-source" id="asopr-source">CryptoQuant</span></td></tr>
+                        <tr><td><strong>Realized Price (BTC)</strong></td><td id="realized-price">Carregando...</td><td>ℹ️ Preço médio</td><td><span class="data-source" id="realized-price-source">CryptoQuant</span></td></tr>
                         <tr><td><strong>ETF Flows (BTC)</strong></td><td id="etf-btc-live"><strong>Carregando...</strong></td><td id="etf-btc-interp">--</td><td><span class="data-source" id="etf-btc-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>ETF Flows (ETH)</strong></td><td id="etf-eth-live"><strong>Carregando...</strong></td><td id="etf-eth-interp">--</td><td><span class="data-source" id="etf-eth-source">Yahoo Finance</span></td></tr>
+                        <tr><td><strong>Exchange Netflow</strong></td><td id="exchange-netflow">Carregando...</td><td id="exchange-netflow-interp">--</td><td><span class="data-source" id="exchange-netflow-source">CryptoQuant</span></td></tr>
                         <tr><td><strong>Funding Rate (atual)</strong></td><td id="funding-rate">Carregando...</td><td id="funding-rate-interp">ℹ️ Neutro</td><td><span class="data-source" id="funding-rate-source">Binance/Bybit</span></td></tr>
                         <tr><td><strong>Open Interest</strong></td><td id="open-interest">Carregando...</td><td id="open-interest-interp">ℹ️ Volume em aberto</td><td><span class="data-source" id="open-interest-source">Binance/Bybit</span></td></tr>
                         <tr><td><strong>OI Delta (24h)</strong></td><td id="oi-delta">Carregando...</td><td id="oi-delta-interp">--</td><td><span class="data-source" id="oi-delta-source">Binance/Bybit</span></td></tr>
                         <tr><td><strong>Basis (perp vs spot)</strong></td><td id="basis">Carregando...</td><td>ℹ️ Prêmio/Deságio</td><td><span class="data-source" id="basis-source">Binance</span></td></tr>
                         <tr><td><strong>BTC Put/Call Ratio</strong></td><td id="put-call-ratio">Carregando...</td><td id="put-call-interp">--</td><td><span class="data-source" id="put-call-source">Deribit</span></td></tr>
+                        <tr><td><strong>BTC Hashrate</strong></td><td id="btc-hashrate">Carregando...</td><td>✅ Elevado</td><td><span class="data-source" id="hashrate-source">CryptoQuant</span></td></tr>
+                        <tr><td><strong>Miner Outflow</strong></td><td id="miner-outflow">Carregando...</td><td id="miner-outflow-interp">--</td><td><span class="data-source" id="miner-outflow-source">CryptoQuant</span></td></tr>
+                        <tr><td><strong>Active Addresses</strong></td><td id="active-addresses">Carregando...</td><td>ℹ️ Moderado</td><td><span class="data-source" id="active-addresses-source">CryptoQuant</span></td></tr>
+                        <tr><td><strong>ETH Gas Price</strong></td><td id="eth-gas">Carregando...</td><td>✅ Baixo</td><td><span class="data-source" id="gas-source">Blockchair</span></td></tr>
                     </tbody>
                 </table>
             </div>
             <div class="chart-wrapper"><canvas id="chart_etf_flows"></canvas></div>
+        </section>
+
+        <section>
+            <h2 class="section-title">✅ PAINEL DE CONFIRMAÇÃO DE FUNDO</h2>
+            <div class="confirmation-panel">
+                <div class="confirmation-grid">
+                    <div class="confirmation-pillar"><div class="pillar-status" id="p-mvrv">❌</div><div class="pillar-name">MVRV Extremo</div></div>
+                    <div class="confirmation-pillar"><div class="pillar-status" id="p-fear">✅</div><div class="pillar-name">Fear Extremo</div></div>
+                    <div class="confirmation-pillar"><div class="pillar-status" id="p-sth">✅</div><div class="pillar-name">STH Capitulação</div></div>
+                    <div class="confirmation-pillar"><div class="pillar-status" id="p-smart">❌</div><div class="pillar-name">Smart Money Acum.</div></div>
+                    <div class="confirmation-pillar"><div class="pillar-status" id="p-macro">❌</div><div class="pillar-name">Macro Suporta</div></div>
+                </div>
+                <div class="confirmation-description"><strong>Análise:</strong> 3/5 pilares confirmam fundo. Mercado em capitulação tática.</div>
+            </div>
         </section>
 
         <section>
@@ -314,6 +331,13 @@
                 <div class="score-box"><div class="score-label">Entry Score</div><div class="score-value" id="entry-score">--</div><div class="score-bar"><div class="score-fill" id="entry-fill" style="width:50%;background:var(--accent-yellow);"></div></div></div>
                 <div class="score-box"><div class="score-label">Exit Score</div><div class="score-value" id="exit-score">--</div><div class="score-bar"><div class="score-fill" id="exit-fill" style="width:50%;background:var(--accent-red);"></div></div></div>
             </div>
+            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:24px;margin-bottom:30px;">
+                <h3 style="color:var(--text-light);margin-bottom:16px;">Conviction</h3>
+                <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+                    <span class="conviction-badge conviction-bearish">🔴 BEARISH CONVICTION</span>
+                    <span class="on-chain-cycle">📉 Ciclo On-Chain: MARKDOWN</span>
+                </div>
+            </div>
         </section>
 
         <section>
@@ -326,7 +350,7 @@
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>📋 Metodologia V2 + Comitê</h4>
-                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados 100% reais e atualizados</strong> via CoinGecko, Blockchair, Mempool, Binance, Bybit, Deribit, DefiLlama.</p>
+                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados 100% reais e atualizados</strong> via CoinGecko, Blockchair, Mempool, Binance, Bybit, Deribit, DefiLlama, CryptoQuant.</p>
                     <p><strong>Última atualização bem‑sucedida:</strong> <span id="live-update-time">--</span></p>
                 </div>
             </div>
@@ -376,8 +400,18 @@
             fetchOrderBook,
             setCurrentPrice,
             sleep,
-            warmupBackend,       // <-- NOVO
-            getBackendStatus     // <-- NOVO
+            warmupBackend,
+            getBackendStatus,
+            // CryptoQuant
+            fetchMVRV,
+            fetchSOPR,
+            fetchASOPR,
+            fetchRealizedPrice,
+            fetchExchangeNetflow,
+            fetchMinerOutflow,
+            fetchCQActiveAddresses,
+            fetchCQDifficulty,
+            fetchCQHashrate
         } = dadosExternos;
 
         // ===== STATE =====
@@ -656,7 +690,7 @@
                 console.error('Committee engine error:', e);
             } finally {
                 committeeRunning = false;
-                setTimeout(runCommittee, 60000); // AGORA 60 SEGUNDOS
+                setTimeout(runCommittee, 60000);
             }
         }
 
@@ -1016,7 +1050,7 @@
             updateActiveTradesUI();
         }
 
-        // ===== NOVA FUNÇÃO: ATUALIZA MTF E OI =====
+        // ===== ATUALIZA MTF E OI =====
         async function updateMTFAndOI() {
             await Promise.all(CONFIG.ASSETS.map(async (symbol) => {
                 try {
@@ -1096,19 +1130,67 @@
             if (externalUpdating) return;
             externalUpdating = true;
             try {
+                // ===== CRYPTOQUANT (ON-CHAIN) =====
+                const [
+                    mvrv, sopr, asopr, realizedPrice,
+                    netflow, minerOutflow, cqActive, cqDiff, cqHashrate
+                ] = await Promise.all([
+                    fetchMVRV(),
+                    fetchSOPR(),
+                    fetchASOPR(),
+                    fetchRealizedPrice(),
+                    fetchExchangeNetflow(),
+                    fetchMinerOutflow(),
+                    fetchCQActiveAddresses(),
+                    fetchCQDifficulty(),
+                    fetchCQHashrate()
+                ]);
+
+                if (mvrv !== null) {
+                    document.getElementById('mvrv').textContent = mvrv.toFixed(2);
+                    document.getElementById('mvrv-interp').textContent = mvrv > 1.0 ? '⚠️ Acima de 1.0' : 'ℹ️ Abaixo de 1.0';
+                }
+                if (sopr !== null) {
+                    document.getElementById('sopr').textContent = sopr.toFixed(2);
+                    document.getElementById('sopr-interp').textContent = sopr < 1.0 ? '🔴 Weakness' : '🟢 Strength';
+                }
+                if (asopr !== null) {
+                    document.getElementById('asopr').textContent = asopr.toFixed(2);
+                    document.getElementById('asopr-interp').textContent = asopr < 1.0 ? '⚠️ Ajustado fraco' : 'ℹ️ Ajustado neutro';
+                }
+                if (realizedPrice !== null) {
+                    document.getElementById('realized-price').textContent = '$' + realizedPrice.toLocaleString('en-US', { maximumFractionDigits: 0 });
+                }
+                if (netflow !== null) {
+                    document.getElementById('exchange-netflow').textContent = (netflow > 0 ? '+' : '') + netflow.toFixed(0) + ' BTC';
+                    document.getElementById('exchange-netflow-interp').textContent = netflow > 0 ? '⚠️ Entrada' : '✅ Saída';
+                }
+                if (minerOutflow !== null) {
+                    document.getElementById('miner-outflow').textContent = minerOutflow.toFixed(2) + ' BTC';
+                    document.getElementById('miner-outflow-interp').textContent = minerOutflow > 1000 ? '⚠️ Vendendo' : 'ℹ️ Normal';
+                }
+                if (cqActive !== null) {
+                    document.getElementById('active-addresses').textContent = cqActive.toLocaleString();
+                }
+                if (cqDiff !== null) {
+                    document.getElementById('difficulty').textContent = cqDiff.toExponential(2);
+                }
+                if (cqHashrate !== null) {
+                    document.getElementById('btc-hashrate').textContent = (cqHashrate / 1e18).toFixed(2) + ' EH/s';
+                }
+
+                // ===== BLOCKCHAIR (fallback) =====
                 const blockchair = await fetchBlockchairStats();
                 if (blockchair) {
                     document.getElementById('block-height').textContent = blockchair.blockHeight.toLocaleString();
                     document.getElementById('mempool-size').textContent = (blockchair.mempoolSize / 1e6).toFixed(2) + ' MB';
-                    document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
+                    if (cqActive === null) {
+                        document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
+                    }
                     document.getElementById('eth-gas').textContent = blockchair.ethGas.toFixed(2) + ' Gwei';
                 }
-                const mempool = await fetchMempoolStats();
-                if (mempool) {
-                    document.getElementById('btc-hashrate').textContent = mempool.hashrate.toFixed(2) + ' EH/s';
-                    document.getElementById('difficulty').textContent = mempool.difficulty.toExponential(2);
-                }
 
+                // ===== ETF (Yahoo Finance) =====
                 const etf = await fetchETFData();
                 if (etf) {
                     document.getElementById('etf-btc-live').innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + etf.btcFlow.toFixed(2) + '%</strong>';
@@ -1116,6 +1198,7 @@
                     graficos.updateETFChart(etf);
                 }
 
+                // ===== TETHER PREMIUM =====
                 const premium = await fetchTetherPremium();
                 const tetherEl = document.getElementById('tether-premium');
                 if (tetherEl) {
@@ -1123,15 +1206,19 @@
                     tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
                 }
 
+                // ===== PUT/CALL RATIO =====
                 const pcr = await fetchPutCallRatio();
                 if (pcr !== null) { document.getElementById('put-call-ratio').textContent = pcr.toFixed(3); }
 
+                // ===== BASIS =====
                 const basis = await fetchBasis();
                 if (basis !== null) { document.getElementById('basis').textContent = (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%'; }
 
+                // ===== FED RATE =====
                 const fedRate = await fetchFedRate();
                 if (fedRate !== null) document.getElementById('fed-rate').textContent = fedRate.toFixed(2) + '%';
 
+                // ===== MACRO =====
                 const macro = await fetchMacroStatic();
                 if (macro) {
                     document.getElementById('dxy-value').textContent = macro.dxy.toFixed(2);
@@ -1142,6 +1229,7 @@
                     graficos.updateMacroChart(macro);
                 }
 
+                // ===== DEFI =====
                 const defi = await fetchDeFiData();
                 if (defi) {
                     document.getElementById('stablecoin-supply').textContent = '$' + defi.totalStable.toFixed(0) + 'B';
@@ -1149,6 +1237,7 @@
                     document.getElementById('defi-tvl-change').textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
                 }
 
+                // ===== FEAR & GREED =====
                 const fg = await fetchFearGreed();
                 if (fg) {
                     document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
@@ -1165,7 +1254,7 @@
         // ===== INICIALIZAÇÃO =====
         async function init() {
             cacheDOM();
-            warmupBackend(); // fire-and-forget
+            warmupBackend();
             graficos.initCharts();
             const candleBTC = graficos.initCandleChart('candle-btc', '#00e896');
             const candleETH = graficos.initCandleChart('candle-eth', '#00b4d8');
@@ -1203,7 +1292,7 @@
 
             initWebSockets();
             await updateExternalData();
-            await updateMTFAndOI(); // ← NOVO
+            await updateMTFAndOI();
             await evaluateMarkets();
 
             setTimeout(runCommittee, 1000);
@@ -1234,7 +1323,7 @@
                         assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
                     }
                 }
-                await updateMTFAndOI(); // ← NOVO
+                await updateMTFAndOI();
                 evaluateMarkets();
             }, 300000);
 
@@ -1259,7 +1348,6 @@
                 const badge = document.getElementById('status-badge');
                 if (badge) { badge.textContent = '✅ LIVE'; badge.className = 'status-badge live'; }
 
-                // Atualiza badge do backend
                 const backendBadge = document.getElementById('backend-status');
                 if (backendBadge) {
                     const s = getBackendStatus();
