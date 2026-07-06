@@ -556,4 +556,65 @@ export const fetchTetherPremium = async () => {
             fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD', {}, 2)
         ]);
         const usdtBrl = crypto?.tether?.brl;
-        const
+        const usdBrl = fiat?.rates?.BRL;
+        if (usdtBrl && usdBrl) {
+            const premium = ((usdtBrl / usdBrl) - 1) * 100;
+            setCachedData(cacheKey, premium);
+            return premium;
+        }
+    } catch(e) { /* ignore */ }
+    if (cached) return cached;
+    return 0;
+};
+
+export const fetchFearGreed = async () => {
+    const cacheKey = 'fng';
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) return cached;
+
+    try {
+        const data = await fetchWithRetry('https://api.alternative.me/fng/?limit=1', {}, 2);
+        const v = parseInt(data.data[0].value);
+        const color = v < 25 ? '#ff1744' : v < 45 ? '#ff9800' : v < 55 ? '#ffc107' : v < 75 ? '#8bc34a' : '#00e676';
+        const result = { value: v, classification: data.data[0].value_classification, color };
+        setCachedData(cacheKey, result);
+        return result;
+    } catch(e) { /* ignore */ }
+    if (cached) return cached;
+    return null;
+};
+
+export async function getMTFConfluence(symbol) {
+    const cacheKey = `mtf_${symbol}`;
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) return cached;
+
+    const timeframes = ['15m','1h','4h'];
+    const directions = [];
+    for (const tf of timeframes) {
+        const candles = await fetchHistoricalCandles(symbol, tf, 50);
+        if (!candles.length) continue;
+        const closes = candles.map(c => c.close);
+        const ema20 = calcEMA(closes, 20);
+        const ema50 = calcEMA(closes, 50);
+        const last = candles.length - 1;
+        if (ema20[last] > ema50[last] && candles[last].close > ema20[last]) directions.push({ tf, dir: 'BULL' });
+        else if (ema20[last] < ema50[last] && candles[last].close < ema20[last]) directions.push({ tf, dir: 'BEAR' });
+        else directions.push({ tf, dir: 'NEUTRO' });
+    }
+    const bulls = directions.filter(d => d.dir === 'BULL').length;
+    const bears = directions.filter(d => d.dir === 'BEAR').length;
+    const result = {
+        directions,
+        score: bulls - bears,
+        confluencia: Math.max(bulls, bears) === 3 ? 'FORTE' : Math.max(bulls, bears) === 2 ? 'MODERADA' : 'FRACA',
+        alinhado: Math.max(bulls, bears) >= 2
+    };
+    setCachedData(cacheKey, result);
+    return result;
+}
+
+// ===== COMPATIBILIDADE =====
+export const fetchFREDVIX = async () => null;
+export const fetchFREDUS10Y = async () => null;
+export const fetchFREDDXY = async () => null;
