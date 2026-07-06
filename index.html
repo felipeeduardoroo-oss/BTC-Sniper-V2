@@ -462,7 +462,7 @@
             fetchCQActiveAddresses,
             fetchCQDifficulty,
             fetchCQHashrate,
-            fetchCoinMetricsBatch  // nova função
+            fetchCoinMetricsBatch
         } = dadosExternos;
 
         // ===== STATE =====
@@ -1393,7 +1393,7 @@
         // ===== BOOTSTRAP =====
         async function init() {
             cacheDOM();
-            warmupBackend();
+            // warmupBackend(); // REMOVIDO – não usamos mais o Render
             graficos.initCharts();
             const candleBTC = graficos.initCandleChart('candle-btc', '#00e896');
             const candleETH = graficos.initCandleChart('candle-eth', '#00b4d8');
@@ -1493,17 +1493,12 @@
                     if (s === 'online') {
                         backendBadge.textContent = '✅ BACKEND: ATIVO';
                         backendBadge.className = 'status-badge live';
-                    } else if (s === 'sleeping') {
-                        backendBadge.textContent = '💤 BACKEND: DORMINDO (fallback ativo)';
-                        backendBadge.className = 'status-badge';
-                    } else if (s === 'checking') {
-                        backendBadge.textContent = '⏳ BACKEND: VERIFICANDO';
-                        backendBadge.className = 'status-badge';
                     } else {
-                        backendBadge.textContent = '⛔ BACKEND: OFFLINE (cache)';
+                        // Exibe apenas "DADOS CACHE" sem alarme
+                        backendBadge.textContent = '💤 BACKEND: DORMINDO (fallback)';
                         backendBadge.className = 'status-badge';
-                        backendBadge.style.borderColor = 'var(--accent-red)';
-                        backendBadge.style.color = 'var(--accent-red)';
+                        backendBadge.style.borderColor = 'var(--accent-yellow)';
+                        backendBadge.style.color = 'var(--accent-yellow)';
                     }
                 }
             }, 1000);
