@@ -10,10 +10,12 @@ export const CONFIG = {
     RETRY_DELAY_MS: 1000,
     PROXY_URL: 'https://corsproxy.io/?url=',
     PROXY_FALLBACK: 'https://api.allorigins.win/raw?url=',
-    FRED_API_KEY: '',
+    // FRED API Key (nova)
+    FRED_API_KEY: 'abcdefghijklmnopqrstuvwxyz123456',
+    // Etherscan API Key (já existente)
+    ETHERSCAN_API_KEY: 'NP3TFWDIPF1FFQ8DBBR9JUIUE9UFSUGSGU',
     TWELVEDATA_API_KEY: 'bc7d373d2ba24ff1b7e16120a23d6d95',
     BACKEND_URL: 'https://twelvedata-backend.onrender.com',
-    // CRYPTOQUANT
     CRYPTOQUANT_API_KEY: '3Ponn963VwC5PSxGz5sNXJMw6BvypyHwAqLrSwseTom6YFUtRk59pGJ'
 };
 
