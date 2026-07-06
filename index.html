@@ -260,7 +260,7 @@
                         <tr><td><strong>BTC Hashrate</strong></td><td id="btc-hashrate">Carregando...</td><td>✅ Elevado</td><td><span class="data-source" id="hashrate-source">CryptoQuant</span></td></tr>
                         <tr><td><strong>Miner Outflow</strong></td><td id="miner-outflow">Carregando...</td><td id="miner-outflow-interp">--</td><td><span class="data-source" id="miner-outflow-source">CryptoQuant</span></td></tr>
                         <tr><td><strong>Active Addresses</strong></td><td id="active-addresses">Carregando...</td><td>ℹ️ Moderado</td><td><span class="data-source" id="active-addresses-source">CryptoQuant</span></td></tr>
-                        <tr><td><strong>ETH Gas Price</strong></td><td id="eth-gas">Carregando...</td><td>✅ Baixo</td><td><span class="data-source" id="gas-source">Blockchair</span></td></tr>
+                        <tr><td><strong>ETH Gas Price</strong></td><td id="eth-gas">Carregando...</td><td>✅ Baixo</td><td><span class="data-source" id="gas-source">Etherscan</span></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -288,7 +288,7 @@
                     <thead><tr><th>Indicador</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
                     <tbody>
                         <tr><td><strong>DXY</strong></td><td id="dxy-value">Carregando...</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source" id="dxy-source">Yahoo Finance</span></td></tr>
-                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">Carregando...</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source" id="fed-source">FRED (St. Louis Fed)</span></td></tr>
+                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">Carregando...</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source" id="fed-source">FRED API</span></td></tr>
                         <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">Carregando...</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source" id="us10y-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>VIX</strong></td><td id="vix-value">Carregando...</td><td id="vix-interp">ℹ️ Estresse de mercado</td><td><span class="data-source" id="vix-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>NASDAQ % (24h)</strong></td><td id="nasdaq-value">Carregando...</td><td>🔴 Tech</td><td><span class="data-source" id="nasdaq-source">Yahoo Finance</span></td></tr>
@@ -350,7 +350,7 @@
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>📋 Metodologia V2 + Comitê</h4>
-                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados 100% reais e atualizados</strong> via CoinGecko, Blockchair, Mempool, Binance, Bybit, Deribit, DefiLlama, CryptoQuant.</p>
+                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados 100% reais e atualizados</strong> via CoinGecko, Blockchair, Binance, Bybit, Deribit, DefiLlama, CryptoQuant, FRED API, Etherscan, Twelve Data.</p>
                     <p><strong>Última atualização bem‑sucedida:</strong> <span id="live-update-time">--</span></p>
                 </div>
             </div>
@@ -368,9 +368,7 @@
         import * as banco from './js/banco_de_dados.js';
         import * as historico from './js/historicos_sinais.js';
 
-        // Desestruturação única
         const {
-            // Do indicadores
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
             generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
             calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
@@ -382,15 +380,14 @@
         } = indicadores;
 
         const {
-            // Do dadosExternos
             fetchHistoricalCandles,
             fetchFundingRate,
             fetchOpenInterest,
             fetchBasis,
             fetchBlockchairStats,
-            fetchMempoolStats,
             fetchETFData,
             fetchFedRate,
+            fetchEthGasPrice,
             fetchPutCallRatio,
             fetchDeFiData,
             fetchTetherPremium,
@@ -1130,7 +1127,7 @@
             if (externalUpdating) return;
             externalUpdating = true;
             try {
-                // ===== CRYPTOQUANT (ON-CHAIN) =====
+                // ===== CRYPTOQUANT =====
                 const [
                     mvrv, sopr, asopr, realizedPrice,
                     netflow, minerOutflow, cqActive, cqDiff, cqHashrate
@@ -1187,10 +1184,15 @@
                     if (cqActive === null) {
                         document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
                     }
-                    document.getElementById('eth-gas').textContent = blockchair.ethGas.toFixed(2) + ' Gwei';
                 }
 
-                // ===== ETF (Yahoo Finance) =====
+                // ===== ETH GAS (Etherscan) =====
+                const ethGas = await fetchEthGasPrice();
+                if (ethGas !== null) {
+                    document.getElementById('eth-gas').textContent = ethGas.toFixed(2) + ' Gwei';
+                }
+
+                // ===== ETF =====
                 const etf = await fetchETFData();
                 if (etf) {
                     document.getElementById('etf-btc-live').innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + etf.btcFlow.toFixed(2) + '%</strong>';
@@ -1198,7 +1200,7 @@
                     graficos.updateETFChart(etf);
                 }
 
-                // ===== TETHER PREMIUM =====
+                // ===== TETHER =====
                 const premium = await fetchTetherPremium();
                 const tetherEl = document.getElementById('tether-premium');
                 if (tetherEl) {
@@ -1206,7 +1208,7 @@
                     tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
                 }
 
-                // ===== PUT/CALL RATIO =====
+                // ===== PUT/CALL =====
                 const pcr = await fetchPutCallRatio();
                 if (pcr !== null) { document.getElementById('put-call-ratio').textContent = pcr.toFixed(3); }
 
@@ -1364,7 +1366,6 @@
                 }
             }, 1000);
 
-            // Atualiza gráfico de whale a cada 30s
             setInterval(() => {
                 graficos.updateWhaleChart(whaleTrades);
                 updateWhaleUI();
