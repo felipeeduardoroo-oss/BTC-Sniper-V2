@@ -371,26 +371,7 @@
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
     <script type="module">
-        import { CONFIG } from './js/config.js';
-        import * as indicadores from './js/indicadores.js';
-        import * as dadosExternos from './js/dados_externos.js';
-        import * as graficos from './js/graficos.js';
-        import * as telegram from './js/telegram.js';
-        import * as banco from './js/banco_de_dados.js';
-        import * as historico from './js/historicos_sinais.js';
-
-        const {
-            calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
-            generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
-            calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
-            computeChoppiness, calculateBB, detectHTFStructure, updateSwingPoints,
-            findSMCSetup, getSMCZones, checkLateralMarket, checkHTFAlignment,
-            checkOnChainFilter, checkVolumeAndOrderflow, checkDerivativesFilter,
-            checkPortfolioExposure, checkMTFAlignment, computeScore, isSafeToTrade,
-            KellyPositionSize
-        } = indicadores;
-
-        const {
+        import {
             fetchHistoricalCandles,
             fetchFundingRate,
             fetchOpenInterest,
@@ -416,7 +397,24 @@
             fetchHashrate,
             fetchExchangeNetflow,
             fetchMinerOutflow
-        } = dadosExternos;
+        } from './js/dados_externos.js';
+
+        import * as indicadores from './js/indicadores.js';
+        import * as graficos from './js/graficos.js';
+        import * as telegram from './js/telegram.js';
+        import * as banco from './js/banco_de_dados.js';
+        import * as historico from './js/historicos_sinais.js';
+
+        const {
+            calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
+            generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
+            calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
+            computeChoppiness, calculateBB, detectHTFStructure, updateSwingPoints,
+            findSMCSetup, getSMCZones, checkLateralMarket, checkHTFAlignment,
+            checkOnChainFilter, checkVolumeAndOrderflow, checkDerivativesFilter,
+            checkPortfolioExposure, checkMTFAlignment, computeScore, isSafeToTrade,
+            KellyPositionSize
+        } = indicadores;
 
         // ===== STATE =====
         const assetsData = {};
