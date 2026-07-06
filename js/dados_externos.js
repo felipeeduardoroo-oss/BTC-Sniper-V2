@@ -5,7 +5,7 @@ import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 const BACKEND_URL = CONFIG.BACKEND_URL || 'https://twelvedata-backend.onrender.com';
 
 // ===== NOVA URL DO REPLIT (COINMETRICS) =====
-const REPLIT_CM_URL = 'https://0f6c32ea-14f2-4470-9a55-e9fb37eeb395-00-2u2zgtjsl1c44.picard.replit.dev/api/assets';
+const REPLIT_CM_URL = 'https://0f6c32ea-14f2-4470-9a55-e9fb37eeb395-00-2u2zgtjsl1c44.picard.replit.dev/api/coinmetrics/assets';
 
 // ===== HELPERS =====
 export function fetchWithTimeout(url, options = {}, timeout = 15000) {
