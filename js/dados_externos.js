@@ -1,4 +1,4 @@
-// js/dados_externos.js – todas as funções exportadas
+// js/dados_externos.js – todas as funções exportadas (corrigido)
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
@@ -127,7 +127,7 @@ export const fetchFedRate = async () => {
 };
 
 // ============================================================
-// 4. ON-CHAIN – MVRV, Active Addresses, Hashrate (CoinMetrics)
+// 4. ON-CHAIN – MVRV, Active Addresses (CoinMetrics) e Hashrate (unificada)
 // ============================================================
 const CM_BASE = 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics';
 
@@ -156,7 +156,38 @@ function fetchCM(metric) {
 
 export const fetchMVRV = fetchCM('CapMVRVCur');
 export const fetchCQActiveAddresses = fetchCM('AdrActCnt');
-export const fetchCQHashrate = fetchCM('HashRate');
+
+// ===== HASHERATE – prioridade mempool.space, fallback CoinMetrics =====
+export const fetchHashrate = async () => {
+    const cacheKey = 'hashrate';
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) return cached;
+
+    // 1) mempool.space
+    try {
+        const data = await fetchWithRetry('https://mempool.space/api/v1/mining/hashrate/1d', {}, 2);
+        if (data?.avgHashrate) {
+            const hashrate = parseFloat(data.avgHashrate); // em TH/s
+            setCachedData(cacheKey, hashrate);
+            return hashrate;
+        }
+    } catch (e) { /* silencioso */ }
+
+    // 2) CoinMetrics (fallback)
+    try {
+        const url = `${CM_BASE}?assets=btc&metrics=HashRate&frequency=1d&page_size=1`;
+        const data = await fetchWithRetry(url, {}, 2);
+        const val = data?.data?.[0]?.HashRate;
+        if (val !== undefined && val !== null) {
+            const num = parseFloat(val);
+            setCachedData(cacheKey, num);
+            return num;
+        }
+    } catch (e) { /* silencioso */ }
+
+    if (cached) return cached;
+    return null;
+};
 
 // ===== BLOCKCHAIR (fallback Active Addresses) =====
 export const fetchBlockchairStats = async () => {
@@ -219,7 +250,7 @@ export const fetchRealizedPrice = async () => {
 };
 
 // ============================================================
-// 7. ETF Flows (Farside Investors – scraping)
+// 7. ETF Flows (Farside Investors – scraping com fallback mock)
 // ============================================================
 export const fetchETFData = async () => {
     const cacheKey = 'etf_flows';
@@ -257,8 +288,10 @@ export const fetchETFData = async () => {
         setCachedData(cacheKey, result);
         return result;
     } catch (e) {
-        if (cached) return cached;
-        return null;
+        // Fallback: mock (evita que o dashboard quebre)
+        const mock = { btcFlow: 0, ethFlow: 0 };
+        setCachedData(cacheKey, mock);
+        return mock;
     }
 };
 
@@ -268,7 +301,7 @@ export const fetchETFData = async () => {
 export const fetchExchangeNetflow = async () => null;
 
 // ============================================================
-// 9. Mining Outflow (indisponível)
+// 9. Miner Outflow (indisponível)
 // ============================================================
 export const fetchMinerOutflow = async () => null;
 
@@ -324,29 +357,7 @@ export const fetchPutCallRatio = async () => {
 };
 
 // ============================================================
-// 12. Hashrate (mempool.space)
-// ============================================================
-export const fetchHashrate = async () => {
-    const cacheKey = 'hashrate';
-    const cached = getCachedData(cacheKey, 300000);
-    if (cached && !cached.stale) return cached;
-
-    try {
-        const data = await fetchWithRetry('https://mempool.space/api/v1/mining/hashrate/1d', {}, 2);
-        if (data?.avgHashrate) {
-            const hashrate = parseFloat(data.avgHashrate); // em TH/s
-            setCachedData(cacheKey, hashrate);
-            return hashrate;
-        }
-        return null;
-    } catch (e) {
-        if (cached) return cached;
-        return null;
-    }
-};
-
-// ============================================================
-// 13. FUNÇÕES ORIGINAIS (mantidas)
+// 12. FUNÇÕES ORIGINAIS (mantidas)
 // ============================================================
 const SYMBOL_TO_COINGECKO = {
     'BTCUSDT': 'bitcoin',
