@@ -1,4 +1,4 @@
-// dados_externos.js – COMPLETO (CryptoQuant + FRED + Etherscan + fallbacks)
+// dados_externos.js – versão com fallbacks robustos
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
@@ -82,85 +82,6 @@ export async function warmupBackend() {
     }
 }
 
-// ===== CRYPTOQUANT (com cache) =====
-const CQ_API_KEY = CONFIG.CRYPTOQUANT_API_KEY;
-const CQ_BASE = 'https://api.cryptoquant.com/v1';
-
-async function fetchCryptoQuant(endpoint, params = {}) {
-    const url = new URL(`${CQ_BASE}${endpoint}`);
-    url.searchParams.set('limit', '1');
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-    const resp = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${CQ_API_KEY}` }
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status} - ${resp.statusText}`);
-    const data = await resp.json();
-    return data && data.length > 0 ? data[0] : null;
-}
-
-function fetchCQWithCache(endpoint, cacheKey, maxAge = 300000) {
-    return async () => {
-        const cached = getCachedData(cacheKey, maxAge);
-        if (cached && !cached.stale) return cached;
-        try {
-            const result = await fetchCryptoQuant(endpoint);
-            if (result && result.value !== undefined) {
-                const val = parseFloat(result.value);
-                setCachedData(cacheKey, val);
-                return val;
-            }
-            return null;
-        } catch(e) {
-            console.warn(`[CryptoQuant] ${cacheKey} falhou:`, e);
-            if (cached) return cached;
-            return null;
-        }
-    };
-}
-
-export const fetchMVRV = fetchCQWithCache('/btc/market-indicator/mvrv', 'cq_mvrv');
-export const fetchSOPR = fetchCQWithCache('/btc/market-indicator/sopr', 'cq_sopr');
-export const fetchASOPR = fetchCQWithCache('/btc/market-indicator/asopr', 'cq_asopr');
-export const fetchRealizedPrice = fetchCQWithCache('/btc/network-data/realized-price', 'cq_realized_price');
-export const fetchExchangeNetflow = fetchCQWithCache('/btc/exchange-flows/netflow', 'cq_netflow');
-export const fetchMinerOutflow = fetchCQWithCache('/btc/miner-flows/outflow', 'cq_miner_outflow');
-export const fetchCQActiveAddresses = fetchCQWithCache('/btc/network-data/active-addresses', 'cq_active_addresses');
-export const fetchCQDifficulty = fetchCQWithCache('/btc/network-data/difficulty', 'cq_difficulty');
-export const fetchCQHashrate = fetchCQWithCache('/btc/network-data/hashrate', 'cq_hashrate');
-
-// ===== FRED API HELPER =====
-async function fetchFREDSeries(seriesId, limit = 1) {
-    const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${CONFIG.FRED_API_KEY}&file_type=json&sort_order=desc&limit=${limit}`;
-    const resp = await fetchWithTimeout(url, {}, 10000);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    if (data.observations && data.observations.length > 0) {
-        const latest = data.observations[0];
-        return latest.value ? parseFloat(latest.value) : null;
-    }
-    return null;
-}
-
-function fetchFREDWithCache(seriesId, cacheKey, maxAge = 300000) {
-    return async () => {
-        const cached = getCachedData(cacheKey, maxAge);
-        if (cached && !cached.stale) return cached;
-        try {
-            const val = await fetchFREDSeries(seriesId);
-            if (val !== null) {
-                setCachedData(cacheKey, val);
-                return val;
-            }
-        } catch(e) { console.warn(`[FRED] ${cacheKey} falhou:`, e); }
-        if (cached) return cached;
-        return null;
-    };
-}
-
-export const fetchFREDVIX = fetchFREDWithCache('VIXCLS', 'fred_vix');
-export const fetchFREDUS10Y = fetchFREDWithCache('DGS10', 'fred_us10y');
-export const fetchFREDDXY = fetchFREDWithCache('DTWEXBGS', 'fred_dxy');
-
 // ===== CACHE =====
 function getCachedData(key, maxAge = CONFIG.CACHE_TTL_MS) {
     try {
@@ -180,95 +101,117 @@ function setCachedData(key, data) {
     } catch(e) { /* ignore */ }
 }
 
-// ===== FETCH MACRO (FRED primário, Yahoo fallback) =====
+// ============================================================
+// 1. ETH GAS PRICE – RPC público + Etherscan V2 fallback
+// ============================================================
+export const fetchEthGasPrice = async () => {
+    const cacheKey = 'ethGas';
+    const cached = getCachedData(cacheKey, 60000);
+    if (cached && !cached.stale) return cached;
+
+    // 1) RPC público (sem key, sem CORS)
+    try {
+        const resp = await fetchWithRetry('https://ethereum.publicnode.com', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_gasPrice', params: [], id: 1 })
+        }, 2);
+        if (resp && resp.result) {
+            const gwei = parseInt(resp.result, 16) / 1e9;
+            setCachedData(cacheKey, gwei);
+            return gwei;
+        }
+    } catch (e) { console.warn('[GasPrice publicnode] falhou:', e); }
+
+    // 2) Etherscan V2 (V1 foi desativado)
+    try {
+        const url = `https://api.etherscan.io/v2/api?chainid=1&module=gastracker&action=gasoracle&apikey=${CONFIG.ETHERSCAN_API_KEY}`;
+        const data = await fetchWithRetry(url, {}, 2);
+        if (data && data.status === '1' && data.result) {
+            const gasPrice = parseFloat(data.result.ProposeGasPrice);
+            setCachedData(cacheKey, gasPrice);
+            return gasPrice;
+        }
+    } catch (e) { console.warn('[GasPrice Etherscan V2] falhou:', e); }
+
+    if (cached) return cached;
+    return 5;
+};
+
+// ============================================================
+// 2. MACRO – Twelve Data → Yahoo via proxy (sem FRED)
+// ============================================================
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
     const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
-    // 1) FRED
+    // 1) Twelve Data (via backend)
     try {
-        const [dxy, us10y, vix] = await Promise.all([
-            fetchFREDDXY(),
-            fetchFREDUS10Y(),
-            fetchFREDVIX()
+        const fetchTD = async (symbol) => {
+            const url = `${BACKEND_URL}/api/quote?symbol=${symbol}`;
+            const data = await fetchWithRetry(url, {}, 2);
+            if (data && data.close && data.previous_close) {
+                return {
+                    current: parseFloat(data.close),
+                    change: ((parseFloat(data.close) - parseFloat(data.previous_close)) / parseFloat(data.previous_close)) * 100
+                };
+            }
+            return null;
+        };
+        const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
+            fetchTD('DXY'), fetchTD('DGS10'), fetchTD('VIX'), fetchTD('SPX'), fetchTD('NDX')
         ]);
         const macro = {
-            dxy: dxy || 0,
-            us10y: us10y || 0,
-            vix: vix || 0,
-            spChange: 0,
-            nasdaqChange: 0
+            dxy: dxy?.current || 0, us10y: us10y?.current || 0, vix: vix?.current || 0,
+            spChange: sp?.change || 0, nasdaqChange: nasdaq?.change || 0
         };
-        // Yahoo para changes
-        try {
-            const fetchYahooChange = async (ticker) => {
-                const data = await fetchViaProxy(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`, 2);
-                if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
-                    const meta = data.chart.result[0].meta;
-                    return ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100;
-                }
-                return 0;
-            };
-            const [spChange, nasdaqChange] = await Promise.all([
-                fetchYahooChange('^GSPC'),
-                fetchYahooChange('^NDX')
-            ]);
-            macro.spChange = spChange || 0;
-            macro.nasdaqChange = nasdaqChange || 0;
-        } catch(e) { /* ignora */ }
-        setCachedData(cacheKey, macro);
-        return macro;
-    } catch(e) {
-        console.warn('[Macro FRED] falhou, tentando Yahoo fallback...', e);
-    }
+        if (macro.dxy && macro.vix) { setCachedData(cacheKey, macro); return macro; }
+    } catch (e) { console.warn('[Macro TwelveData] falhou:', e); }
 
-    // 2) Yahoo fallback
+    // 2) Yahoo via proxy (fallback)
     try {
         const fetchYahoo = async (ticker) => {
             const data = await fetchViaProxy(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`, 2);
-            if (data && data.chart && data.chart.result && data.chart.result[0].meta) {
+            if (data?.chart?.result?.[0]?.meta) {
                 const meta = data.chart.result[0].meta;
                 return { current: meta.regularMarketPrice, change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 };
             }
             return null;
         };
         const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
-            fetchYahoo('DX-Y.NYB'),
-            fetchYahoo('^TNX'),
-            fetchYahoo('^VIX'),
-            fetchYahoo('^GSPC'),
-            fetchYahoo('^NDX')
+            fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), fetchYahoo('^GSPC'), fetchYahoo('^NDX')
         ]);
         const macro = {
-            dxy: dxy?.current || 0,
-            us10y: us10y?.current || 0,
-            vix: vix?.current || 0,
-            spChange: sp?.change || 0,
-            nasdaqChange: nasdaq?.change || 0
+            dxy: dxy?.current || 0, us10y: us10y?.current || 0, vix: vix?.current || 0,
+            spChange: sp?.change || 0, nasdaqChange: nasdaq?.change || 0
         };
         setCachedData(cacheKey, macro);
         return macro;
-    } catch(e) {
+    } catch (e) {
         console.warn('[Macro Yahoo] falhou:', e);
         if (cached) return cached;
         return { dxy: 0, us10y: 0, vix: 0, spChange: 0, nasdaqChange: 0 };
     }
 };
 
-// ===== FED RATE (FRED API) =====
+// ============================================================
+// 3. FED RATE – Alpha Vantage → CSV proxy fallback
+// ============================================================
 export const fetchFedRate = async () => {
     const cacheKey = 'fedRate';
     const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
     if (cached && !cached.stale) return cached;
 
     try {
-        const val = await fetchFREDSeries('FEDFUNDS');
-        if (val !== null) {
-            setCachedData(cacheKey, val);
-            return val;
+        const url = `https://www.alphavantage.co/query?function=FEDERAL_FUNDS_RATE&interval=monthly&apikey=${CONFIG.ALPHAVANTAGE_API_KEY}`;
+        const data = await fetchWithRetry(url, {}, 2);
+        if (data?.data?.[0]?.value) {
+            const rate = parseFloat(data.data[0].value);
+            setCachedData(cacheKey, rate);
+            return rate;
         }
-    } catch(e) { console.warn('[FRED FedRate] falhou:', e); }
+    } catch (e) { console.warn('[FedRate AlphaVantage] falhou:', e); }
 
     // Fallback CSV via proxy
     try {
@@ -276,39 +219,81 @@ export const fetchFedRate = async () => {
         if (csv && typeof csv === 'string') {
             const lastLine = csv.trim().split('\n').pop();
             const rate = parseFloat(lastLine.split(',')[1]);
-            if (!isNaN(rate) && rate > 0) {
-                setCachedData(cacheKey, rate);
-                return rate;
-            }
+            if (!isNaN(rate) && rate > 0) { setCachedData(cacheKey, rate); return rate; }
         }
-    } catch(e) { console.warn('[FRED CSV fallback] falhou:', e); }
+    } catch (e) { console.warn('[FedRate CSV] falhou:', e); }
 
     if (cached) return cached;
     return 4.33;
 };
 
-// ===== ETH GAS (Etherscan) =====
-export const fetchEthGasPrice = async () => {
-    const cacheKey = 'ethGas';
-    const cached = getCachedData(cacheKey, 60000);
-    if (cached && !cached.stale) return cached;
+// ============================================================
+// 4. ON-CHAIN – CoinMetrics Community (sem key)
+// ============================================================
+const CM_BASE = 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics';
 
-    try {
-        const url = `https://api.etherscan.io/api?module=gastracker&action=gasoracle&apikey=${CONFIG.ETHERSCAN_API_KEY}`;
-        const resp = await fetchWithTimeout(url, {}, 10000);
-        if (resp.ok) {
-            const data = await resp.json();
-            if (data.status === '1' && data.result) {
-                const gasPrice = parseFloat(data.result.ProposeGasPrice) / 10;
-                setCachedData(cacheKey, gasPrice);
-                return gasPrice;
+function fetchCMWithCache(metric, cacheKey, maxAge = 300000) {
+    return async () => {
+        const cached = getCachedData(cacheKey, maxAge);
+        if (cached && !cached.stale) return cached;
+        try {
+            const url = `${CM_BASE}?assets=btc&metrics=${metric}&frequency=1d&page_size=1`;
+            const data = await fetchWithRetry(url, {}, 2);
+            const val = data?.data?.[0]?.[metric];
+            if (val !== undefined && val !== null) {
+                const num = parseFloat(val);
+                setCachedData(cacheKey, num);
+                return num;
             }
+            return null;
+        } catch (e) {
+            console.warn(`[CoinMetrics] ${cacheKey} falhou:`, e);
+            if (cached) return cached;
+            return null;
         }
-    } catch(e) { console.warn('[Etherscan] falhou:', e); }
+    };
+}
 
-    if (cached) return cached;
-    return 5;
+export const fetchMVRV = fetchCMWithCache('CapMVRVCur', 'cm_mvrv');
+export const fetchRealizedPrice = fetchCMWithCache('CapRealUSD', 'cm_realized_price');
+export const fetchCQActiveAddresses = fetchCMWithCache('AdrActCnt', 'cm_active_addresses');
+export const fetchCQDifficulty = fetchCMWithCache('DiffMean', 'cm_difficulty');
+export const fetchCQHashrate = fetchCMWithCache('HashRate', 'cm_hashrate');
+export const fetchSOPR = fetchCMWithCache('SOPR', 'cm_sopr');
+export const fetchASOPR = fetchCMWithCache('SOPRAdj', 'cm_asopr');
+
+// ===== ON-CHAIN SEM SUBSTITUTO GRATUITO =====
+export const fetchExchangeNetflow = async () => {
+    console.warn('[ExchangeNetflow] sem fonte gratuita confiável — retornando null');
+    return null;
 };
+export const fetchMinerOutflow = async () => {
+    console.warn('[MinerOutflow] sem fonte gratuita confiável — retornando null');
+    return null;
+};
+
+// ============================================================
+// 5. DEMAIS FUNÇÕES (mantidas da versão estável)
+// ============================================================
+
+// MAPEAMENTO
+const SYMBOL_TO_COINGECKO = {
+    'BTCUSDT': 'bitcoin',
+    'ETHUSDT': 'ethereum',
+    'SOLUSDT': 'solana'
+};
+const TIMEFRAME_TO_MINUTES = {
+    '15m': 15,
+    '1h': 60,
+    '4h': 240,
+    '1d': 1440
+};
+
+// PREÇO ATUAL
+let _currentPrices = { 'BTCUSDT':0,'ETHUSDT':0,'SOLUSDT':0 };
+export function setCurrentPrice(symbol, price) { _currentPrices[symbol] = price; }
+export function getCurrentPrice(symbol) { return _currentPrices[symbol] || 0; }
+export function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ===== FETCH CANDLES =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
@@ -349,9 +334,9 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
 
     // 3) CoinGecko
     try {
-        const coinId = { 'BTCUSDT':'bitcoin','ETHUSDT':'ethereum','SOLUSDT':'solana' }[symbol];
+        const coinId = SYMBOL_TO_COINGECKO[symbol];
         if (coinId) {
-            const minutes = { '15m':15,'1h':60,'4h':240,'1d':1440 }[interval] || 60;
+            const minutes = TIMEFRAME_TO_MINUTES[interval] || 60;
             let days = Math.ceil((limit * minutes) / 1440) + 1;
             days = Math.min(Math.max(days, 1), 90);
             const url = `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
@@ -395,7 +380,7 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     return [];
 }
 
-// ===== DEMAIS FUNÇÕES (mantidas) =====
+// ===== DEMAIS FUNÇÕES =====
 export const fetchFundingRate = async (symbol) => {
     try {
         const data = await fetchWithRetry(`https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`);
@@ -559,8 +544,8 @@ export async function getMTFConfluence(symbol) {
     };
 }
 
-// ===== EXPORTS ADICIONAIS =====
-export let _currentPrices = { 'BTCUSDT':0,'ETHUSDT':0,'SOLUSDT':0 };
-export function setCurrentPrice(symbol, price) { _currentPrices[symbol] = price; }
-export function getCurrentPrice(symbol) { return _currentPrices[symbol] || 0; }
-export function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// ===== FRED FALLBACK (opcional, mantido para compatibilidade) =====
+// Nota: estas funções podem ser removidas se não forem usadas, mas mantemos export vazio.
+export const fetchFREDVIX = async () => null;
+export const fetchFREDUS10Y = async () => null;
+export const fetchFREDDXY = async () => null;
