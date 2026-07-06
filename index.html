@@ -141,7 +141,7 @@
                     <div class="badge">⚡ STATUS: SMC+MTF ENGINE</div>
                     <span class="live-indicator" id="ws-status">🔄 WEBSOCKET</span>
                     <span class="status-badge" id="status-badge">📋 ESTÁTICO</span>
-                    <span class="status-badge" id="backend-status">⏳ BACKEND: VERIFICANDO</span>
+                    <span class="status-badge" id="backend-status">💤 BACKEND: DORMINDO</span>
                     <span class="telegram-badge" id="telegram-badge"><span class="telegram-status" id="telegram-status-dot"></span> 📨 TELEGRAM</span>
                 </div>
             </div>
@@ -235,7 +235,7 @@
                 <div class="summary-card"><h3>Bitcoin</h3><div class="value negative" id="btc-price">$60.000</div><div class="subtext" id="btc-change">↓ 5,94%</div><span class="source-with-time" id="btc-source">Binance/Bybit • WS</span></div>
                 <div class="summary-card"><h3>Ethereum</h3><div class="value negative" id="eth-price">$1.573,53</div><div class="subtext" id="eth-change">↓ 0,15%</div><span class="source-with-time" id="eth-source">Binance/Bybit • WS</span></div>
                 <div class="summary-card"><h3>Solana</h3><div class="value negative" id="sol-price">$170,00</div><div class="subtext" id="sol-change">↓ 2,30%</div><span class="source-with-time" id="sol-source">Binance/Bybit • WS</span></div>
-                <div class="summary-card"><h3>Sentiment Macro</h3><div class="value negative" id="macro-summary">DXY 101,37 | US10Y 4,28%</div><div class="subtext" id="macro-status">Referência</div><span class="source-with-time" id="macro-source">Yahoo Finance</span></div>
+                <div class="summary-card"><h3>Sentiment Macro</h3><div class="value negative" id="macro-summary">DXY 101,37 | US10Y 4,28%</div><div class="subtext" id="macro-status">Referência</div><span class="source-with-time" id="macro-source">Estático</span></div>
                 <div class="summary-card"><h3>Tether Premium</h3><div class="value negative" id="tether-premium">Carregando...</div><div class="subtext">USDT/BRL vs USD/BRL</div><span class="source-with-time" id="tether-source">CoinGecko & Exchangerate</span></div>
             </div>
         </section>
@@ -259,8 +259,8 @@
                         <tr><td><strong>SOPR</strong></td><td id="sopr">INDISPONÍVEL</td><td id="sopr-interp">--</td><td><span class="data-source" id="sopr-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>aSOPR 7D</strong></td><td id="asopr">INDISPONÍVEL</td><td id="asopr-interp">--</td><td><span class="data-source" id="asopr-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>Realized Price (BTC)</strong></td><td id="realized-price">INDISPONÍVEL</td><td>ℹ️ Preço médio</td><td><span class="data-source" id="realized-price-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>ETF Flows (BTC)</strong></td><td id="etf-btc-live"><strong>Carregando...</strong></td><td id="etf-btc-interp">--</td><td><span class="data-source" id="etf-btc-source">Yahoo Finance</span></td></tr>
-                        <tr><td><strong>ETF Flows (ETH)</strong></td><td id="etf-eth-live"><strong>Carregando...</strong></td><td id="etf-eth-interp">--</td><td><span class="data-source" id="etf-eth-source">Yahoo Finance</span></td></tr>
+                        <tr><td><strong>ETF Flows (BTC)</strong></td><td id="etf-btc-live"><strong>INDISPONÍVEL</strong></td><td id="etf-btc-interp">--</td><td><span class="data-source" id="etf-btc-source">Yahoo Finance</span></td></tr>
+                        <tr><td><strong>ETF Flows (ETH)</strong></td><td id="etf-eth-live"><strong>INDISPONÍVEL</strong></td><td id="etf-eth-interp">--</td><td><span class="data-source" id="etf-eth-source">Yahoo Finance</span></td></tr>
                         <tr><td><strong>Exchange Netflow</strong></td><td id="exchange-netflow">INDISPONÍVEL</td><td id="exchange-netflow-interp">--</td><td><span class="data-source" id="exchange-netflow-source">N/A</span></td></tr>
                         <tr><td><strong>Funding Rate (atual)</strong></td><td id="funding-rate">Carregando...</td><td id="funding-rate-interp">ℹ️ Neutro</td><td><span class="data-source" id="funding-rate-source">Binance/Bybit</span></td></tr>
                         <tr><td><strong>Open Interest</strong></td><td id="open-interest">Carregando...</td><td id="open-interest-interp">ℹ️ Volume em aberto</td><td><span class="data-source" id="open-interest-source">Binance/Bybit</span></td></tr>
@@ -277,7 +277,7 @@
             <div class="chart-wrapper"><canvas id="chart_etf_flows"></canvas></div>
         </section>
 
-        <!-- ===== NOVA SEÇÃO: MÉTRICAS COINMETRICS ===== -->
+        <!-- ===== SEÇÃO DE MÉTRICAS COINMETRICS (SIMPLIFICADA) ===== -->
         <section>
             <h2 class="section-title">📊 Métricas CoinMetrics (Community)</h2>
             <div class="table-wrapper">
@@ -285,40 +285,41 @@
                     <thead><tr><th>Métrica</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
                     <tbody>
                         <tr><td><strong>Preço (USD)</strong></td><td id="cm-priceusd">Carregando...</td><td>ℹ️ Preço atual</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Preço (BTC)</strong></td><td id="cm-pricebtc">Carregando...</td><td>ℹ️ Preço em BTC</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Preço (BTC)</strong></td><td id="cm-pricebtc">INDISPONÍVEL</td><td>ℹ️ Preço em BTC</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>Reference Rate (USD)</strong></td><td id="cm-referencerateusd">Carregando...</td><td>ℹ️ Taxa de referência</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Reference Rate (BTC)</strong></td><td id="cm-referenceratebtc">Carregando...</td><td>ℹ️ Taxa de referência</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Reference Rate (ETH)</strong></td><td id="cm-referencerateeth">Carregando...</td><td>ℹ️ Taxa de referência</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Reference Rate (EUR)</strong></td><td id="cm-referencerateeur">Carregando...</td><td>ℹ️ Taxa de referência</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Reference Rate (BTC)</strong></td><td id="cm-referenceratebtc">INDISPONÍVEL</td><td>ℹ️ Taxa de referência</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Reference Rate (ETH)</strong></td><td id="cm-referencerateeth">INDISPONÍVEL</td><td>ℹ️ Taxa de referência</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Reference Rate (EUR)</strong></td><td id="cm-referencerateeur">INDISPONÍVEL</td><td>ℹ️ Taxa de referência</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>Market Cap (USD)</strong></td><td id="cm-capmrktcurusd">Carregando...</td><td>💰 Capitalização</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Market Cap Estimado (USD)</strong></td><td id="cm-capmrktestusd">Carregando...</td><td>💰 Estimativa</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Market Cap Estimado (USD)</strong></td><td id="cm-capmrktestusd">INDISPONÍVEL</td><td>💰 Estimativa</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>MVRV</strong></td><td id="cm-mvrv">Carregando...</td><td>📊 MVRV Ratio</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>Supply Circulante</strong></td><td id="cm-splycur">Carregando...</td><td>🔄 Oferta circulante</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Supply em Exchanges (Nativo)</strong></td><td id="cm-splyexntv">Carregando...</td><td>🏦 Saldo em exchanges</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Supply em Exchanges (USD)</strong></td><td id="cm-splyexusd">Carregando...</td><td>🏦 Saldo em exchanges</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Supply Esperado 10 anos</strong></td><td id="cm-splyexpfut10yr">Carregando...</td><td>🔮 Projeção</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Supply em Exchanges (Nativo)</strong></td><td id="cm-splyexntv">INDISPONÍVEL</td><td>🏦 Saldo em exchanges</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Supply em Exchanges (USD)</strong></td><td id="cm-splyexusd">INDISPONÍVEL</td><td>🏦 Saldo em exchanges</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Supply Esperado 10 anos</strong></td><td id="cm-splyexpfut10yr">INDISPONÍVEL</td><td>🔮 Projeção</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>Endereços Ativos</strong></td><td id="cm-adractcnt">Carregando...</td><td>👤 Último dia</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Endereços com Saldo</strong></td><td id="cm-adrbalcnt">Carregando...</td><td>💰 Com saldo > 0</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Endereços com Saldo</strong></td><td id="cm-adrbalcnt">INDISPONÍVEL</td><td>💰 Com saldo > 0</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>Total de Transações</strong></td><td id="cm-txcnt">Carregando...</td><td>📈 Tx totais</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Transações de Transferência</strong></td><td id="cm-txtfrcnt">Carregando...</td><td>🔁 Tx de transferência</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Transações de Transferência</strong></td><td id="cm-txtfrcnt">INDISPONÍVEL</td><td>🔁 Tx de transferência</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>Total de Blocos</strong></td><td id="cm-blkcnt">Carregando...</td><td>🧱 Blocos minerados</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>Hash Rate</strong></td><td id="cm-hashrate">Carregando...</td><td>⚡ Poder computacional</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>Emissão Total (Nativo)</strong></td><td id="cm-isstotntv">Carregando...</td><td>🪙 Moedas emitidas</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Emissão Total (USD)</strong></td><td id="cm-isstotusd">Carregando...</td><td>💵 Emissão em USD</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Emissão Total (USD)</strong></td><td id="cm-isstotusd">INDISPONÍVEL</td><td>💵 Emissão em USD</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>Total de Taxas (Nativo)</strong></td><td id="cm-feetotntv">Carregando...</td><td>💸 Taxas pagas</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Fluxo Entrada Exchange (Nativo)</strong></td><td id="cm-flowinexntv">Carregando...</td><td>📥 Entrada em exchanges</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Fluxo Entrada Exchange (USD)</strong></td><td id="cm-flowinexusd">Carregando...</td><td>📥 Entrada em USD</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Fluxo Saída Exchange (Nativo)</strong></td><td id="cm-flowoutexntv">Carregando...</td><td>📤 Saída de exchanges</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Fluxo Saída Exchange (USD)</strong></td><td id="cm-flowoutexusd">Carregando...</td><td>📤 Saída em USD</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Fluxo Entrada Exchange (Nativo)</strong></td><td id="cm-flowinexntv">INDISPONÍVEL</td><td>📥 Entrada em exchanges</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Fluxo Entrada Exchange (USD)</strong></td><td id="cm-flowinexusd">INDISPONÍVEL</td><td>📥 Entrada em USD</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Fluxo Saída Exchange (Nativo)</strong></td><td id="cm-flowoutexntv">INDISPONÍVEL</td><td>📤 Saída de exchanges</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Fluxo Saída Exchange (USD)</strong></td><td id="cm-flowoutexusd">INDISPONÍVEL</td><td>📤 Saída em USD</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>ROI 1 ano</strong></td><td id="cm-roi1yr">Carregando...</td><td>📈 Retorno anual</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>ROI 30 dias</strong></td><td id="cm-roi30d">Carregando...</td><td>📈 Retorno mensal</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Tempo de Conclusão</strong></td><td id="cm-assetcompletiontime">Carregando...</td><td>⏳ Tempo estimado</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Tempo de Conclusão (EOD)</strong></td><td id="cm-asseteodcompletiontime">Carregando...</td><td>⏳ EOD</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>Volume Spot Reportado (USD, 1d)</strong></td><td id="cm-volume_reported_spot_usd_1d">Carregando...</td><td>📊 Volume spot diário</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Tempo de Conclusão</strong></td><td id="cm-assetcompletiontime">INDISPONÍVEL</td><td>⏳ Tempo estimado</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Tempo de Conclusão (EOD)</strong></td><td id="cm-asseteodcompletiontime">INDISPONÍVEL</td><td>⏳ EOD</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Volume Spot Reportado (USD, 1d)</strong></td><td id="cm-volume_reported_spot_usd_1d">INDISPONÍVEL</td><td>📊 Volume spot diário</td><td><span class="data-source">CoinMetrics</span></td></tr>
                     </tbody>
                 </table>
             </div>
         </section>
+        
                 <section>
             <h2 class="section-title">✅ PAINEL DE CONFIRMAÇÃO DE FUNDO</h2>
             <div class="confirmation-panel">
@@ -339,12 +340,12 @@
                 <table>
                     <thead><tr><th>Indicador</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
                     <tbody>
-                        <tr><td><strong>DXY</strong></td><td id="dxy-value">Carregando...</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source" id="dxy-source">Twelve Data</span></td></tr>
-                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">Carregando...</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source" id="fed-source">Alpha Vantage</span></td></tr>
-                        <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">Carregando...</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source" id="us10y-source">Twelve Data</span></td></tr>
-                        <tr><td><strong>VIX</strong></td><td id="vix-value">Carregando...</td><td id="vix-interp">ℹ️ Estresse de mercado</td><td><span class="data-source" id="vix-source">Twelve Data</span></td></tr>
-                        <tr><td><strong>NASDAQ % (24h)</strong></td><td id="nasdaq-value">Carregando...</td><td>🔴 Tech</td><td><span class="data-source" id="nasdaq-source">Yahoo Finance</span></td></tr>
-                        <tr><td><strong>S&amp;P 500 % (24h)</strong></td><td id="sp500-value">Carregando...</td><td>ℹ️ Broad market</td><td><span class="data-source" id="sp500-source">Yahoo Finance</span></td></tr>
+                        <tr><td><strong>DXY</strong></td><td id="dxy-value">101.37</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source" id="dxy-source">Estático</span></td></tr>
+                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">4.33</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source" id="fed-source">Alpha Vantage</span></td></tr>
+                        <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">4.28</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source" id="us10y-source">Estático</span></td></tr>
+                        <tr><td><strong>VIX</strong></td><td id="vix-value">20.5</td><td id="vix-interp">ℹ️ Estresse de mercado</td><td><span class="data-source" id="vix-source">Estático</span></td></tr>
+                        <tr><td><strong>NASDAQ % (24h)</strong></td><td id="nasdaq-value">-0.80%</td><td>🔴 Tech</td><td><span class="data-source" id="nasdaq-source">Estático</span></td></tr>
+                        <tr><td><strong>S&amp;P 500 % (24h)</strong></td><td id="sp500-value">-0.50%</td><td>ℹ️ Broad market</td><td><span class="data-source" id="sp500-source">Estático</span></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -402,7 +403,7 @@
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>📋 Metodologia V2 + Comitê</h4>
-                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados 100% reais e atualizados</strong> via CoinMetrics, Twelve Data, Alpha Vantage, Etherscan, Binance, Bybit, CoinGecko, DefiLlama, Deribit.</p>
+                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados 100% reais e atualizados</strong> via CoinMetrics, Binance, Bybit, CoinGecko, DefiLlama, Deribit.</p>
                     <p><strong>Última atualização bem‑sucedida:</strong> <span id="live-update-time">--</span></p>
                 </div>
             </div>
@@ -411,7 +412,6 @@
 
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
-    <!-- ===== SCRIPT MODULE REVISADO ===== -->
     <script type="module">
         import { CONFIG } from './js/config.js';
         import * as indicadores from './js/indicadores.js';
@@ -438,7 +438,6 @@
             fetchOpenInterest,
             fetchBasis,
             fetchBlockchairStats,
-            fetchETFData,
             fetchFedRate,
             fetchEthGasPrice,
             fetchPutCallRatio,
@@ -449,12 +448,9 @@
             getMTFConfluence,
             fetchOrderBook,
             setCurrentPrice,
-            sleep,
-            getBackendStatus,
             fetchMVRV,
             fetchCQActiveAddresses,
-            fetchCQHashrate,
-            fetchCoinMetricsBatch
+            fetchCQHashrate
         } = dadosExternos;
 
         // ===== STATE =====
@@ -506,7 +502,7 @@
 
         const DOM = {};
         function cacheDOM() {
-            const ids = ['btc-price', 'eth-price', 'sol-price', 'score-value', 'score-bar', 'last-update', 'header-timestamp', 'status-badge', 'ws-status'];
+            const ids = ['btc-price', 'eth-price', 'sol-price', 'score-value', 'score-bar', 'last-update', 'header-timestamp', 'status-badge'];
             ids.forEach(id => DOM[id] = document.getElementById(id));
         }
 
@@ -1184,7 +1180,7 @@
             if (externalUpdating) return;
             externalUpdating = true;
             try {
-                // ===== ON-CHAIN – APENAS MVRV, ACTIVE ADDRESSES, HASHRATE =====
+                // ===== ON-CHAIN – APENAS GRATUITAS =====
                 const [mvrv, cqActive, cqHashrate] = await Promise.all([
                     fetchMVRV(),
                     fetchCQActiveAddresses(),
@@ -1201,7 +1197,7 @@
                 setTextOrNA('active-addresses', cqActive);
                 setTextOrNA('btc-hashrate', cqHashrate !== null ? (cqHashrate / 1e18).toFixed(2) + ' EH/s' : null);
 
-                // ===== BLOCKCHAIR (fallback para Active Addresses) =====
+                // ===== BLOCKCHAIR (fallback Active Addresses) =====
                 const blockchair = await fetchBlockchairStats();
                 if (blockchair) {
                     if (cqActive === null) {
@@ -1212,14 +1208,6 @@
                 // ===== ETH GAS =====
                 const ethGas = await fetchEthGasPrice();
                 setTextOrNA('eth-gas', ethGas, '', ' Gwei');
-
-                // ===== ETF =====
-                const etf = await fetchETFData();
-                if (etf) {
-                    document.getElementById('etf-btc-live').innerHTML = '<strong>' + (etf.btcFlow >= 0 ? '+' : '') + etf.btcFlow.toFixed(2) + '%</strong>';
-                    document.getElementById('etf-eth-live').innerHTML = '<strong>' + (etf.ethFlow >= 0 ? '+' : '') + etf.ethFlow.toFixed(2) + '%</strong>';
-                    graficos.updateETFChart(etf);
-                }
 
                 // ===== TETHER =====
                 const premium = await fetchTetherPremium();
@@ -1241,16 +1229,8 @@
                 const fedRate = await fetchFedRate();
                 setTextOrNA('fed-rate', fedRate, '', '%');
 
-                // ===== MACRO =====
-                const macro = await fetchMacroStatic();
-                if (macro) {
-                    setTextOrNA('dxy-value', macro.dxy);
-                    setTextOrNA('us10y-value', macro.us10y, '', '%');
-                    setTextOrNA('vix-value', macro.vix);
-                    setTextOrNA('nasdaq-value', macro.nasdaqChange, '', '%');
-                    setTextOrNA('sp500-value', macro.spChange, '', '%');
-                    graficos.updateMacroChart(macro);
-                }
+                // ===== MACRO – estático =====
+                // já está no HTML com valores padrão
 
                 // ===== DEFI =====
                 const defi = await fetchDeFiData();
@@ -1267,82 +1247,65 @@
                     document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
                 }
 
-                // ===== NOVA: MÉTRICAS COINMETRICS BATCH =====
+                // ===== MÉTRICAS COINMETRICS INDIVIDUAIS (substituindo o batch) =====
                 try {
-                    const cmMetrics = [
-                        'PriceUSD', 'PriceBTC', 'ReferenceRateUSD', 'ReferenceRateBTC', 'ReferenceRateETH', 'ReferenceRateEUR',
-                        'CapMrktCurUSD', 'CapMrktEstUSD', 'CapMVRVCur', 'SplyCur', 'SplyExNtv', 'SplyExUSD', 'SplyExpFut10yr',
-                        'AdrActCnt', 'AdrBalCnt', 'TxCnt', 'TxTfrCnt', 'BlkCnt', 'HashRate',
-                        'IssTotNtv', 'IssTotUSD', 'FeeTotNtv', 'FlowInExNtv', 'FlowInExUSD', 'FlowOutExNtv', 'FlowOutExUSD',
-                        'ROI1yr', 'ROI30d', 'AssetCompletionTime', 'AssetEODCompletionTime', 'volume_reported_spot_usd_1d'
-                    ];
-                    const cmData = await fetchCoinMetricsBatch(cmMetrics);
-                    if (cmData) {
-                        const map = {
-                            'PriceUSD': 'cm-priceusd',
-                            'PriceBTC': 'cm-pricebtc',
-                            'ReferenceRateUSD': 'cm-referencerateusd',
-                            'ReferenceRateBTC': 'cm-referenceratebtc',
-                            'ReferenceRateETH': 'cm-referencerateeth',
-                            'ReferenceRateEUR': 'cm-referencerateeur',
-                            'CapMrktCurUSD': 'cm-capmrktcurusd',
-                            'CapMrktEstUSD': 'cm-capmrktestusd',
-                            'CapMVRVCur': 'cm-mvrv',
-                            'SplyCur': 'cm-splycur',
-                            'SplyExNtv': 'cm-splyexntv',
-                            'SplyExUSD': 'cm-splyexusd',
-                            'SplyExpFut10yr': 'cm-splyexpfut10yr',
-                            'AdrActCnt': 'cm-adractcnt',
-                            'AdrBalCnt': 'cm-adrbalcnt',
-                            'TxCnt': 'cm-txcnt',
-                            'TxTfrCnt': 'cm-txtfrcnt',
-                            'BlkCnt': 'cm-blkcnt',
-                            'HashRate': 'cm-hashrate',
-                            'IssTotNtv': 'cm-isstotntv',
-                            'IssTotUSD': 'cm-isstotusd',
-                            'FeeTotNtv': 'cm-feetotntv',
-                            'FlowInExNtv': 'cm-flowinexntv',
-                            'FlowInExUSD': 'cm-flowinexusd',
-                            'FlowOutExNtv': 'cm-flowoutexntv',
-                            'FlowOutExUSD': 'cm-flowoutexusd',
-                            'ROI1yr': 'cm-roi1yr',
-                            'ROI30d': 'cm-roi30d',
-                            'AssetCompletionTime': 'cm-assetcompletiontime',
-                            'AssetEODCompletionTime': 'cm-asseteodcompletiontime',
-                            'volume_reported_spot_usd_1d': 'cm-volume_reported_spot_usd_1d'
-                        };
-                        for (const [metric, id] of Object.entries(map)) {
-                            const el = document.getElementById(id);
-                            if (el && cmData[metric] !== undefined && cmData[metric] !== null) {
-                                const val = cmData[metric];
-                                let display = val;
-                                if (typeof val === 'number') {
-                                    if (metric === 'PriceUSD' || metric === 'PriceBTC' || metric === 'ReferenceRateUSD' || metric === 'CapMrktCurUSD' || metric === 'CapMrktEstUSD' || metric === 'CapMVRVCur') {
-                                        display = val.toFixed(2);
-                                    } else if (metric === 'SplyCur' || metric === 'SplyExNtv' || metric === 'SplyExUSD' || metric === 'SplyExpFut10yr' || metric === 'IssTotNtv' || metric === 'IssTotUSD' || metric === 'FlowInExNtv' || metric === 'FlowInExUSD' || metric === 'FlowOutExNtv' || metric === 'FlowOutExUSD' || metric === 'volume_reported_spot_usd_1d') {
-                                        display = Number(val.toFixed(0)).toLocaleString();
-                                    } else if (metric === 'AdrActCnt' || metric === 'AdrBalCnt' || metric === 'TxCnt' || metric === 'TxTfrCnt' || metric === 'BlkCnt') {
-                                        display = Number(val.toFixed(0)).toLocaleString();
-                                    } else if (metric === 'HashRate') {
-                                        if (val > 1e18) display = (val / 1e18).toFixed(2) + ' EH/s';
-                                        else if (val > 1e15) display = (val / 1e15).toFixed(2) + ' PH/s';
-                                        else display = Number(val.toFixed(0)).toLocaleString();
-                                    } else if (metric === 'FeeTotNtv') {
-                                        display = val.toFixed(2);
-                                    } else if (metric === 'ROI1yr' || metric === 'ROI30d') {
-                                        display = (val * 100).toFixed(2) + '%';
-                                    } else {
-                                        display = val.toString();
-                                    }
+                    // Função auxiliar para buscar métrica individual
+                    const fetchCM = async (metric) => {
+                        try {
+                            const url = `https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=${metric}&frequency=1d&page_size=1`;
+                            const data = await fetchWithRetry(url, {}, 2);
+                            return data?.data?.[0]?.[metric] !== undefined ? parseFloat(data.data[0][metric]) : null;
+                        } catch(e) { return null; }
+                    };
+
+                    // Lista de métricas que sabemos serem gratuitas
+                    const metricsMap = {
+                        'PriceUSD': 'cm-priceusd',
+                        'ReferenceRateUSD': 'cm-referencerateusd',
+                        'CapMrktCurUSD': 'cm-capmrktcurusd',
+                        'CapMVRVCur': 'cm-mvrv',
+                        'SplyCur': 'cm-splycur',
+                        'AdrActCnt': 'cm-adractcnt',
+                        'TxCnt': 'cm-txcnt',
+                        'BlkCnt': 'cm-blkcnt',
+                        'HashRate': 'cm-hashrate',
+                        'IssTotNtv': 'cm-isstotntv',
+                        'FeeTotNtv': 'cm-feetotntv',
+                        'ROI1yr': 'cm-roi1yr',
+                        'ROI30d': 'cm-roi30d'
+                    };
+
+                    for (const [metric, id] of Object.entries(metricsMap)) {
+                        const val = await fetchCM(metric);
+                        const el = document.getElementById(id);
+                        if (el && val !== null && val !== undefined) {
+                            let display = val;
+                            if (typeof val === 'number') {
+                                if (metric === 'PriceUSD' || metric === 'ReferenceRateUSD' || metric === 'CapMrktCurUSD' || metric === 'CapMVRVCur') {
+                                    display = val.toFixed(2);
+                                } else if (metric === 'SplyCur' || metric === 'IssTotNtv') {
+                                    display = Number(val.toFixed(0)).toLocaleString();
+                                } else if (metric === 'AdrActCnt' || metric === 'TxCnt' || metric === 'BlkCnt') {
+                                    display = Number(val.toFixed(0)).toLocaleString();
+                                } else if (metric === 'HashRate') {
+                                    if (val > 1e18) display = (val / 1e18).toFixed(2) + ' EH/s';
+                                    else if (val > 1e15) display = (val / 1e15).toFixed(2) + ' PH/s';
+                                    else display = Number(val.toFixed(0)).toLocaleString();
+                                } else if (metric === 'FeeTotNtv') {
+                                    display = val.toFixed(2);
+                                } else if (metric === 'ROI1yr' || metric === 'ROI30d') {
+                                    display = (val * 100).toFixed(2) + '%';
+                                } else {
+                                    display = val.toString();
                                 }
-                                el.textContent = display;
-                            } else if (el) {
-                                el.textContent = 'INDISPONÍVEL';
                             }
+                            el.textContent = display;
+                        } else if (el) {
+                            el.textContent = 'INDISPONÍVEL';
                         }
                     }
                 } catch (e) {
-                    console.warn('Erro ao buscar métricas CoinMetrics batch:', e);
+                    console.warn('Erro ao buscar métricas individuais CoinMetrics:', e);
                 }
 
             } catch (e) {
@@ -1356,7 +1319,6 @@
         // ===== BOOTSTRAP =====
         async function init() {
             cacheDOM();
-            // warmupBackend(); // REMOVIDO – não usamos mais o Render
             graficos.initCharts();
             const candleBTC = graficos.initCandleChart('candle-btc', '#00e896');
             const candleETH = graficos.initCandleChart('candle-eth', '#00b4d8');
@@ -1450,9 +1412,9 @@
                 const badge = document.getElementById('status-badge');
                 if (badge) { badge.textContent = '✅ LIVE'; badge.className = 'status-badge live'; }
 
+                // Backend badge fixo (não usamos mais)
                 const backendBadge = document.getElementById('backend-status');
                 if (backendBadge) {
-                    // Exibe apenas "DADOS CACHE" sem alarme
                     backendBadge.textContent = '💤 BACKEND: DORMINDO (fallback)';
                     backendBadge.className = 'status-badge';
                     backendBadge.style.borderColor = 'var(--accent-yellow)';
