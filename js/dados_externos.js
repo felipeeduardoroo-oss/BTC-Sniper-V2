@@ -1,8 +1,11 @@
-// dados_externos.js – versão com resiliência máxima a falhas de back-end
+// dados_externos.js – versão com cache avançado, backoff e fallbacks robustos
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
 const BACKEND_URL = CONFIG.BACKEND_URL || 'https://twelvedata-backend.onrender.com';
+
+// ===== NOVA URL DO REPLIT (COINMETRICS) =====
+const REPLIT_CM_URL = 'https://0f6c32ea-14f2-4470-9a55-e9fb37eeb395-00-2u2zgtjsl1c44.picard.replit.dev/api/assets';
 
 // ===== HELPERS =====
 export function fetchWithTimeout(url, options = {}, timeout = 15000) {
@@ -148,7 +151,7 @@ export const fetchEthGasPrice = async () => {
 // ============================================================
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
-    const cached = getCachedData(cacheKey, 300000); // 5min fresh, 1h stale
+    const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
     // Tenta primeiro o Yahoo (mais confiável que o Render dormindo)
@@ -194,9 +197,7 @@ export const fetchMacroStatic = async () => {
         if (macro.dxy && macro.vix) { setCachedData(cacheKey, macro); return macro; }
     } catch (e) { console.warn('[Macro TwelveData] falhou:', e); }
 
-    // Se tudo falhar, retorna cache (mesmo stale) ou valores estáticos
     if (cached) return cached;
-    // Valores estáticos (para não quebrar a UI)
     return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
 };
 
@@ -232,16 +233,23 @@ export const fetchFedRate = async () => {
 };
 
 // ============================================================
-// 4. ON-CHAIN – CoinMetrics Community + fallback Blockchair
+// 4. ON-CHAIN – PRIORIDADE: REPLIT (CoinMetrics) → CoinMetrics Community → Blockchair
 // ============================================================
-const CM_BASE = 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics';
 
-function fetchCMWithCache(metric, cacheKey, maxAge = 300000) {
+/**
+ * Busca métricas on-chain com prioridade:
+ * 1. Replit (CoinMetrics via proxy próprio)
+ * 2. CoinMetrics Community (gratuito, com limite)
+ * 3. Cache (stale)
+ */
+function fetchOnChainWithFallback(metric, cacheKey, maxAge = 300000) {
     return async () => {
         const cached = getCachedData(cacheKey, maxAge);
         if (cached && !cached.stale) return cached;
+
+        // 1) Tenta o Replit primeiro
         try {
-            const url = `${CM_BASE}?assets=btc&metrics=${metric}&frequency=1d&page_size=1`;
+            const url = `${REPLIT_CM_URL}?assets=btc&metrics=${metric}`;
             const data = await fetchWithRetry(url, {}, 2);
             const val = data?.data?.[0]?.[metric];
             if (val !== undefined && val !== null) {
@@ -249,23 +257,38 @@ function fetchCMWithCache(metric, cacheKey, maxAge = 300000) {
                 setCachedData(cacheKey, num);
                 return num;
             }
-            return null;
         } catch (e) {
-            console.warn(`[CoinMetrics] ${cacheKey} falhou:`, e);
-            if (cached) return cached;
-            return null;
+            console.warn(`[Replit] ${cacheKey} falhou:`, e);
         }
+
+        // 2) Fallback: CoinMetrics Community
+        try {
+            const url = `https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=${metric}&frequency=1d&page_size=1`;
+            const data = await fetchWithRetry(url, {}, 2);
+            const val = data?.data?.[0]?.[metric];
+            if (val !== undefined && val !== null) {
+                const num = parseFloat(val);
+                setCachedData(cacheKey, num);
+                return num;
+            }
+        } catch (e) {
+            console.warn(`[CoinMetrics Community] ${cacheKey} falhou:`, e);
+        }
+
+        if (cached) return cached;
+        return null;
     };
 }
 
-export const fetchMVRV = fetchCMWithCache('CapMVRVCur', 'cm_mvrv');
-export const fetchRealizedPrice = fetchCMWithCache('CapRealUSD', 'cm_realized_price');
-export const fetchCQActiveAddresses = fetchCMWithCache('AdrActCnt', 'cm_active_addresses');
-export const fetchCQDifficulty = fetchCMWithCache('DiffMean', 'cm_difficulty');
-export const fetchCQHashrate = fetchCMWithCache('HashRate', 'cm_hashrate');
-export const fetchSOPR = fetchCMWithCache('SOPR', 'cm_sopr');
-export const fetchASOPR = fetchCMWithCache('SOPRAdj', 'cm_asopr');
+export const fetchMVRV = fetchOnChainWithFallback('CapMVRVCur', 'cm_mvrv');
+export const fetchRealizedPrice = fetchOnChainWithFallback('CapRealUSD', 'cm_realized_price');
+export const fetchCQActiveAddresses = fetchOnChainWithFallback('AdrActCnt', 'cm_active_addresses');
+export const fetchCQDifficulty = fetchOnChainWithFallback('DiffMean', 'cm_difficulty');
+export const fetchCQHashrate = fetchOnChainWithFallback('HashRate', 'cm_hashrate');
+export const fetchSOPR = fetchOnChainWithFallback('SOPR', 'cm_sopr');
+export const fetchASOPR = fetchOnChainWithFallback('SOPRAdj', 'cm_asopr');
 
+// ===== BLOCKCHAIR (fallback para Active Addresses) =====
 export const fetchBlockchairStats = async () => {
     try {
         const btc = await fetchWithRetry('https://api.blockchair.com/bitcoin/stats', {}, 2);
