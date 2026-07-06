@@ -361,7 +361,7 @@
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>📋 Metodologia V2 + Comitê</h4>
-                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados atualizados</strong> via CoinMetrics, bitcoin-data.com, Binance, Deribit, mempool.space, Farside Investors, DefiLlama.</p>
+                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados atualizados</strong> via CoinMetrics, bitcoin-data.com (via proxy), Binance, Deribit, mempool.space, Farside Investors (via proxy), DefiLlama.</p>
                     <p><strong>Última atualização bem‑sucedida:</strong> <span id="live-update-time">--</span></p>
                 </div>
             </div>
@@ -389,7 +389,7 @@
             setCurrentPrice,
             fetchMVRV,
             fetchCQActiveAddresses,
-            fetchHashrate, // agora unificada (mempool.space + CoinMetrics)
+            fetchHashrate,
             fetchSOPR,
             fetchRealizedPrice,
             fetchETFData,
@@ -1157,7 +1157,7 @@
                 }
                 setTextOrNA('active-addresses', cqActive);
 
-                // ===== SOPR e aSOPR (bitcoin-data.com) =====
+                // ===== SOPR e aSOPR (bitcoin-data.com via proxy) =====
                 const soprData = await fetchSOPR();
                 if (soprData) {
                     const soprEl = document.getElementById('sopr');
@@ -1174,11 +1174,11 @@
                     }
                 }
 
-                // ===== Realized Price =====
+                // ===== Realized Price (via proxy) =====
                 const realizedPrice = await fetchRealizedPrice();
                 setTextOrNA('realized-price', realizedPrice !== null ? '$' + realizedPrice.toFixed(2) : null);
 
-                // ===== ETF Flows =====
+                // ===== ETF Flows (via proxy) =====
                 const etf = await fetchETFData();
                 if (etf) {
                     const btcEl = document.getElementById('etf-btc-live');
@@ -1226,7 +1226,7 @@
                     document.getElementById('put-call-interp').textContent = pcr > 1.5 ? '⚠️ Medo' : pcr < 0.7 ? '✅ Otimismo' : 'ℹ️ Neutro';
                 }
 
-                // ===== Hashrate (unificada) =====
+                // ===== Hashrate =====
                 const hashrate = await fetchHashrate();
                 if (hashrate !== null) {
                     document.getElementById('btc-hashrate').textContent = (hashrate / 1e6).toFixed(2) + ' EH/s';
