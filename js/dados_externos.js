@@ -1,4 +1,4 @@
-// js/dados_externos.js – apenas funções essenciais para o Score/Sinal
+// js/dados_externos.js – completo com Alpha Vantage para Macro
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
@@ -59,6 +59,9 @@ function setCachedData(key, data) {
     try { localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() })); } catch(e) { /* ignore */ }
 }
 
+// ===== SLEEP (para evitar rate limit) =====
+export function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 // ============================================================
 // 1. ETH GAS PRICE
 // ============================================================
@@ -94,19 +97,77 @@ export const fetchEthGasPrice = async () => {
 };
 
 // ============================================================
-// 2. MACRO – estático
+// 2. MACRO – Alpha Vantage (com fallback estático)
 // ============================================================
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
     const cached = getCachedData(cacheKey, 300000);
-    if (cached) return cached;
-    const macro = { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
-    setCachedData(cacheKey, macro);
-    return macro;
+    if (cached && !cached.stale) return cached;
+
+    const apiKey = CONFIG.ALPHAVANTAGE_API_KEY;
+    if (!apiKey) {
+        console.warn('[Macro] Alpha Vantage API key não configurada. Usando fallback estático.');
+        if (cached) return cached;
+        return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
+    }
+
+    try {
+        // Símbolos da Alpha Vantage
+        const symbols = ['DXY', 'DGS10', 'VIX', 'SPX', 'NDX'];
+        
+        // Função para buscar um símbolo com delay (evita rate limit de 5/min)
+        const fetchSymbol = async (symbol) => {
+            await sleep(300); // 300ms entre cada chamada
+            return await fetchWithRetry(
+                `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`,
+                {},
+                2
+            );
+        };
+
+        const results = await Promise.all(symbols.map(s => fetchSymbol(s)));
+
+        // Função para extrair o preço (05. price)
+        const parseQuote = (data, defaultVal) => {
+            try {
+                const val = data?.['Global Quote']?.['05. price'];
+                return val !== undefined && val !== null ? parseFloat(val) : defaultVal;
+            } catch(e) { return defaultVal; }
+        };
+
+        // Função para extrair a variação percentual (10. change percent)
+        const parseChange = (data, defaultVal) => {
+            try {
+                const val = data?.['Global Quote']?.['10. change percent'];
+                if (val) return parseFloat(val.replace('%', ''));
+                return defaultVal;
+            } catch(e) { return defaultVal; }
+        };
+
+        const macro = {
+            dxy: parseQuote(results[0], 101.5),
+            us10y: parseQuote(results[1], 4.28),
+            vix: parseQuote(results[2], 20.5),
+            spChange: parseChange(results[3], -0.5),
+            nasdaqChange: parseChange(results[4], -0.8)
+        };
+
+        // Validação simples: se todos vierem com os valores padrão, algo deu errado
+        if (macro.dxy === 101.5 && macro.us10y === 4.28 && macro.vix === 20.5) {
+            throw new Error('Dados inválidos retornados da Alpha Vantage');
+        }
+
+        setCachedData(cacheKey, macro);
+        return macro;
+    } catch (e) {
+        console.warn('[Macro] Alpha Vantage falhou, usando fallback:', e);
+        if (cached) return cached;
+        return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
+    }
 };
 
 // ============================================================
-// 3. FED RATE
+// 3. FED RATE (Alpha Vantage)
 // ============================================================
 export const fetchFedRate = async () => {
     const cacheKey = 'fedRate';
@@ -162,7 +223,7 @@ export const fetchHashrate = async () => {
     const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
-    // mempool.space (sem proxy, CORS liberado)
+    // mempool.space (CORS liberado)
     try {
         const data = await fetchWithRetry('https://mempool.space/api/v1/mining/hashrate/1d', {}, 2);
         if (data?.avgHashrate) {
@@ -300,7 +361,6 @@ const TIMEFRAME_TO_MINUTES = {
 let _currentPrices = { 'BTCUSDT':0,'ETHUSDT':0,'SOLUSDT':0 };
 export function setCurrentPrice(symbol, price) { _currentPrices[symbol] = price; }
 export function getCurrentPrice(symbol) { return _currentPrices[symbol] || 0; }
-export function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     const cacheKey = `candles_${symbol}_${interval}_${limit}`;
