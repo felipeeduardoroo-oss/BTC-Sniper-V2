@@ -21,6 +21,9 @@ export const CONFIG = {
     CRYPTOQUANT_API_KEY: '',
     // Alpha Vantage (para Fed Rate)
     ALPHAVANTAGE_API_KEY: 'QHIQIJB9SO2NI9IE' // <-- SUBSTITUA PELA CHAVE REAL
+        // ===== NOVO: CONFIGURAÇÕES DO JSONBIN =====
+    JSONBIN_MASTER_KEY: '$2a$10$az2hnvvlu5j9V0M78KGxdujpPxV/Vsl9MwOvllR52XWcyEZ6Nt7sq', // Cole a Master Key que copiou
+    JSONBIN_BIN_ID: '6a4c4be6da38895dfe3841c9'          // Cole o ID do bin que criou
 };
 
 export const COLORS = {
