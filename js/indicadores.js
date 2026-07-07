@@ -50,11 +50,11 @@ export function calculateRSI(candles, period = 14) {
 }
 
 // ============================================================
-// 2. DETECÇÃO DE DIVERGÊNCIA RSI (melhorada)
+// 2. DETECÇÃO DE DIVERGÊNCIA RSI (corrigida)
 // ============================================================
 
 export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
-    if (candles.length < lookback + 14) return null;
+    if (candles.length < lookback + 14 || rsiValues.length < lookback) return null;
     const priceData = candles.slice(-lookback);
     const rsiData = rsiValues.slice(-lookback);
     
@@ -83,7 +83,7 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
     const rsiHighs = findPeaks(rsiData);
     const rsiLows = findTroughs(rsiData);
     
-    // Divergência regular de alta (preço faz lower low, RSI faz higher low)
+    // Divergência regular de alta
     if (priceLows.length >= 2 && rsiLows.length >= 2) {
         const p1 = priceLows[priceLows.length - 2];
         const p2 = priceLows[priceLows.length - 1];
@@ -93,7 +93,7 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
             return { type: 'BULLISH_REGULAR', strength: (r2.value - r1.value) / r1.value };
         }
     }
-    // Divergência regular de baixa (preço faz higher high, RSI faz lower high)
+    // Divergência regular de baixa
     if (priceHighs.length >= 2 && rsiHighs.length >= 2) {
         const p1 = priceHighs[priceHighs.length - 2];
         const p2 = priceHighs[priceHighs.length - 1];
@@ -103,7 +103,6 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
             return { type: 'BEARISH_REGULAR', strength: (r1.value - r2.value) / r1.value };
         }
     }
-    // Divergência oculta de alta (preço faz higher low, RSI faz lower low) - não implementada
     return null;
 }
 
@@ -145,7 +144,6 @@ export function calculateADX(candles, period = 14) {
         minusDM.push((down > up && down > 0) ? down : 0);
     }
     
-    // Médias suavizadas (Wilder's smoothing)
     let atr = tr.slice(0, period).reduce((a,b) => a+b, 0) / period;
     let plus = plusDM.slice(0, period).reduce((a,b) => a+b, 0) / period;
     let minus = minusDM.slice(0, period).reduce((a,b) => a+b, 0) / period;
@@ -159,7 +157,6 @@ export function calculateADX(candles, period = 14) {
     const plusDI = (plus / atr) * 100;
     const minusDI = (minus / atr) * 100;
     const dx = (Math.abs(plusDI - minusDI) / (plusDI + minusDI)) * 100;
-    // ADX é a média móvel do DX (últimos periodos)
     let adx = dx;
     if (tr.length >= period * 2) {
         let sum = 0;
@@ -202,21 +199,21 @@ export function generateTrailingStopParams(candles, entryPrice, direction, atrMu
 }
 
 // ============================================================
-// 6. SCORE DE CONFIANÇA BASEADO EM CONFLUÊNCIA (Melhoria 10)
+// 6. SCORE DE CONFIANÇA (com ajuste de pesos e penalidades)
 // ============================================================
 
 export function calculateConfidenceScore(symbolData) {
     let score = 0;
     const reasons = [];
     const weights = {
-        mtfAlignment: 0.20,
+        mtfAlignment: 0.25,   // aumentado
         adxTrend: 0.15,
         volumeAnomaly: 0.15,
         fundingRate: 0.10,
         openInterest: 0.10,
         rsiDivergence: 0.15,
         macroFilter: 0.05,
-        smcStructure: 0.10
+        smcStructure: 0.15    // aumentado
     };
     
     if (symbolData.mtfAligned) { score += weights.mtfAlignment; reasons.push('MTF_ALIGNED'); }
@@ -225,18 +222,26 @@ export function calculateConfidenceScore(symbolData) {
     if (symbolData.fundingRate < -0.0001) { score += weights.fundingRate; reasons.push('FUNDING_NEGATIVE'); }
     else if (symbolData.fundingRate > 0.0001) { score -= weights.fundingRate * 0.5; reasons.push('FUNDING_POSITIVE'); }
     if (symbolData.openInterestTrend === 'INCREASING') { score += weights.openInterest; reasons.push('OI_RISING'); }
+    
+    // Divergência com penalidade maior para contradição
     if (symbolData.divergence) {
         if ((symbolData.direction === 'LONG' && symbolData.divergence.type === 'BULLISH_REGULAR') ||
             (symbolData.direction === 'SHORT' && symbolData.divergence.type === 'BEARISH_REGULAR')) {
             score += weights.rsiDivergence;
             reasons.push('DIVERGENCE_CONFIRMED');
         } else {
-            score -= weights.rsiDivergence * 0.7;
-            reasons.push('DIVERGENCE_CONTRADICT');
+            score -= weights.rsiDivergence * 1.5; // penalidade maior
+            reasons.push('DIVERGENCE_HARD_CONTRADICT');
         }
     }
     if (!symbolData.macroBlackout) { score += weights.macroFilter; reasons.push('MACRO_CLEAR'); }
     if (symbolData.smcStructure === 'BOS') { score += weights.smcStructure; reasons.push('SMC_BOS'); }
+    
+    // Exigir MTF para score alto
+    if (!symbolData.mtfAligned && score > 0.4) {
+        score = 0.4;
+        reasons.push('MTF_REQUIRED_FOR_HIGH_SCORE');
+    }
     
     const level = score >= 0.8 ? 'VERY_HIGH' :
                   score >= 0.6 ? 'HIGH' :
@@ -252,27 +257,46 @@ export function calculateConfidenceScore(symbolData) {
 }
 
 // ============================================================
-// 7. FILTRO MACRO (calendário de eventos)
+// 7. FILTRO MACRO (calendário de eventos) – com API dinâmica
 // ============================================================
 
-const macroEvents = [
-    { date: '2026-07-10', time: '14:00', event: 'FOMC Minutes', impact: 'HIGH' },
-    { date: '2026-07-12', time: '08:30', event: 'CPI Data', impact: 'HIGH' },
-    { date: '2026-07-15', time: '10:00', event: 'Fed Chair Speech', impact: 'MEDIUM' }
-];
-
-export function isHighImpactEventNow() {
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    for (const ev of macroEvents) {
-        if (ev.date === today) {
-            const [h, m] = ev.time.split(':').map(Number);
-            const eventHour = h; // assume 24h
-            const blackoutStart = (eventHour - 1 + 24) % 24;
-            const blackoutEnd = (eventHour + 1) % 24;
-            const currentHour = now.getHours();
-            if (currentHour >= blackoutStart && currentHour <= blackoutEnd) {
-                return { isBlackout: true, event: ev.event, impact: ev.impact };
+export async function isHighImpactEventNow() {
+    try {
+        // Usando uma API pública de calendário (fallback para estático se falhar)
+        const response = await fetch('https://nfs.faireconomy.media/cc/fred.json', { signal: AbortSignal.timeout(5000) });
+        const events = await response.json();
+        const now = new Date();
+        const today = now.toISOString().split('T')[0];
+        const currentHour = now.getHours();
+        
+        for (const ev of events) {
+            if (ev.country === 'US' && ev.date && ev.date.includes(today) && ev.impact === 'high') {
+                const eventHour = parseInt(ev.date.split('T')[1].split(':')[0]);
+                const blackoutStart = (eventHour - 1 + 24) % 24;
+                const blackoutEnd = (eventHour + 1) % 24;
+                if (currentHour >= blackoutStart && currentHour <= blackoutEnd) {
+                    return { isBlackout: true, event: ev.title, impact: 'HIGH' };
+                }
+            }
+        }
+    } catch(e) {
+        // Fallback para eventos manuais (atualizado)
+        const staticEvents = [
+            { date: '2026-07-10', time: '14:00', event: 'FOMC Minutes', impact: 'HIGH' },
+            { date: '2026-07-12', time: '08:30', event: 'CPI Data', impact: 'HIGH' },
+            { date: '2026-07-15', time: '10:00', event: 'Fed Chair Speech', impact: 'MEDIUM' }
+        ];
+        const now = new Date();
+        const today = now.toISOString().split('T')[0];
+        const currentHour = now.getHours();
+        for (const ev of staticEvents) {
+            if (ev.date === today) {
+                const eventHour = parseInt(ev.time.split(':')[0]);
+                const blackoutStart = (eventHour - 1 + 24) % 24;
+                const blackoutEnd = (eventHour + 1) % 24;
+                if (currentHour >= blackoutStart && currentHour <= blackoutEnd) {
+                    return { isBlackout: true, event: ev.event, impact: ev.impact };
+                }
             }
         }
     }
@@ -280,7 +304,45 @@ export function isHighImpactEventNow() {
 }
 
 // ============================================================
-// 8. FUNÇÕES EXISTENTES (mantidas para compatibilidade)
+// 8. NOVO: CÁLCULO DE VWAP (melhoria 4)
+// ============================================================
+
+export function calculateVWAP(candles) {
+    if (!candles.length) return 0;
+    let cumulativeTP = 0;
+    let cumulativeVol = 0;
+    for (const c of candles) {
+        const tp = (c.high + c.low + c.close) / 3;
+        cumulativeTP += tp * c.volume;
+        cumulativeVol += c.volume;
+    }
+    return cumulativeVol > 0 ? cumulativeTP / cumulativeVol : 0;
+}
+
+// ============================================================
+// 9. DETECÇÃO REAL DE BREAK OF STRUCTURE (BOS) – melhoria 2
+// ============================================================
+
+export function findSMCSetup(data, direction) {
+    if (data.swingHighs.length < 2 || data.swingLows.length < 2) return false;
+    const lastHigh = data.swingHighs[data.swingHighs.length - 1];
+    const prevHigh = data.swingHighs[data.swingHighs.length - 2];
+    const lastLow = data.swingLows[data.swingLows.length - 1];
+    const prevLow = data.swingLows[data.swingLows.length - 2];
+    const currentPrice = data.price;
+
+    if (direction === 'LONG') {
+        // BOS Bullish: preço quebra o último swing high
+        return currentPrice > lastHigh;
+    } else if (direction === 'SHORT') {
+        // BOS Bearish: preço quebra o último swing low
+        return currentPrice < lastLow;
+    }
+    return false;
+}
+
+// ============================================================
+// 10. FUNÇÕES EXISTENTES (mantidas para compatibilidade)
 // ============================================================
 
 export function updateSwingPoints(data) {
@@ -298,11 +360,6 @@ export function updateSwingPoints(data) {
             data.swingLows.push(closes[i]);
         }
     }
-}
-
-export function findSMCSetup(data, direction) {
-    // Simulação: sempre retorna true para não bloquear
-    return true;
 }
 
 export function checkMTFAlignment(mtfData) {
@@ -377,7 +434,6 @@ export function checkPortfolioExposure(activePositions, direction) {
 }
 
 export function isSafeToTrade() {
-    // Pode adicionar verificações de horário, etc.
     return true;
 }
 
@@ -392,7 +448,6 @@ export function KellyPositionSize(winRate, rr) {
 
 export function computeScore(symbol, assetsData, liqMap) {
     const data = assetsData[symbol];
-    // Score simplificado – na prática usa o confidence score
     const base = 50;
     const mtfScore = data.mtfConfluence?.score || 0;
     const adx = data.adx || 0;
@@ -457,7 +512,6 @@ export function updateStatefulRSI(state, price, prevPrice) {
 }
 
 export function calculateSignalScore(indicators) {
-    // Função legada para o comitê
     let score = 50;
     const reasons = [];
     if (indicators.rsi > 70) { score -= 10; reasons.push('RSI sobrecompra'); }
