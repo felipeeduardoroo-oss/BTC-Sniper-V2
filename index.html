@@ -442,6 +442,7 @@
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
     <script type="module">
+        // ===== IMPORTAÇÕES =====
         import {
             fetchHistoricalCandles,
             fetchFundingRate,
@@ -471,8 +472,6 @@
         import * as banco from './js/banco_de_dados.js';
         import * as historico from './js/historicos_sinais.js';
         import { CONFIG } from './js/config.js';
-        
-        // ===== IMPORTAÇÃO DO BACKTEST =====
         import { runBacktest } from './js/backtest.js';
 
         const {
@@ -594,7 +593,7 @@
             document.getElementById('exit-fill').style.width = exit + '%';
         }
 
-        // ===== HISTÓRICO DE SINAIS COM PERSISTÊNCIA =====
+        // ===== HISTÓRICO DE SINAIS =====
         let signalHistory = [];
 
         function loadSignalHistory() {
@@ -897,103 +896,65 @@
 
         // ===== UI DO PAINEL "FORÇA DO SINAL" (LEGADO) =====
         function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData) {
-    const bar = document.getElementById('scoreBar');
-    const val = document.getElementById('scoreValue');
-    const label = document.getElementById('scoreLabel');
+            const bar = document.getElementById('scoreBar');
+            const val = document.getElementById('scoreValue');
+            const label = document.getElementById('scoreLabel');
 
-    if (bar) bar.style.width = (scoreData?.score ?? 50) + '%';
-    if (val) val.textContent = scoreData?.score ?? 50;
+            if (bar) bar.style.width = scoreData.score + '%';
+            if (val) val.textContent = scoreData.score;
 
-    const colors = {
-        'MUITO FORTE': { bg: 'rgba(0,230,118,0.2)', color: '#00e676', border: '#00e676' },
-        'FORTE': { bg: 'rgba(0,200,83,0.15)', color: '#00c853', border: '#00c853' },
-        'MODERADO': { bg: 'rgba(255,193,7,0.15)', color: '#ffc107', border: '#ffc107' },
-        'NEUTRO': { bg: 'rgba(139,148,158,0.15)', color: '#8b949e', border: '#8b949e' },
-        'MODERADO CONTRA': { bg: 'rgba(255,152,0,0.15)', color: '#ff9800', border: '#ff9800' },
-        'FORTE CONTRA': { bg: 'rgba(255,82,82,0.15)', color: '#ff5252', border: '#ff5252' },
-        'MUITO FORTE CONTRA': { bg: 'rgba(255,23,68,0.2)', color: '#ff1744', border: '#ff1744' }
-    };
+            const colors = {
+                'MUITO FORTE': { bg: 'rgba(0,230,118,0.2)', color: '#00e676', border: '#00e676' },
+                'FORTE': { bg: 'rgba(0,200,83,0.15)', color: '#00c853', border: '#00c853' },
+                'MODERADO': { bg: 'rgba(255,193,7,0.15)', color: '#ffc107', border: '#ffc107' },
+                'NEUTRO': { bg: 'rgba(139,148,158,0.15)', color: '#8b949e', border: '#8b949e' },
+                'MODERADO CONTRA': { bg: 'rgba(255,152,0,0.15)', color: '#ff9800', border: '#ff9800' },
+                'FORTE CONTRA': { bg: 'rgba(255,82,82,0.15)', color: '#ff5252', border: '#ff5252' },
+                'MUITO FORTE CONTRA': { bg: 'rgba(255,23,68,0.2)', color: '#ff1744', border: '#ff1744' }
+            };
 
-    const c = colors[scoreData?.label] || colors['NEUTRO'];
-    if (label) {
-        label.style.background = c.bg;
-        label.style.color = c.color;
-        label.style.border = `1px solid ${c.border}`;
-        label.textContent = scoreData?.label || 'NEUTRO';
-    }
+            const c = colors[scoreData.label] || colors['NEUTRO'];
+            if (label) {
+                label.style.background = c.bg;
+                label.style.color = c.color;
+                label.style.border = `1px solid ${c.border}`;
+                label.textContent = scoreData.label;
+            }
 
-    // MTF Badges
-    const mtfContainer = document.getElementById('mtfBadges');
-    if (mtfContainer && mtfData && Array.isArray(mtfData.directions)) {
-        mtfContainer.innerHTML = mtfData.directions.map(d => {
-            const cls = d.dir === 'BULL' ? 'mtf-bull' : d.dir === 'BEAR' ? 'mtf-bear' : 'mtf-neutral';
-            return `<span class="mtf-badge ${cls}">${d.tf} ${d.dir}</span>`;
-        }).join('');
-    } else if (mtfContainer) {
-        mtfContainer.innerHTML = '';
-    }
+            const mtfContainer = document.getElementById('mtfBadges');
+            if (mtfContainer && mtfData && mtfData.directions) {
+                mtfContainer.innerHTML = mtfData.directions.map(d => {
+                    const cls = d.dir === 'BULL' ? 'mtf-bull' : d.dir === 'BEAR' ? 'mtf-bear' : 'mtf-neutral';
+                    return `<span class="mtf-badge ${cls}">${d.tf} ${d.dir}</span>`;
+                }).join('');
+            }
 
-    // Reasons
-    const reasonsContainer = document.getElementById('scoreReasons');
-    if (reasonsContainer && scoreData && Array.isArray(scoreData.reasons)) {
-        reasonsContainer.innerHTML = scoreData.reasons.map(r => {
-            const cls = r.includes('Contra') || r.includes('Baixo') || r.includes('Sem') || r.includes('Sobrecompra') || r.includes('Perigoso') ? 'negative' : 'positive';
-            return `<span class="reason-tag ${cls}">${r}</span>`;
-        }).join('');
-    } else if (reasonsContainer) {
-        reasonsContainer.innerHTML = '';
-    }
+            const reasonsContainer = document.getElementById('scoreReasons');
+            if (reasonsContainer) {
+                reasonsContainer.innerHTML = scoreData.reasons.map(r => {
+                    const cls = r.includes('Contra') || r.includes('Baixo') || r.includes('Sem') || r.includes('Sobrecompra') || r.includes('Perigoso') ? 'negative' : 'positive';
+                    return `<span class="reason-tag ${cls}">${r}</span>`;
+                }).join('');
+            }
 
-    // Funding Rate
-    const fundEl = document.getElementById('fundingDisplay');
-    if (fundEl && fundingData && fundingData.rate !== undefined && fundingData.rate !== null) {
-        const fColor = fundingData.rate > 0.01 ? '#ff5252' : fundingData.rate < -0.01 ? '#00e676' : '#ffc107';
-        fundEl.style.color = fColor;
-        fundEl.textContent = `${(fundingData.rate * 100).toFixed(4)}% — ${fundingData.interpretacao || 'EQUILIBRADO'}`;
-    } else if (fundEl) {
-        fundEl.textContent = '--';
-    }
+            const fundEl = document.getElementById('fundingDisplay');
+            if (fundEl && fundingData && fundingData.rate !== undefined) {
+                const fColor = fundingData.rate > 0.01 ? '#ff5252' : fundingData.rate < -0.01 ? '#00e676' : '#ffc107';
+                fundEl.style.color = fColor;
+                fundEl.textContent = `${(fundingData.rate * 100).toFixed(4)}% — ${fundingData.interpretacao || 'EQUILIBRADO'}`;
+            }
 
-    // ADX
-    const adxEl = document.getElementById('adxDisplay');
-    if (adxEl && adxData && adxData.adx !== undefined) {
-        const aColor = adxData.adx < 20 ? '#ff5252' : adxData.adx > 50 ? '#ff9800' : '#00e676';
-        adxEl.style.color = aColor;
-        adxEl.textContent = `${adxData.adx.toFixed(1)} ${adxData.adx < 20 ? '(Sem tendência)' : adxData.trend || '(Tendência)'}`;
-    } else if (adxEl) {
-        adxEl.textContent = '--';
-    }
+            const adxEl = document.getElementById('adxDisplay');
+            if (adxEl && adxData) {
+                const aColor = adxData.adx < 20 ? '#ff5252' : adxData.adx > 50 ? '#ff9800' : '#00e676';
+                adxEl.style.color = aColor;
+                adxEl.textContent = `${adxData.adx.toFixed(1)} ${adxData.adx < 20 ? '(Sem tendência)' : adxData.trend || '(Tendência)'}`;
+            }
 
-    // Order Book
-    const obContainer = document.getElementById('orderbookMini');
-    if (obContainer) {
-        if (obData && Array.isArray(obData.bids) && Array.isArray(obData.asks)) {
-            obContainer.innerHTML = renderMiniOrderBook(obData);
-        } else {
-            obContainer.innerHTML = '<span style="color:#8b949e;">Order Book indisponível</span>';
+            const obContainer = document.getElementById('orderbookMini');
+            if (obContainer) obContainer.innerHTML = renderMiniOrderBook(obData);
         }
-    }
 
-    // ===== 🔥 TEXTO CENTRAL (MAIN SIGNAL) =====
-    const mainSignalEl = document.getElementById('mainSignal');
-    if (mainSignalEl) {
-        const dir = scoreData?.direction;
-        const score = scoreData?.score ?? 50;
-        const labelText = scoreData?.label || 'NEUTRO';
-
-        if (dir === 'LONG' || dir === 'SHORT') {
-            const color = dir === 'LONG' ? '#00e676' : '#ff1744';
-            mainSignalEl.innerHTML = `
-                <div style="color:${color};font-size:20px;font-weight:900;">${dir}</div>
-                <div style="color:#8b949e;font-size:11px;">Score: ${score}/100 — ${labelText}</div>
-            `;
-        } else {
-            mainSignalEl.innerHTML = `
-                <div style="color:#8b949e;font-size:14px;">Sem direção definida (Score: ${score}/100)</div>
-            `;
-        }
-    }
-        }
         // ===== UPDATE WHALE UI =====
         function updateWhaleUI() {
             CONFIG.ASSETS.forEach(symbol => {
@@ -1022,21 +983,26 @@
             graficos.updateWhaleChart(whaleTrades);
         }
 
-        // ===== WEBSOCKET =====
+        // ===== WEBSOCKET COM FAILOVER (P1) =====
         let wsRetryCount = 0;
         const WS_MAX_RETRIES = 5;
+        let wsInstance = null;
+        let wsLiqInstance = null;
 
         function initWebSockets() {
             const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
+            
+            // Tenta Binance primeiro
             const tradeStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
             const klineStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@kline_15m').join('/');
             const streams = tradeStreams + '/' + klineStreams;
             const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+            wsInstance = ws;
 
             ws.onopen = () => {
                 wsRetryCount = 0;
                 if (wsStatusEl) {
-                    wsStatusEl.textContent = '🔄 WEBSOCKET LIVE';
+                    wsStatusEl.textContent = '🔄 WS LIVE (Binance)';
                     wsStatusEl.style.color = 'var(--accent-green)';
                     wsStatusEl.style.animation = 'pulse-dot 1.5s infinite';
                 }
@@ -1053,9 +1019,8 @@
                         const price = parseFloat(data.p);
                         const qty = parseFloat(data.q);
                         const isBuy = !data.m;
-
                         setCurrentPrice(symbol, price);
-
+                        // Whale tracker
                         const tradeValue = price * qty;
                         if (tradeValue > 100000) {
                             if (isBuy) whaleTrades[symbol].buys += tradeValue;
@@ -1068,32 +1033,28 @@
                             };
                             updateWhaleUI();
                         }
-
                         if (assetsData[symbol]) {
                             assetsData[symbol].price = price;
                             updateLivePriceUI(symbol, price);
                         }
-                    }
-                    else if (stream.includes('@kline')) {
+                    } else if (stream.includes('@kline')) {
                         const k = data.k;
                         const symbol = data.s;
                         if (assetsData[symbol] && k.x) {
-                            console.log(`[WS] Candle 15m fechado para ${symbol}, forçando avaliação.`);
                             setTimeout(() => evaluateMarkets(), 1000);
                         }
                     }
-                } catch (e) {
-                    // ignora mensagens malformadas
-                }
+                } catch (e) { /* ignora */ }
             };
 
             ws.onerror = (e) => {
-                console.warn('WS Error', e);
+                console.warn('WS Error (Binance)', e);
                 if (wsStatusEl) {
-                    wsStatusEl.textContent = '❌ WS OFFLINE';
+                    wsStatusEl.textContent = '❌ WS OFFLINE (Binance)';
                     wsStatusEl.style.color = 'var(--accent-red)';
                     wsStatusEl.style.animation = 'none';
                 }
+                tryFallbackWS();
             };
 
             ws.onclose = () => {
@@ -1107,15 +1068,67 @@
                 if (wsRetryCount <= WS_MAX_RETRIES) {
                     setTimeout(initWebSockets, delay);
                 } else {
-                    if (wsStatusEl) {
-                        wsStatusEl.textContent = '⛔ WS FALHOU (limite)';
-                        wsStatusEl.style.color = 'var(--accent-red)';
-                    }
+                    tryFallbackWS();
                 }
             };
 
-            // Liquidações
+            // Fallback para Bybit
+            function tryFallbackWS() {
+                if (wsInstance && wsInstance.readyState !== WebSocket.CLOSED) return;
+                const bybitWs = new WebSocket('wss://stream.bybit.com/v5/public/spot');
+                wsInstance = bybitWs;
+                bybitWs.onopen = () => {
+                    if (wsStatusEl) {
+                        wsStatusEl.textContent = '🔄 WS FALLBACK (Bybit)';
+                        wsStatusEl.style.color = 'var(--accent-yellow)';
+                        wsStatusEl.style.animation = 'pulse-dot 1.5s infinite';
+                    }
+                    const topics = CONFIG.ASSETS.map(a => `publicTrade.${a}`).join(',');
+                    bybitWs.send(JSON.stringify({
+                        op: 'subscribe',
+                        args: topics.split(',')
+                    }));
+                };
+                bybitWs.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        if (msg.type === 'snapshot' && msg.topic && msg.topic.startsWith('publicTrade')) {
+                            const symbol = msg.topic.split('.')[1];
+                            const trade = msg.data[0];
+                            const price = parseFloat(trade.price);
+                            const qty = parseFloat(trade.size);
+                            const isBuy = trade.side === 'Buy';
+                            setCurrentPrice(symbol, price);
+                            const tradeValue = price * qty;
+                            if (tradeValue > 100000) {
+                                if (isBuy) whaleTrades[symbol].buys += tradeValue;
+                                else whaleTrades[symbol].sells += tradeValue;
+                                whaleTrades[symbol].lastTx = {
+                                    price,
+                                    value: tradeValue,
+                                    time: Date.now(),
+                                    side: isBuy ? 'BUY' : 'SELL'
+                                };
+                                updateWhaleUI();
+                            }
+                            if (assetsData[symbol]) {
+                                assetsData[symbol].price = price;
+                                updateLivePriceUI(symbol, price);
+                            }
+                        }
+                    } catch(e) { /* ignora */ }
+                };
+                bybitWs.onclose = () => {
+                    if (wsStatusEl) {
+                        wsStatusEl.textContent = '⛔ WS FALHOU (todos)';
+                        wsStatusEl.style.color = 'var(--accent-red)';
+                    }
+                };
+            }
+
+            // Liquidações (isolado)
             const wsLiq = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
+            wsLiqInstance = wsLiq;
             wsLiq.onmessage = (event) => {
                 try {
                     const orders = JSON.parse(event.data);
@@ -1134,7 +1147,15 @@
                     });
                 } catch (e) { /* ignora */ }
             };
-            wsLiq.onclose = () => setTimeout(initWebSockets, 5000);
+            wsLiq.onclose = () => {
+                setTimeout(() => {
+                    if (wsLiqInstance && wsLiqInstance.readyState === WebSocket.CLOSED) {
+                        wsLiqInstance = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
+                        wsLiqInstance.onmessage = wsLiq.onmessage;
+                        wsLiqInstance.onclose = wsLiq.onclose;
+                    }
+                }, 5000);
+            };
 
             setInterval(() => {
                 Object.keys(liqMap).forEach(k => liqMap[k] = { longs: 0, shorts: 0 });
@@ -1183,10 +1204,8 @@
             updateAnalysisScores(s);
         }
 
-        // ===== ACTIVE TRADES UI (agora somente backtest) =====
-        function updateActiveTradesUI() {
-            // Não há mais posições ativas, mantemos a função vazia.
-        }
+        // ===== ACTIVE TRADES UI =====
+        function updateActiveTradesUI() {}
 
         // ===== POSITION MANAGEMENT =====
         function checkPositionManagement(symbol, currentPrice) {
@@ -1301,19 +1320,17 @@
             }));
         }
 
-        // ===== AVALIAÇÃO DE MERCADO (com todas as correções) =====
+        // ===== AVALIAÇÃO DE MERCADO =====
         async function evaluateMarkets() {
             for (const symbol of CONFIG.ASSETS) {
                 const data = assetsData[symbol];
                 updateSwingPoints(data);
                 
-                // --- 1. Cálculo do ADX ---
                 const adxData = calculateADX(data.candles1H);
                 data.adx = adxData.adx;
                 data.plusDI = adxData.plusDI;
                 data.minusDI = adxData.minusDI;
                 
-                // --- 2. Divergência RSI (corrigida) ---
                 let rsiValues = [];
                 let avgGain = 0, avgLoss = 0;
                 const closes1H = data.candles1H.map(c => c.close);
@@ -1334,7 +1351,6 @@
                 const divergence = detectRSIDivergence(data.candles1H, rsiValues);
                 data.divergence = divergence;
                 
-                // --- 3. Volume anômalo adaptativo ---
                 const currentATR = data.atr_1H || 0;
                 const avgPrice = data.candles1H.slice(-20).reduce((s,c) => s+c.close,0)/20;
                 const volatilityPct = avgPrice > 0 ? (currentATR / avgPrice) * 100 : 1.5;
@@ -1342,15 +1358,12 @@
                 const volAnomaly = detectVolumeAnomaly(data.candles1H, 20, volThreshold);
                 data.volumeAnomaly = volAnomaly;
                 
-                // --- 4. Cálculo do VWAP ---
                 const vwap = calculateVWAP(data.candles1H);
                 data.vwap = vwap;
                 
-                // --- 5. Macro blackout (dinâmico) ---
                 const macroCheck = await isHighImpactEventNow();
                 data.macroBlackout = macroCheck.isBlackout && macroCheck.impact === 'HIGH';
                 
-                // --- 6. Score com ConfidenceScorer ajustado ---
                 const scoreData = computeScore(symbol, assetsData, liqMap);
                 const confidence = calculateConfidenceScore({
                     mtfAligned: data.mtfConfluence?.alinhado || false,
@@ -1367,7 +1380,6 @@
                 const score = confidence.score;
                 let blockReason = scoreData.blockReason;
                 
-                // --- 7. Filtros de bloqueio ---
                 if (data.adx < 25 && !blockReason) {
                     blockReason = blockReason ? blockReason + '; ADX < 25 (lateral)' : 'ADX < 25 (lateral)';
                 }
@@ -1393,7 +1405,6 @@
                     if (!derivCheck.allow) blockReason = derivCheck.reason;
                 }
                 
-                // --- 8. Atualização da UI ---
                 if (symbol === 'BTCUSDT') {
                     updateMainScoreUI(scoreData, blockReason);
                     const confEl = document.getElementById('confidence-score');
@@ -1404,7 +1415,6 @@
                     }
                 }
                 
-                // --- 9. Lógica de entrada (com todos os filtros) ---
                 const prevScore = previousScores[symbol] || 50;
                 if (!activePositions[symbol] && !blockReason && isSafeToTrade()) {
                     const now = Date.now();
@@ -1632,7 +1642,7 @@
 
             setTimeout(runCommittee, 1000);
 
-            // ===== FORÇA DO SINAL ATUALIZANDO A CADA 10 SEGUNDOS (AJUSTE SOLICITADO) =====
+            // ===== FORÇA DO SINAL ATUALIZANDO A CADA 10 SEGUNDOS =====
             setInterval(async () => {
                 const symbol = 'BTCUSDT';
                 try {
@@ -1646,7 +1656,21 @@
                 } catch (e) {
                     console.warn('Erro ao atualizar Força do Sinal:', e);
                 }
-            }, 10000); // <--- 10 segundos
+            }, 10000);
+
+            // ===== FEAR & GREED DINÂMICO (P4) =====
+            setInterval(async () => {
+                const fg = await fetchFearGreed();
+                if (fg) {
+                    document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
+                    document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
+                    const badge = document.querySelector('.badge.sentiment-bearish');
+                    if (badge) {
+                        badge.className = fg.value <= 25 ? 'badge sentiment-bearish' : 'badge sentiment-bullish';
+                        badge.textContent = fg.value <= 25 ? '⚠️ SENTIMENTO: PESSIMISTA' : '✅ SENTIMENTO: OTIMISTA';
+                    }
+                }
+            }, 600000); // 10 minutos
 
             setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
