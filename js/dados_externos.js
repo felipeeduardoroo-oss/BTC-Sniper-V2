@@ -1,4 +1,4 @@
-// js/dados_externos.js – completo com fallbacks
+// js/dados_externos.js – completo com Alpha Vantage para Macro
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
@@ -59,6 +59,7 @@ function setCachedData(key, data) {
     try { localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() })); } catch(e) { /* ignore */ }
 }
 
+// ===== SLEEP (para evitar rate limit) =====
 export function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ============================================================
@@ -96,7 +97,7 @@ export const fetchEthGasPrice = async () => {
 };
 
 // ============================================================
-// 2. MACRO – Alpha Vantage + Yahoo fallback
+// 2. MACRO – Alpha Vantage (com fallback estático)
 // ============================================================
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
@@ -105,14 +106,13 @@ export const fetchMacroStatic = async () => {
 
     const apiKey = CONFIG.ALPHAVANTAGE_API_KEY;
     if (!apiKey) {
-        console.warn('[Macro] Alpha Vantage API key não configurada. Usando fallback.');
+        console.warn('[Macro] Alpha Vantage API key não configurada. Usando fallback estático.');
         if (cached) return cached;
         return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
     }
 
     try {
         const symbols = ['DXY', 'DGS10', 'VIX', 'SPX', 'NDX'];
-        
         const fetchSymbol = async (symbol) => {
             await sleep(300);
             return await fetchWithRetry(
@@ -121,7 +121,6 @@ export const fetchMacroStatic = async () => {
                 2
             );
         };
-
         const results = await Promise.all(symbols.map(s => fetchSymbol(s)));
 
         const parseQuote = (data, defaultVal) => {
@@ -130,7 +129,6 @@ export const fetchMacroStatic = async () => {
                 return val !== undefined && val !== null ? parseFloat(val) : defaultVal;
             } catch(e) { return defaultVal; }
         };
-
         const parseChange = (data, defaultVal) => {
             try {
                 const val = data?.['Global Quote']?.['10. change percent'];
@@ -147,61 +145,18 @@ export const fetchMacroStatic = async () => {
             nasdaqChange: parseChange(results[4], -0.8)
         };
 
-        // Se todos os valores vierem com fallback, tenta Yahoo
         if (macro.dxy === 101.5 && macro.us10y === 4.28 && macro.vix === 20.5) {
-            throw new Error('Alpha Vantage retornou dados inválidos, tentando Yahoo...');
+            throw new Error('Dados inválidos retornados da Alpha Vantage');
         }
 
         setCachedData(cacheKey, macro);
         return macro;
     } catch (e) {
-        console.warn('[Macro] Alpha Vantage falhou, tentando Yahoo via proxy:', e);
-        try {
-            // Yahoo Finance via proxy (corsproxy.io)
-            const fetchYahoo = async (ticker) => {
-                const data = await fetchViaProxy(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`, 2);
-                if (data?.chart?.result?.[0]?.meta) {
-                    const meta = data.chart.result[0].meta;
-                    return { current: meta.regularMarketPrice, change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 };
-                }
-                return null;
-            };
-            const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
-                fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), fetchYahoo('^GSPC'), fetchYahoo('^NDX')
-            ]);
-            const macro = {
-                dxy: dxy?.current || 101.5,
-                us10y: us10y?.current || 4.28,
-                vix: vix?.current || 20.5,
-                spChange: sp?.change || -0.5,
-                nasdaqChange: nasdaq?.change || -0.8
-            };
-            setCachedData(cacheKey, macro);
-            return macro;
-        } catch(e2) {
-            console.warn('[Macro] Yahoo também falhou, usando cache ou estático:', e2);
-            if (cached) return cached;
-            return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
-        }
+        console.warn('[Macro] Alpha Vantage falhou, usando fallback:', e);
+        if (cached) return cached;
+        return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
     }
 };
-
-// Proxy CORS (reutilizado)
-async function fetchViaProxy(targetUrl, retries = 2) {
-    const primary = `${CONFIG.PROXY_URL}${encodeURIComponent(targetUrl)}`;
-    try {
-        return await fetchWithRetry(primary, {}, retries);
-    } catch (e) {
-        console.warn('[Proxy] Primário (corsproxy.io) falhou, tentando fallback (allorigins.win):', e);
-        const fallback = `${CONFIG.PROXY_FALLBACK}${encodeURIComponent(targetUrl)}`;
-        try {
-            return await fetchWithRetry(fallback, {}, retries);
-        } catch(e2) {
-            console.warn('[Proxy] Fallback (allorigins.win) também falhou:', e2);
-            throw e2;
-        }
-    }
-}
 
 // ============================================================
 // 3. FED RATE (Alpha Vantage)
@@ -350,14 +305,13 @@ export const fetchPutCallRatio = async () => {
 };
 
 // ============================================================
-// 8. Basis (perp vs spot) – Binance + fallback Bybit
+// 8. Basis (perp vs spot) – Binance
 // ============================================================
 export const fetchBasis = async (symbol = 'BTCUSDT') => {
     const cacheKey = `basis_${symbol}`;
     const cached = getCachedData(cacheKey, 60000);
     if (cached && !cached.stale) return cached;
 
-    // 1) Tenta Binance
     try {
         const [perp, spot] = await Promise.all([
             fetchWithRetry(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`, {}, 2),
@@ -372,26 +326,11 @@ export const fetchBasis = async (symbol = 'BTCUSDT') => {
                 return basis;
             }
         }
-    } catch (e) { /* silencioso */ }
-
-    // 2) Fallback: Bybit
-    try {
-        const bybitSymbol = symbol.replace('USDT', '');
-        const [perp, spot] = await Promise.all([
-            fetchWithRetry(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${bybitSymbol}USDT`, {}, 2),
-            fetchWithRetry(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${bybitSymbol}USDT`, {}, 2)
-        ]);
-        const perpPrice = parseFloat(perp?.result?.list?.[0]?.markPrice);
-        const spotPrice = parseFloat(spot?.result?.list?.[0]?.lastPrice);
-        if (perpPrice && spotPrice && spotPrice > 0) {
-            const basis = ((perpPrice - spotPrice) / spotPrice) * 100;
-            setCachedData(cacheKey, basis);
-            return basis;
-        }
-    } catch (e) { /* silencioso */ }
-
-    if (cached) return cached;
-    return null;
+        return null;
+    } catch (e) {
+        if (cached) return cached;
+        return null;
+    }
 };
 
 // ============================================================
@@ -521,4 +460,126 @@ export const fetchOpenInterest = async (symbol) => {
     return null;
 };
 
-export const fetchOrderBook = async (symbol = 'BTCUSDT', limit =
+export const fetchOrderBook = async (symbol = 'BTCUSDT', limit = 10) => {
+    const cacheKey = `ob_${symbol}`;
+    const cached = getCachedData(cacheKey, 15000);
+    if (cached && !cached.stale) return cached;
+
+    try {
+        const data = await fetchWithRetry(`https://api.binance.com/api/v3/depth?symbol=${symbol}&limit=${limit}`);
+        if (data?.bids && data?.asks) {
+            const bidTotal = data.bids.reduce((s, b) => s + parseFloat(b[1]) * parseFloat(b[0]), 0);
+            const askTotal = data.asks.reduce((s, a) => s + parseFloat(a[1]) * parseFloat(a[0]), 0);
+            const result = {
+                bids: data.bids.slice(0,5).map(b => ({ price: +b[0], qty: +b[1] })),
+                asks: data.asks.slice(0,5).map(a => ({ price: +a[0], qty: +a[1] })),
+                bidTotal, askTotal,
+                imbalance: ((bidTotal - askTotal) / (bidTotal + askTotal) * 100)
+            };
+            setCachedData(cacheKey, result);
+            return result;
+        }
+    } catch(e) { /* ignore */ }
+    if (cached) return cached;
+    return null;
+};
+
+export const fetchDeFiData = async () => {
+    const cacheKey = 'defiData';
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) return cached;
+
+    try {
+        const [stable, tvl] = await Promise.all([
+            fetchWithRetry('https://stablecoins.llama.fi/stablecoins', {}, 2),
+            fetchWithRetry('https://api.llama.fi/charts', {}, 2)
+        ]);
+        let total = 0;
+        stable?.peggedAssets?.forEach(a => total += a.total || 0);
+        let tvlVal = 0, tvlChange = 0;
+        if (tvl?.length > 1) {
+            tvlVal = tvl[tvl.length-1].totalLiquidityUSD;
+            const prev = tvl[tvl.length-2].totalLiquidityUSD;
+            tvlChange = ((tvlVal - prev) / prev) * 100;
+        }
+        const result = { totalStable: total/1e9, tvl: tvlVal/1e9, tvlChange };
+        setCachedData(cacheKey, result);
+        return result;
+    } catch(e) { /* ignore */ }
+    if (cached) return cached;
+    return null;
+};
+
+export const fetchTetherPremium = async () => {
+    const cacheKey = 'tetherPremium';
+    const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
+    if (cached && !cached.stale) return cached;
+
+    try {
+        const [crypto, fiat] = await Promise.all([
+            fetchWithRetry('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=brl', {}, 2),
+            fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD', {}, 2)
+        ]);
+        const usdtBrl = crypto?.tether?.brl;
+        const usdBrl = fiat?.rates?.BRL;
+        if (usdtBrl && usdBrl) {
+            const premium = ((usdtBrl / usdBrl) - 1) * 100;
+            setCachedData(cacheKey, premium);
+            return premium;
+        }
+    } catch(e) { /* ignore */ }
+    if (cached) return cached;
+    return 0;
+};
+
+export const fetchFearGreed = async () => {
+    const cacheKey = 'fng';
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) return cached;
+
+    try {
+        const data = await fetchWithRetry('https://api.alternative.me/fng/?limit=1', {}, 2);
+        const v = parseInt(data.data[0].value);
+        const color = v < 25 ? '#ff1744' : v < 45 ? '#ff9800' : v < 55 ? '#ffc107' : v < 75 ? '#8bc34a' : '#00e676';
+        const result = { value: v, classification: data.data[0].value_classification, color };
+        setCachedData(cacheKey, result);
+        return result;
+    } catch(e) { /* ignore */ }
+    if (cached) return cached;
+    return null;
+};
+
+export async function getMTFConfluence(symbol) {
+    const cacheKey = `mtf_${symbol}`;
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) return cached;
+
+    const timeframes = ['15m','1h','4h'];
+    const directions = [];
+    for (const tf of timeframes) {
+        const candles = await fetchHistoricalCandles(symbol, tf, 50);
+        if (!candles.length) continue;
+        const closes = candles.map(c => c.close);
+        const ema20 = calcEMA(closes, 20);
+        const ema50 = calcEMA(closes, 50);
+        const last = candles.length - 1;
+        if (ema20[last] > ema50[last] && candles[last].close > ema20[last]) directions.push({ tf, dir: 'BULL' });
+        else if (ema20[last] < ema50[last] && candles[last].close < ema20[last]) directions.push({ tf, dir: 'BEAR' });
+        else directions.push({ tf, dir: 'NEUTRO' });
+    }
+    const bulls = directions.filter(d => d.dir === 'BULL').length;
+    const bears = directions.filter(d => d.dir === 'BEAR').length;
+    const result = {
+        directions,
+        score: bulls - bears,
+        confluencia: Math.max(bulls, bears) === 3 ? 'FORTE' : Math.max(bulls, bears) === 2 ? 'MODERADA' : 'FRACA',
+        alinhado: Math.max(bulls, bears) >= 2
+    };
+    setCachedData(cacheKey, result);
+    return result;
+}
+
+// ===== COMPATIBILIDADE =====
+export const fetchFREDVIX = async () => null;
+export const fetchFREDUS10Y = async () => null;
+export const fetchFREDDXY = async () => null;
