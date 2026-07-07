@@ -36,7 +36,6 @@ async function fetchHistoricalFunding(symbol, startTime, endTime) {
 
 // ===== BUSCAR OI HISTÓRICO (limitado a 500 registros para evitar 400) =====
 async function fetchHistoricalOI(symbol, startTime, endTime) {
-    // Ajusta o startTime para os últimos 500 * 60 * 60 * 1000 ms = 500 horas
     const adjustedStart = Math.max(startTime, endTime - 500 * 60 * 60 * 1000);
     const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=1h&startTime=${adjustedStart}&endTime=${endTime}&limit=500`;
     logDebug('Buscando OI Histórico (limitado):', url);
@@ -113,9 +112,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         logDebug('Macro obtido com sucesso');
 
         // ===== SIMULAÇÃO =====
-        // CORREÇÃO: usar candles1H (maiúsculo) para compatibilidade com updateSwingPoints
         const state = {
-            candles1H: [],              // <-- maiúsculo!
+            candles1H: [],
             candles4h: candles4h || [],
             ema20_1H: 0,
             ema50_1H: 0,
@@ -145,7 +143,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         let equity = 10000;
         let highWaterMark = equity;
 
-        // ===== FUNÇÃO UPDATE INDICADORES =====
         function updateIndicators(candles) {
             try {
                 if (!candles || candles.length < 14) {
@@ -181,14 +178,11 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 const volMA = candles.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
                 state.volumeAnomaly = candles[candles.length - 1].volume > volMA * 2.0 ? 'ALTO' : 'NORMAL';
 
-                // 🔥 CORREÇÃO: updateSwingPoints espera apenas o state
+                // Corrigido: updateSwingPoints espera apenas o state
                 if (typeof updateSwingPoints === 'function') {
-                    updateSwingPoints(state);   // sem o segundo argumento
-                } else {
-                    logDebug('updateSwingPoints não está definida, ignorando.');
+                    updateSwingPoints(state);
                 }
 
-                // HTF structure
                 if (state.candles4h && state.candles4h.length > 50 && typeof detectHTFStructure === 'function') {
                     const htf = detectHTFStructure(state, state.candles4h);
                     if (htf) state.htfStructure = htf;
@@ -199,7 +193,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             }
         }
 
-        // ===== CHECK ENTRY =====
         function checkEntry(candle, index, allCandles) {
             try {
                 let score = 50;
@@ -223,13 +216,12 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             }
         }
 
-        // ===== LOOP PRINCIPAL =====
+        // Loop principal
         for (let i = 0; i < filteredCandles.length; i++) {
             const candle = filteredCandles[i];
-            state.candles1H.push(candle);          // agora com H maiúsculo
+            state.candles1H.push(candle);
             if (state.candles1H.length > 200) state.candles1H.shift();
 
-            // Atualizar funding e OI
             const fundingAtTime = fundingHist.find(f => f.time <= candle.time * 1000) || fundingHist[0];
             state.fundingRate = fundingAtTime ? fundingAtTime.rate : 0;
 
@@ -243,7 +235,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             state.mvrv = mvrvAtTime ? mvrvAtTime.value : null;
             state.macroBlackout = false;
 
-            // Atualizar indicadores (com proteção)
             if (state.candles1H.length >= 50) {
                 try {
                     updateIndicators(state.candles1H);
@@ -271,7 +262,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                         position.sizeRemaining = 0.5;
                         position.trailingStop = Math.max(position.trailingStop, position.entryPrice + state.atr_1H * 0.1);
                     }
-                } else { // SHORT
+                } else {
                     if (low <= position.tp2) { exitPrice = position.tp2; closed = true; reason = 'TP2'; }
                     else if (high >= position.trailingStop) { exitPrice = position.trailingStop; closed = true; reason = 'Trailing Stop'; }
                     else if (low <= position.tp1 && !position.partialTaken) {
