@@ -168,12 +168,12 @@ export const fetchEthGasPrice = async () => {
 // ============================================================
 // 2. MACRO — CORREÇÃO #7 (funciona sem Alpha Vantage key)
 // ============================================================
+// dentro de dados_externos.js, substitua a função fetchMacroStatic por esta:
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
     const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
-    // Se tiver Alpha Vantage key, usa (mais confiável)
     if (CONFIG.ALPHAVANTAGE_API_KEY) {
         try {
             const symbols = ['DXY', 'DGS10', 'VIX', 'SPX', 'NDX'];
@@ -211,17 +211,21 @@ export const fetchMacroStatic = async () => {
         }
     }
 
-    // Fallback: Yahoo Finance via proxy (não precisa de API key)
+    // Fallback Yahoo Finance
     try {
         const fetchYahoo = async (ticker) => {
-            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`;
-            const data = await fetchViaProxy(url, {}, 2);
-            if (data?.chart?.result?.[0]?.meta) {
-                const meta = data.chart.result[0].meta;
-                return { 
-                    current: meta.regularMarketPrice, 
-                    change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 
-                };
+            try {
+                const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`;
+                const data = await fetchViaProxy(url, {}, 2);
+                if (data?.chart?.result?.[0]?.meta) {
+                    const meta = data.chart.result[0].meta;
+                    return { 
+                        current: meta.regularMarketPrice, 
+                        change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 
+                    };
+                }
+            } catch(e) {
+                console.warn(`[Yahoo] Falha ao buscar ${ticker}:`, e.message);
             }
             return null;
         };
