@@ -20,7 +20,7 @@ function logDebug(message, data = null) {
 
 // ===== BUSCAR FUNDING RATE HISTÓRICO =====
 async function fetchHistoricalFunding(symbol, startTime, endTime) {
-    const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
+    const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&startTime=${startTime}&endTime=${endTime}&limit=500`;
     logDebug('Buscando Funding Rate:', url);
     try {
         const data = await fetchWithRetry(url, {}, 2);
@@ -34,10 +34,13 @@ async function fetchHistoricalFunding(symbol, startTime, endTime) {
     }
 }
 
-// ===== BUSCAR OI HISTÓRICO =====
+// ===== BUSCAR OI HISTÓRICO (limitado a 500 registros para evitar 400) =====
 async function fetchHistoricalOI(symbol, startTime, endTime) {
-    const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=1h&startTime=${startTime}&endTime=${endTime}&limit=1000`;
-    logDebug('Buscando OI Histórico:', url);
+    // A Binance limita a 500 registros para period=1h, então pegamos os últimos 500 pontos
+    // Ajustamos o startTime para ser apenas os últimos 500 * 60 * 60 * 1000 ms = 500 horas atrás
+    const adjustedStart = Math.max(startTime, endTime - 500 * 60 * 60 * 1000);
+    const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=1h&startTime=${adjustedStart}&endTime=${endTime}&limit=500`;
+    logDebug('Buscando OI Histórico (limitado):', url);
     try {
         const data = await fetchWithRetry(url, {}, 2);
         if (Array.isArray(data)) {
@@ -78,7 +81,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
     logDebug(`Período: ${startDateStr} a ${endDateStr}`);
 
     try {
-        // 1. Buscar candles (sempre garantir que são arrays)
+        // 1. Buscar candles
         logDebug('Buscando candles 1h...');
         const candles1h = (await fetchHistoricalCandles(symbol, '1h', 800)) || [];
         logDebug(`Candles 1h obtidos: ${candles1h.length}`);
@@ -87,14 +90,13 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         const candles4h = (await fetchHistoricalCandles(symbol, '4h', 200)) || [];
         logDebug(`Candles 4h obtidos: ${candles4h.length}`);
 
-        // Filtrar pelo período
         const filteredCandles = candles1h.filter(c => c.time >= startTime / 1000 && c.time <= endTime / 1000);
         logDebug(`Candles filtrados no período: ${filteredCandles.length}`);
         if (filteredCandles.length === 0) {
             return { trades: [], summary: { error: 'Nenhum candle encontrado no período. Verifique as datas.' } };
         }
 
-        // 2. Buscar dados complementares com fallback para arrays vazios
+        // 2. Buscar dados complementares
         logDebug('Buscando Funding Rate...');
         const fundingHist = (await fetchHistoricalFunding(symbol, startTime, endTime)) || [];
         logDebug(`Funding obtido: ${fundingHist.length} registros`);
@@ -121,8 +123,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             rsiState: { avgGain: 0, avgLoss: 0, rsi: 50 },
             atr_1h: 0,
             atrHistory: [],
-            swingHighs: [],
-            swingLows: [],
+            swingHighs: [],   // garantido como array
+            swingLows: [],    // garantido como array
             currentBOS: 'NEUTRAL',
             htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity },
             price: 0,
@@ -143,71 +145,91 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         let equity = 10000;
         let highWaterMark = equity;
 
+        // ===== FUNÇÃO UPDATE INDICADORES COM PROTEÇÃO =====
         function updateIndicators(candles) {
-            if (!candles || candles.length < 14) return;
-            const closes = candles.map(c => c.close);
-            state.ema20_1h = calcEMA(closes, 20).slice(-1)[0] || closes[closes.length - 1];
-            state.ema50_1h = calcEMA(closes, 50).slice(-1)[0] || closes[closes.length - 1];
-            state.atr_1h = calculateATR(candles, 14);
-            state.atrHistory.push(state.atr_1h);
-            if (state.atrHistory.length > 100) state.atrHistory.shift();
+            try {
+                if (!candles || candles.length < 14) {
+                    logDebug('updateIndicators: candles insuficientes', candles?.length);
+                    return;
+                }
+                const closes = candles.map(c => c.close);
+                state.ema20_1h = calcEMA(closes, 20).slice(-1)[0] || closes[closes.length - 1];
+                state.ema50_1h = calcEMA(closes, 50).slice(-1)[0] || closes[closes.length - 1];
+                state.atr_1h = calculateATR(candles, 14);
+                state.atrHistory.push(state.atr_1h);
+                if (state.atrHistory.length > 100) state.atrHistory.shift();
 
-            let avgGain = 0,
-                avgLoss = 0;
-            for (let i = closes.length - 14; i < closes.length; i++) {
-                const diff = closes[i] - closes[i - 1];
-                if (diff > 0) avgGain += diff;
-                else avgLoss += Math.abs(diff);
-            }
-            avgGain /= 14;
-            avgLoss /= 14;
-            state.rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
+                let avgGain = 0, avgLoss = 0;
+                for (let i = closes.length - 14; i < closes.length; i++) {
+                    const diff = closes[i] - closes[i - 1];
+                    if (diff > 0) avgGain += diff;
+                    else avgLoss += Math.abs(diff);
+                }
+                avgGain /= 14;
+                avgLoss /= 14;
+                state.rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
 
-            const adxData = calculateADX(candles);
-            state.adx = adxData.adx || 0;
-            state.plusDI = adxData.plusDI || 0;
-            state.minusDI = adxData.minusDI || 0;
+                const adxData = calculateADX(candles);
+                state.adx = adxData.adx || 0;
+                state.plusDI = adxData.plusDI || 0;
+                state.minusDI = adxData.minusDI || 0;
 
-            let cumVol = 0,
-                cumVal = 0;
-            candles.forEach(c => { cumVol += c.volume;
-                cumVal += c.close * c.volume; });
-            state.vwap = cumVol > 0 ? cumVal / cumVol : closes[closes.length - 1];
+                let cumVol = 0, cumVal = 0;
+                candles.forEach(c => { cumVol += c.volume; cumVal += c.close * c.volume; });
+                state.vwap = cumVol > 0 ? cumVal / cumVol : closes[closes.length - 1];
 
-            const volMA = candles.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
-            state.volumeAnomaly = candles[candles.length - 1].volume > volMA * 2.0 ? 'ALTO' : 'NORMAL';
+                const volMA = candles.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
+                state.volumeAnomaly = candles[candles.length - 1].volume > volMA * 2.0 ? 'ALTO' : 'NORMAL';
 
-            updateSwingPoints(state, candles);
-            if (state.candles4h && state.candles4h.length > 50) {
-                state.htfStructure = detectHTFStructure(state, state.candles4h);
+                // Atualizar swings com proteção
+                if (typeof updateSwingPoints === 'function') {
+                    updateSwingPoints(state, candles);
+                } else {
+                    logDebug('updateSwingPoints não está definida, ignorando.');
+                }
+
+                // HTF structure
+                if (state.candles4h && state.candles4h.length > 50 && typeof detectHTFStructure === 'function') {
+                    const htf = detectHTFStructure(state, state.candles4h);
+                    if (htf) state.htfStructure = htf;
+                }
+            } catch (error) {
+                logDebug('ERRO em updateIndicators:', error.message);
+                throw error; // relança para ser capturado no loop
             }
         }
 
+        // ===== CHECK ENTRY =====
         function checkEntry(candle, index, allCandles) {
-            let score = 50;
-            if (state.ema20_1h > state.ema50_1h) score += 10;
-            if (state.adx > 25) score += 10;
-            if (state.rsiState.rsi > 50) score += 10;
-            if (state.volumeAnomaly === 'ALTO') score += 10;
-            if (state.htfStructure.bias === 'BULLISH') score += 10;
+            try {
+                let score = 50;
+                if (state.ema20_1h > state.ema50_1h) score += 10;
+                if (state.adx > 25) score += 10;
+                if (state.rsiState.rsi > 50) score += 10;
+                if (state.volumeAnomaly === 'ALTO') score += 10;
+                if (state.htfStructure && state.htfStructure.bias === 'BULLISH') score += 10;
 
-            let blockReason = null;
-            if (state.adx < 25) blockReason = 'ADX < 25';
-            if (state.macroBlackout) blockReason = 'Macro blackout';
-            if (state.htfStructure.bias === 'BEARISH' && score > 50) blockReason = 'HTF 4H Bearish';
-            if (state.fundingRate > 0.01) blockReason = 'Funding alto (longs caros)';
+                let blockReason = null;
+                if (state.adx < 25) blockReason = 'ADX < 25';
+                if (state.macroBlackout) blockReason = 'Macro blackout';
+                if (state.htfStructure && state.htfStructure.bias === 'BEARISH' && score > 50) blockReason = 'HTF 4H Bearish';
+                if (state.fundingRate > 0.01) blockReason = 'Funding alto (longs caros)';
 
-            const direction = score >= 70 ? 'LONG' : (score <= 30 ? 'SHORT' : null);
-            return { score, direction, blockReason };
+                const direction = score >= 70 ? 'LONG' : (score <= 30 ? 'SHORT' : null);
+                return { score, direction, blockReason };
+            } catch (error) {
+                logDebug('ERRO em checkEntry:', error.message);
+                return { score: 50, direction: null, blockReason: 'Erro interno' };
+            }
         }
 
-        // Loop principal
+        // ===== LOOP PRINCIPAL =====
         for (let i = 0; i < filteredCandles.length; i++) {
             const candle = filteredCandles[i];
             state.candles1h.push(candle);
             if (state.candles1h.length > 200) state.candles1h.shift();
 
-            // Atualizar funding e OI (com verificações)
+            // Atualizar funding e OI
             const fundingAtTime = fundingHist.find(f => f.time <= candle.time * 1000) || fundingHist[0];
             state.fundingRate = fundingAtTime ? fundingAtTime.rate : 0;
 
@@ -221,8 +243,14 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             state.mvrv = mvrvAtTime ? mvrvAtTime.value : null;
             state.macroBlackout = false;
 
+            // Atualizar indicadores (com proteção)
             if (state.candles1h.length >= 50) {
-                updateIndicators(state.candles1h);
+                try {
+                    updateIndicators(state.candles1h);
+                } catch (err) {
+                    logDebug(`Erro ao atualizar indicadores no candle ${i}:`, err.message);
+                    continue; // pula este candle
+                }
             } else {
                 continue;
             }
@@ -236,21 +264,17 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 let reason = '';
 
                 if (position.type === 'LONG') {
-                    if (high >= position.tp2) { exitPrice = position.tp2;
-                        closed = true;
-                        reason = 'TP2'; } else if (low <= position.trailingStop) { exitPrice = position.trailingStop;
-                        closed = true;
-                        reason = 'Trailing Stop'; } else if (high >= position.tp1 && !position.partialTaken) {
+                    if (high >= position.tp2) { exitPrice = position.tp2; closed = true; reason = 'TP2'; }
+                    else if (low <= position.trailingStop) { exitPrice = position.trailingStop; closed = true; reason = 'Trailing Stop'; }
+                    else if (high >= position.tp1 && !position.partialTaken) {
                         position.partialTaken = true;
                         position.sizeRemaining = 0.5;
                         position.trailingStop = Math.max(position.trailingStop, position.entryPrice + state.atr_1h * 0.1);
                     }
                 } else { // SHORT
-                    if (low <= position.tp2) { exitPrice = position.tp2;
-                        closed = true;
-                        reason = 'TP2'; } else if (high >= position.trailingStop) { exitPrice = position.trailingStop;
-                        closed = true;
-                        reason = 'Trailing Stop'; } else if (low <= position.tp1 && !position.partialTaken) {
+                    if (low <= position.tp2) { exitPrice = position.tp2; closed = true; reason = 'TP2'; }
+                    else if (high >= position.trailingStop) { exitPrice = position.trailingStop; closed = true; reason = 'Trailing Stop'; }
+                    else if (low <= position.tp1 && !position.partialTaken) {
                         position.partialTaken = true;
                         position.sizeRemaining = 0.5;
                         position.trailingStop = Math.min(position.trailingStop, position.entryPrice - state.atr_1h * 0.1);
@@ -354,7 +378,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             position = null;
         }
 
-        // Estatísticas (com verificações)
+        // Estatísticas
         const closedTrades = trades.filter(t => t.exitTime !== null && t.pnlPct !== null);
         const totalTrades = closedTrades.length;
         const wins = closedTrades.filter(t => parseFloat(t.pnlPct) > 0).length;
