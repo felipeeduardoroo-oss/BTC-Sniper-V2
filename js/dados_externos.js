@@ -1,9 +1,9 @@
-// js/dados_externos.js – Com todas as correções P0 a P4
+// js/dados_externos.js – Com todas as correções P0 a P4 + rodada 3
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
 // ============================================================
-// 0. NOVO HELPER: fetchViaProxy (P1)
+// 0. HELPER: fetchViaProxy com retry e jitter
 // ============================================================
 const PROXY_LIST = [
     'https://corsproxy.io/?url=',
@@ -13,31 +13,36 @@ const PROXY_LIST = [
 ];
 
 async function fetchViaProxy(url, options = {}, retries = 2) {
-    // Tenta diretamente primeiro (se CORS permitir)
+    // Tenta diretamente primeiro
     try {
         const resp = await fetchWithTimeout(url, options, 10000);
         if (resp.ok) {
             const text = await resp.text();
             try { return JSON.parse(text); } catch(e) { return text; }
         }
-    } catch (e) { /* falha, tenta proxy */ }
+    } catch (e) { /* continua para proxies */ }
 
-    // Tenta cada proxy em sequência
-    for (const proxy of PROXY_LIST) {
-        const proxyUrl = proxy + encodeURIComponent(url);
-        try {
-            const resp = await fetchWithTimeout(proxyUrl, options, 15000);
-            if (resp.ok) {
-                const text = await resp.text();
-                try { return JSON.parse(text); } catch(e) { return text; }
+    // Tenta cada proxy em sequência com jitter
+    for (let attempt = 0; attempt < retries; attempt++) {
+        for (const proxy of PROXY_LIST) {
+            const proxyUrl = proxy + encodeURIComponent(url);
+            try {
+                const resp = await fetchWithTimeout(proxyUrl, options, 15000);
+                if (resp.ok) {
+                    const text = await resp.text();
+                    try { return JSON.parse(text); } catch(e) { return text; }
+                }
+            } catch (e) { 
+                // Jitter antes de tentar próximo proxy
+                await sleep(200 + Math.random() * 300);
             }
-        } catch (e) { /* tenta próximo */ }
+        }
     }
     throw new Error(`Falha ao buscar ${url} após tentar todos os proxies`);
 }
 
 // ============================================================
-// HELPERS EXISTENTES (com ajustes)
+// HELPERS EXISTENTES
 // ============================================================
 export function fetchWithTimeout(url, options = {}, timeout = 15000) {
     return new Promise((resolve, reject) => {
@@ -71,54 +76,74 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
         } catch(e) {
             lastError = e;
             if (i === retries - 1) break;
-            const wait = CONFIG.RETRY_DELAY_MS * Math.pow(2, i) + 500 + Math.random() * 300;
+            const wait = (CONFIG.RETRY_DELAY_MS || 1000) * Math.pow(2, i) + 500 + Math.random() * 300;
             await new Promise(r => setTimeout(r, wait));
         }
     }
     throw lastError || new Error(`Falha ao buscar ${url}`);
 }
 
-// ===== CACHE COM STALE-WHILE-REVALIDATE (P3) =====
+// ===== CACHE COM STALE-WHILE-REVALIDATE + localStorage (P3 melhorado) =====
 const CACHE = new Map();
 
 function getCachedData(key, maxAge = CONFIG.CACHE_TTL_MS) {
-    const entry = CACHE.get(key);
-    if (!entry) return null;
-    const age = Date.now() - entry.timestamp;
-    if (age < maxAge) return entry.data;
-    if (age < CONFIG.STALE_CACHE_TTL_MS || age < 3600000) return { data: entry.data, stale: true };
+    // Primeiro tenta cache em memória
+    const memEntry = CACHE.get(key);
+    if (memEntry) {
+        const age = Date.now() - memEntry.timestamp;
+        if (age < maxAge) return memEntry.data;
+        if (age < (CONFIG.STALE_CACHE_TTL_MS || 3600000)) return { data: memEntry.data, stale: true };
+    }
+    // Fallback para localStorage
+    try {
+        const raw = localStorage.getItem(`cache_${key}`);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        const age = Date.now() - parsed.timestamp;
+        if (age < maxAge) return parsed.data;
+        if (age < (CONFIG.STALE_CACHE_TTL_MS || 3600000)) return { data: parsed.data, stale: true };
+    } catch(e) { /* ignore */ }
     return null;
 }
 
 function setCachedData(key, data) {
-    CACHE.set(key, { data, timestamp: Date.now() });
+    const entry = { data, timestamp: Date.now() };
+    CACHE.set(key, entry);
+    // Persiste também em localStorage (se não for muito grande)
+    try {
+        const str = JSON.stringify(entry);
+        if (str.length < 500000) { // 500KB limite
+            localStorage.setItem(`cache_${key}`, str);
+        }
+    } catch(e) { /* localStorage cheio ou indisponível */ }
 }
 
 export function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ============================================================
-// 1. ETH GAS PRICE (Blockchair via proxy) – P2
+// 1. ETH GAS PRICE — CORREÇÃO #7 (fallback sem API key)
 // ============================================================
 export const fetchEthGasPrice = async () => {
     const cacheKey = 'ethGas';
     const cached = getCachedData(cacheKey, 60000);
     if (cached && !cached.stale) return cached;
 
-    try {
-        // Etherscan (já é CORS-friendly)
-        const url = `https://api.etherscan.io/v2/api?chainid=1&module=gastracker&action=gasoracle&apikey=${CONFIG.ETHERSCAN_API_KEY}`;
-        const data = await fetchWithRetry(url, {}, 2);
-        if (data && data.status === '1' && data.result) {
-            const gasPrice = parseFloat(data.result.ProposeGasPrice);
-            setCachedData(cacheKey, gasPrice);
-            return gasPrice;
-        }
-    } catch(e) { /* fallback */ }
+    // Tenta Etherscan se tiver API key
+    if (CONFIG.ETHERSCAN_API_KEY) {
+        try {
+            const url = `https://api.etherscan.io/v2/api?chainid=1&module=gastracker&action=gasoracle&apikey=${CONFIG.ETHERSCAN_API_KEY}`;
+            const data = await fetchWithRetry(url, {}, 2);
+            if (data && data.status === '1' && data.result) {
+                const gasPrice = parseFloat(data.result.ProposeGasPrice);
+                setCachedData(cacheKey, gasPrice);
+                return gasPrice;
+            }
+        } catch(e) { /* fallback */ }
+    }
 
-    // Fallback via proxy (Blockchair)
+    // Fallback: Blockchair via proxy (sem API key necessária)
     try {
-        const proxyUrl = `https://api.allorigins.win/raw?url=https://api.blockchair.com/ethereum/stats`;
-        const data = await fetchWithRetry(proxyUrl, {}, 2);
+        const data = await fetchViaProxy('https://api.blockchair.com/ethereum/stats', {}, 2);
         if (data?.data?.gas_price) {
             const gwei = parseFloat(data.data.gas_price) / 1e9;
             setCachedData(cacheKey, gwei);
@@ -126,92 +151,144 @@ export const fetchEthGasPrice = async () => {
         }
     } catch(e) { /* silencioso */ }
 
+    // Último fallback: gas station pública
+    try {
+        const data = await fetchWithRetry('https://ethgasstation.info/api/ethgasAPI.json', {}, 2);
+        if (data?.average) {
+            const gwei = data.average / 10; // ethgasstation retorna em Gwei*10
+            setCachedData(cacheKey, gwei);
+            return gwei;
+        }
+    } catch(e) { /* silencioso */ }
+
     if (cached) return cached;
-    return 5;
+    return 5; // fallback estático
 };
 
 // ============================================================
-// 2. MACRO – Alpha Vantage (via proxy) – P2
+// 2. MACRO — CORREÇÃO #7 (funciona sem Alpha Vantage key)
 // ============================================================
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
     const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
-    const apiKey = CONFIG.ALPHAVANTAGE_API_KEY;
-    if (!apiKey) {
-        console.warn('[Macro] Alpha Vantage API key não configurada. Usando fallback estático.');
-        if (cached) return cached;
-        return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
-    }
+    // Se tiver Alpha Vantage key, usa (mais confiável)
+    if (CONFIG.ALPHAVANTAGE_API_KEY) {
+        try {
+            const symbols = ['DXY', 'DGS10', 'VIX', 'SPX', 'NDX'];
+            const fetchSymbol = async (symbol) => {
+                await sleep(300);
+                const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${CONFIG.ALPHAVANTAGE_API_KEY}`;
+                return await fetchViaProxy(url, {}, 2);
+            };
+            const results = await Promise.all(symbols.map(s => fetchSymbol(s)));
 
-    try {
-        const symbols = ['DXY', 'DGS10', 'VIX', 'SPX', 'NDX'];
-        const fetchSymbol = async (symbol) => {
-            await sleep(300);
-            const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
-            return await fetchViaProxy(url, {}, 2); // usando proxy
-        };
-        const results = await Promise.all(symbols.map(s => fetchSymbol(s)));
-
-        const parseQuote = (data, defaultVal) => {
-            try {
+            const parseQuote = (data, defaultVal) => {
                 const val = data?.['Global Quote']?.['05. price'];
                 return val !== undefined && val !== null ? parseFloat(val) : defaultVal;
-            } catch(e) { return defaultVal; }
-        };
-        const parseChange = (data, defaultVal) => {
-            try {
+            };
+            const parseChange = (data, defaultVal) => {
                 const val = data?.['Global Quote']?.['10. change percent'];
                 if (val) return parseFloat(val.replace('%', ''));
                 return defaultVal;
-            } catch(e) { return defaultVal; }
-        };
+            };
 
-        const macro = {
-            dxy: parseQuote(results[0], 101.5),
-            us10y: parseQuote(results[1], 4.28),
-            vix: parseQuote(results[2], 20.5),
-            spChange: parseChange(results[3], -0.5),
-            nasdaqChange: parseChange(results[4], -0.8)
-        };
+            const macro = {
+                dxy: parseQuote(results[0], 101.5),
+                us10y: parseQuote(results[1], 4.28),
+                vix: parseQuote(results[2], 20.5),
+                spChange: parseChange(results[3], -0.5),
+                nasdaqChange: parseChange(results[4], -0.8)
+            };
 
-        if (macro.dxy === 101.5 && macro.us10y === 4.28 && macro.vix === 20.5) {
-            throw new Error('Dados inválidos retornados da Alpha Vantage');
+            if (!(macro.dxy === 101.5 && macro.us10y === 4.28 && macro.vix === 20.5)) {
+                setCachedData(cacheKey, macro);
+                return macro;
+            }
+        } catch (e) {
+            console.warn('[Macro] Alpha Vantage falhou, tentando Yahoo:', e.message);
         }
+    }
 
+    // Fallback: Yahoo Finance via proxy (não precisa de API key)
+    try {
+        const fetchYahoo = async (ticker) => {
+            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`;
+            const data = await fetchViaProxy(url, {}, 2);
+            if (data?.chart?.result?.[0]?.meta) {
+                const meta = data.chart.result[0].meta;
+                return { 
+                    current: meta.regularMarketPrice, 
+                    change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 
+                };
+            }
+            return null;
+        };
+        
+        const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
+            fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), 
+            fetchYahoo('^GSPC'), fetchYahoo('^NDQ')
+        ]);
+        
+        const macro = {
+            dxy: dxy?.current || 101.5,
+            us10y: us10y?.current || 4.28,
+            vix: vix?.current || 20.5,
+            spChange: sp?.change || 0,
+            nasdaqChange: nasdaq?.change || 0
+        };
+        
         setCachedData(cacheKey, macro);
         return macro;
-    } catch (e) {
-        console.warn('[Macro] Alpha Vantage falhou, usando fallback:', e);
-        if (cached) return cached;
-        return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
+    } catch(e) {
+        console.warn('[Macro] Yahoo falhou:', e.message);
     }
+
+    if (cached) return cached;
+    return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
 };
 
 // ============================================================
-// 3. FED RATE (Alpha Vantage via proxy)
+// 3. FED RATE — CORREÇÃO #7 (funciona sem Alpha Vantage key)
 // ============================================================
 export const fetchFedRate = async () => {
     const cacheKey = 'fedRate';
     const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
     if (cached && !cached.stale) return cached;
 
+    if (CONFIG.ALPHAVANTAGE_API_KEY) {
+        try {
+            const url = `https://www.alphavantage.co/query?function=FEDERAL_FUNDS_RATE&interval=monthly&apikey=${CONFIG.ALPHAVANTAGE_API_KEY}`;
+            const data = await fetchViaProxy(url, {}, 2);
+            if (data?.data?.[0]?.value) {
+                const rate = parseFloat(data.data[0].value);
+                setCachedData(cacheKey, rate);
+                return rate;
+            }
+        } catch (e) { /* silencioso */ }
+    }
+
+    // Fallback: FRED CSV via proxy (sem API key)
     try {
-        const url = `https://www.alphavantage.co/query?function=FEDERAL_FUNDS_RATE&interval=monthly&apikey=${CONFIG.ALPHAVANTAGE_API_KEY}`;
-        const data = await fetchViaProxy(url, {}, 2);
-        if (data?.data?.[0]?.value) {
-            const rate = parseFloat(data.data[0].value);
-            setCachedData(cacheKey, rate);
-            return rate;
+        const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS';
+        const csv = await fetchViaProxy(url, {}, 2);
+        if (typeof csv === 'string') {
+            const lastLine = csv.trim().split('\n').pop();
+            const rate = parseFloat(lastLine.split(',')[1]);
+            if (!isNaN(rate) && rate > 0) {
+                setCachedData(cacheKey, rate);
+                return rate;
+            }
         }
     } catch (e) { /* silencioso */ }
+
     if (cached) return cached;
     return 4.33;
 };
 
 // ============================================================
-// 4. ON-CHAIN – MVRV, Active Addresses, Hashrate
+// 4. ON-CHAIN — CoinMetrics + fallbacks
 // ============================================================
 const CM_BASE = 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics';
 
@@ -271,7 +348,7 @@ export const fetchHashrate = async () => {
 };
 
 // ============================================================
-// 5. BLOCKCHAIR (via proxy) – P2
+// 5. BLOCKCHAIR via proxy + fallback mempool
 // ============================================================
 export const fetchBlockchairStats = async () => {
     const cacheKey = 'blockchair';
@@ -279,8 +356,7 @@ export const fetchBlockchairStats = async () => {
     if (cached && !cached.stale) return cached;
 
     try {
-        const url = 'https://api.blockchair.com/bitcoin/stats';
-        const data = await fetchViaProxy(url, {}, 2);
+        const data = await fetchViaProxy('https://api.blockchair.com/bitcoin/stats', {}, 2);
         if (data?.data) {
             const result = {
                 blockHeight: data.data.best_block_height || 0,
@@ -292,12 +368,16 @@ export const fetchBlockchairStats = async () => {
         }
     } catch(e) { /* fallback */ }
 
-    // Fallback: mempool.space
+    // Fallback: mempool.space para block height + mempool
     try {
-        const data = await fetchWithRetry('https://mempool.space/api/v1/blocks/tip/height', {}, 2);
-        const height = parseInt(data);
+        const [heightResp, mempoolResp] = await Promise.all([
+            fetchWithRetry('https://mempool.space/api/blocks/tip/height', {}, 2),
+            fetchWithRetry('https://mempool.space/api/mempool', {}, 2)
+        ]);
+        const height = parseInt(heightResp);
+        const mempoolSize = mempoolResp?.count || 0;
         if (!isNaN(height)) {
-            const result = { blockHeight: height, mempoolSize: 0, activeAddresses: 0 };
+            const result = { blockHeight: height, mempoolSize, activeAddresses: 0 };
             setCachedData(cacheKey, result);
             return result;
         }
@@ -308,7 +388,7 @@ export const fetchBlockchairStats = async () => {
 };
 
 // ============================================================
-// 6. OI Delta (Binance) – CORREÇÃO P0 (URL)
+// 6. OI Delta — CORREÇÃO P0 (URL) + otimização (1 requisição)
 // ============================================================
 export const fetchOIDelta = async (symbol = 'BTCUSDT') => {
     const cacheKey = `oi_delta_${symbol}`;
@@ -316,27 +396,51 @@ export const fetchOIDelta = async (symbol = 'BTCUSDT') => {
     if (cached && !cached.stale) return cached;
 
     try {
-        // Corrigido: símbolo sem ponto extra, parâmetro period
-        const currData = await fetchWithRetry(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=15m&limit=1`);
-        const currOi = currData?.length ? parseFloat(currData[0].sumOpenInterest) : 0;
-
-        const histData = await fetchWithRetry(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=15m&limit=97`);
-        if (histData?.length >= 97) {
-            const pastOi = parseFloat(histData[histData.length - 97].sumOpenInterest);
+        // Otimização: 1 requisição com 2 pontos (atual + 24h atrás)
+        const data = await fetchWithRetry(
+            `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=15m&limit=97`, {}, 2
+        );
+        if (data?.length >= 97) {
+            const currOi = parseFloat(data[data.length - 1].sumOpenInterest);
+            const pastOi = parseFloat(data[0].sumOpenInterest);
             const delta = pastOi > 0 ? ((currOi - pastOi) / pastOi) * 100 : 0;
             const result = { oi: currOi, delta };
             setCachedData(cacheKey, result);
             return result;
         }
-        return null;
+        // Se não tiver 97 pontos, usa o que tiver
+        if (data?.length >= 2) {
+            const currOi = parseFloat(data[data.length - 1].sumOpenInterest);
+            const pastOi = parseFloat(data[0].sumOpenInterest);
+            const delta = pastOi > 0 ? ((currOi - pastOi) / pastOi) * 100 : 0;
+            const result = { oi: currOi, delta };
+            setCachedData(cacheKey, result);
+            return result;
+        }
     } catch (e) {
-        if (cached) return cached;
-        return null;
+        // Fallback Bybit
+        try {
+            const resp = await fetchWithRetry(
+                `https://api.bybit.com/v5/market/open-interest?category=linear&symbol=${symbol}&intervalTime=15min&limit=96`, {}, 2
+            );
+            if (resp?.result?.list?.length >= 2) {
+                const list = resp.result.list;
+                const currOi = parseFloat(list[0].openInterest);
+                const pastOi = parseFloat(list[list.length - 1].openInterest);
+                const delta = pastOi > 0 ? ((currOi - pastOi) / pastOi) * 100 : 0;
+                const result = { oi: currOi, delta };
+                setCachedData(cacheKey, result);
+                return result;
+            }
+        } catch(e2) { /* silencioso */ }
     }
+
+    if (cached) return cached;
+    return null;
 };
 
 // ============================================================
-// 7. Put/Call Ratio (Deribit via proxy) – P2
+// 7. Put/Call Ratio via proxy
 // ============================================================
 export const fetchPutCallRatio = async () => {
     const cacheKey = 'pcr';
@@ -361,7 +465,7 @@ export const fetchPutCallRatio = async () => {
 };
 
 // ============================================================
-// 8. Basis (perp vs spot) – Binance
+// 8. Basis (perp vs spot)
 // ============================================================
 export const fetchBasis = async (symbol = 'BTCUSDT') => {
     const cacheKey = `basis_${symbol}`;
@@ -382,15 +486,31 @@ export const fetchBasis = async (symbol = 'BTCUSDT') => {
                 return basis;
             }
         }
-        return null;
     } catch (e) {
-        if (cached) return cached;
-        return null;
+        // Fallback Bybit
+        try {
+            const resp = await fetchWithRetry(
+                `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`, {}, 2
+            );
+            if (resp?.result?.list?.[0]) {
+                const item = resp.result.list[0];
+                const markPrice = parseFloat(item.markPrice);
+                const spotPrice = parseFloat(item.indexPrice);
+                if (spotPrice > 0) {
+                    const basis = ((markPrice - spotPrice) / spotPrice) * 100;
+                    setCachedData(cacheKey, basis);
+                    return basis;
+                }
+            }
+        } catch(e2) { /* silencioso */ }
     }
+
+    if (cached) return cached;
+    return null;
 };
 
 // ============================================================
-// 9. FUNÇÕES DE PREÇO E CANDLES (sem alterações)
+// 9. PREÇO E CANDLES — CORREÇÃO #8 (cache TTL por timeframe)
 // ============================================================
 const SYMBOL_TO_COINGECKO = {
     'BTCUSDT': 'bitcoin',
@@ -410,9 +530,13 @@ export function getCurrentPrice(symbol) { return _currentPrices[symbol] || 0; }
 
 export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     const cacheKey = `candles_${symbol}_${interval}_${limit}`;
-    const cached = getCachedData(cacheKey, 60000);
+    // Cache TTL dinâmico: 15m=30s, 1h=2min, 4h=5min, 1d=30min
+    const ttlMap = { '15m': 30000, '1h': 120000, '4h': 300000, '1d': 1800000 };
+    const ttl = ttlMap[interval] || 60000;
+    const cached = getCachedData(cacheKey, ttl);
     if (cached && !cached.stale) return cached;
 
+    // Binance (primário)
     try {
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
         const data = await fetchWithRetry(url, {}, 3);
@@ -428,8 +552,9 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
             setCachedData(cacheKey, candles);
             return candles;
         }
-    } catch(e) { /* ignore */ }
+    } catch(e) { /* fallback */ }
 
+    // Bybit (secundário)
     try {
         const map = { '15m':'15','1h':'60','4h':'240','1d':'D' };
         const bybitInterval = map[interval] || '60';
@@ -447,8 +572,9 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
             setCachedData(cacheKey, candles);
             return candles;
         }
-    } catch(e) { /* ignore */ }
+    } catch(e) { /* fallback */ }
 
+    // CoinGecko (terciário)
     try {
         const coinId = SYMBOL_TO_COINGECKO[symbol];
         if (coinId) {
@@ -470,7 +596,7 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
                 return candles;
             }
         }
-    } catch(e) { /* ignore */ }
+    } catch(e) { /* fallback */ }
 
     if (cached) return cached;
     return [];
@@ -492,7 +618,23 @@ export const fetchFundingRate = async (symbol) => {
             setCachedData(cacheKey, result);
             return result;
         }
-    } catch(e) { /* ignore */ }
+    } catch(e) { /* fallback */ }
+    
+    // Fallback Bybit
+    try {
+        const resp = await fetchWithRetry(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`, {}, 2);
+        if (resp?.result?.list?.[0]) {
+            const item = resp.result.list[0];
+            const rate = parseFloat(item.fundingRate);
+            let interpretacao = 'EQUILIBRADO';
+            if (rate > 0.01) interpretacao = 'LONGS SOBRE-APOSTADOS';
+            else if (rate < -0.01) interpretacao = 'SHORTS SOBRE-APOSTADOS';
+            const result = { rate, interpretacao };
+            setCachedData(cacheKey, result);
+            return result;
+        }
+    } catch(e2) { /* silencioso */ }
+    
     if (cached) return cached;
     return null;
 };
@@ -511,7 +653,23 @@ export const fetchOpenInterest = async (symbol) => {
             setCachedData(cacheKey, result);
             return result;
         }
-    } catch(e) { /* ignore */ }
+    } catch(e) { /* fallback */ }
+    
+    // Fallback Bybit
+    try {
+        const resp = await fetchWithRetry(
+            `https://api.bybit.com/v5/market/open-interest?category=linear&symbol=${symbol}&intervalTime=15min&limit=8`, {}, 2
+        );
+        if (resp?.result?.list?.length >= 2) {
+            const list = resp.result.list;
+            const curr = parseFloat(list[0].openInterest);
+            const prev = parseFloat(list[list.length - 1].openInterest);
+            const result = { oi: curr, delta: ((curr - prev) / prev) * 100 };
+            setCachedData(cacheKey, result);
+            return result;
+        }
+    } catch(e2) { /* silencioso */ }
+    
     if (cached) return cached;
     return null;
 };
@@ -535,13 +693,14 @@ export const fetchOrderBook = async (symbol = 'BTCUSDT', limit = 10) => {
             setCachedData(cacheKey, result);
             return result;
         }
-    } catch(e) { /* ignore */ }
+    } catch(e) { /* silencioso */ }
+    
     if (cached) return cached;
     return null;
 };
 
 // ============================================================
-// 10. DEFI LLAMA (correção TVL 24h – P3)
+// 10. DEFI LLAMA — CORREÇÃO #6 (TVL 24h preciso via timestamp)
 // ============================================================
 export const fetchDeFiData = async () => {
     const cacheKey = 'defiData';
@@ -555,22 +714,32 @@ export const fetchDeFiData = async () => {
         ]);
         let total = 0;
         stable?.peggedAssets?.forEach(a => total += a.total || 0);
+        
         let tvlVal = 0, tvlChange = 0;
         if (tvl?.length > 1) {
-            // Último ponto completo (assumindo que o último é o mais recente, mas pode ser parcial)
-            // Pega o ponto de 24h atrás (índice -2 se a frequência for diária)
             const last = tvl.length - 1;
-            const prev = Math.max(last - 2, 0); // para garantir se houver menos pontos
             tvlVal = tvl[last].totalLiquidityUSD;
-            const prevVal = tvl[prev].totalLiquidityUSD;
+            
+            // CORREÇÃO: busca o ponto de ~24h atrás comparando timestamps
+            const targetTime = (tvl[last].date || 0) - 86400; // 24h em segundos
+            let prevIdx = Math.max(last - 2, 0);
+            for (let i = last - 1; i >= 0; i--) {
+                if (tvl[i].date && tvl[i].date <= targetTime) {
+                    prevIdx = i;
+                    break;
+                }
+            }
+            const prevVal = tvl[prevIdx].totalLiquidityUSD;
             tvlChange = prevVal > 0 ? ((tvlVal - prevVal) / prevVal) * 100 : 0;
         }
+        
         const result = { totalStable: total/1e9, tvl: tvlVal/1e9, tvlChange };
         setCachedData(cacheKey, result);
         return result;
-    } catch(e) { /* ignore */ }
-    if (cached) return cached;
-    return null;
+    } catch(e) {
+        if (cached) return cached;
+        return null;
+    }
 };
 
 export const fetchTetherPremium = async () => {
@@ -613,7 +782,7 @@ export const fetchFearGreed = async () => {
 };
 
 // ============================================================
-// 11. ETF FLOWS REAIS (P2) – via Farside scraping com proxy
+// 11. ETF FLOWS — CORREÇÃO #9 (regex mais robusto)
 // ============================================================
 export const fetchETFData = async () => {
     const cacheKey = 'etfData';
@@ -621,38 +790,51 @@ export const fetchETFData = async () => {
     if (cached && !cached.stale) return cached;
 
     try {
-        // Usa a tabela HTML da Farside e extrai os dados via proxy
         const url = 'https://farside.co.uk/bitcoin-etf-flow-all-data/';
         const html = await fetchViaProxy(url, {}, 2);
-        // Extrai a tabela com regex simples (procura pela tabela com dados)
-        const tableMatch = html.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
-        if (!tableMatch) throw new Error('Tabela não encontrada');
+        
+        // CORREÇÃO: regex mais robusto para encontrar a tabela de dados
+        // Procura pela tabela que contém "Total" no cabeçalho
+        const tableMatch = html.match(/<table[^>]*class="[^"]*etf[^"]*"[^>]*>([\s\S]*?)<\/table>/i) 
+                        || html.match(/<table[^>]*>([\s\S]*?<th[^>]*>.*?Total.*?<\/th>[\s\S]*?)<\/table>/i)
+                        || html.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
+        
+        if (!tableMatch) throw new Error('Tabela ETF não encontrada');
+        
         const rows = tableMatch[1].match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
         const data = [];
-        // Cabeçalho: Data, Total Flow, etc.
-        for (let i = 1; i < rows.length; i++) { // pula cabeçalho
+        
+        for (let i = 1; i < rows.length; i++) {
             const cols = rows[i].match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
             if (cols.length < 2) continue;
-            const date = cols[0].replace(/<[^>]*>/g, '').trim();
-            const flowStr = cols[1].replace(/<[^>]*>/g, '').trim().replace(/,/g, '');
+            
+            // Extrai texto limpo
+            const cleanText = (html) => html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+            
+            const date = cleanText(cols[0]);
+            const flowStr = cleanText(cols[cols.length - 1]).replace(/,/g, '').replace(/-/g, '');
             const flow = parseFloat(flowStr);
+            
             if (date && !isNaN(flow)) {
                 data.push({ date, total: flow });
             }
         }
+        
+        if (data.length === 0) throw new Error('Nenhum dado extraído da tabela');
+        
         // Pega os últimos 30 dias
         const sorted = data.reverse().slice(0, 30);
         setCachedData(cacheKey, sorted);
         return sorted;
     } catch(e) {
-        console.warn('[ETF] Erro ao buscar dados da Farside:', e);
+        console.warn('[ETF] Erro ao buscar dados da Farside:', e.message);
         if (cached) return cached;
         return null;
     }
 };
 
 // ============================================================
-// 12. MTF CONFLUENCE (sem alterações)
+// 12. MTF CONFLUENCE — CORREÇÃO #8 (paralelização)
 // ============================================================
 export async function getMTFConfluence(symbol) {
     const cacheKey = `mtf_${symbol}`;
@@ -660,18 +842,30 @@ export async function getMTFConfluence(symbol) {
     if (cached && !cached.stale) return cached;
 
     const timeframes = ['15m','1h','4h'];
+    
+    // CORREÇÃO: paraleliza as 3 requisições
+    const candlesPromises = timeframes.map(tf => fetchHistoricalCandles(symbol, tf, 50));
+    const candlesResults = await Promise.all(candlesPromises);
+    
     const directions = [];
-    for (const tf of timeframes) {
-        const candles = await fetchHistoricalCandles(symbol, tf, 50);
-        if (!candles.length) continue;
+    for (let i = 0; i < timeframes.length; i++) {
+        const candles = candlesResults[i];
+        if (!candles || !candles.length) continue;
+        
         const closes = candles.map(c => c.close);
         const ema20 = calcEMA(closes, 20);
         const ema50 = calcEMA(closes, 50);
         const last = candles.length - 1;
-        if (ema20[last] > ema50[last] && candles[last].close > ema20[last]) directions.push({ tf, dir: 'BULL' });
-        else if (ema20[last] < ema50[last] && candles[last].close < ema20[last]) directions.push({ tf, dir: 'BEAR' });
-        else directions.push({ tf, dir: 'NEUTRO' });
+        
+        if (ema20[last] > ema50[last] && candles[last].close > ema20[last]) {
+            directions.push({ tf: timeframes[i], dir: 'BULL' });
+        } else if (ema20[last] < ema50[last] && candles[last].close < ema20[last]) {
+            directions.push({ tf: timeframes[i], dir: 'BEAR' });
+        } else {
+            directions.push({ tf: timeframes[i], dir: 'NEUTRO' });
+        }
     }
+    
     const bulls = directions.filter(d => d.dir === 'BULL').length;
     const bears = directions.filter(d => d.dir === 'BEAR').length;
     const result = {
