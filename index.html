@@ -127,6 +127,12 @@
         .orderbook-mini .bar-bg { height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; margin: 2px 0; }
         .orderbook-mini .bar-fill { height: 100%; border-radius: 2px; }
         .orderbook-mini .spread { color: var(--accent-yellow); font-weight: 600; margin: 4px 0; }
+        .confidence-level { font-weight: 700; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; }
+        .confidence-VERY_HIGH { background: rgba(0,230,118,0.2); color: #00e676; border: 1px solid #00e676; }
+        .confidence-HIGH { background: rgba(0,200,83,0.15); color: #00c853; border: 1px solid #00c853; }
+        .confidence-MEDIUM { background: rgba(255,193,7,0.15); color: #ffc107; border: 1px solid #ffc107; }
+        .confidence-LOW { background: rgba(255,152,0,0.15); color: #ff9800; border: 1px solid #ff9800; }
+        .confidence-VERY_LOW { background: rgba(255,82,82,0.15); color: #ff5252; border: 1px solid #ff5252; }
     </style>
 </head>
 <body>
@@ -422,7 +428,8 @@
             findSMCSetup, getSMCZones, checkLateralMarket, checkHTFAlignment,
             checkOnChainFilter, checkVolumeAndOrderflow, checkDerivativesFilter,
             checkPortfolioExposure, checkMTFAlignment, computeScore, isSafeToTrade,
-            KellyPositionSize
+            KellyPositionSize, detectVolumeAnomaly, isHighImpactEventNow,
+            ConfidenceScorer, calculateConfidenceScore
         } = indicadores;
 
         // ===== STATE =====
@@ -452,7 +459,13 @@
                 trend4H: 'NEUTRAL',
                 trend1D: 'NEUTRAL',
                 htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity },
-                mtfConfluence: null
+                mtfConfluence: null,
+                adx: 0,
+                plusDI: 0,
+                minusDI: 0,
+                divergence: null,
+                volumeAnomaly: null,
+                macroBlackout: false
             };
         });
 
@@ -1175,17 +1188,87 @@
             }));
         }
 
-        // ===== AVALIAÇÃO DE MERCADO =====
+        // ===== AVALIAÇÃO DE MERCADO (com todas as melhorias) =====
         function evaluateMarkets() {
             CONFIG.ASSETS.forEach(symbol => {
                 const data = assetsData[symbol];
                 updateSwingPoints(data);
+                
+                // --- 1. Cálculo do ADX ---
+                const adxData = calculateADX(data.candles1H);
+                data.adx = adxData.adx;
+                data.plusDI = adxData.plusDI;
+                data.minusDI = adxData.minusDI;
+                
+                // --- 2. Detecção de volume anômalo ---
+                const volAnomaly = detectVolumeAnomaly(data.candles1H);
+                data.volumeAnomaly = volAnomaly;
+                
+                // --- 3. Divergência RSI ---
+                const rsiValues = data.candles1H.map(c => {
+                    // Simplificado: usa o RSI calculado no estado
+                    return data.rsi_1H;
+                });
+                const divergence = detectRSIDivergence(data.candles1H, rsiValues);
+                data.divergence = divergence;
+                
+                // --- 4. Macro blackout ---
+                const macroCheck = isHighImpactEventNow();
+                data.macroBlackout = macroCheck.isBlackout && macroCheck.impact === 'HIGH';
+                
+                // --- 5. Score com ConfidenceScorer ---
                 const scoreData = computeScore(symbol, assetsData, liqMap);
-                const score = scoreData.score;
+                const confidence = calculateConfidenceScore({
+                    mtfAligned: data.mtfConfluence?.alinhado || false,
+                    adx: data.adx,
+                    volumeAnomaly: data.volumeAnomaly,
+                    fundingRate: data.fundingRate,
+                    openInterestTrend: data.oiDelta > 0 ? 'INCREASING' : (data.oiDelta < 0 ? 'DECREASING' : 'NEUTRAL'),
+                    divergence: data.divergence,
+                    macroBlackout: data.macroBlackout,
+                    smcStructure: data.currentBOS || 'NEUTRAL',
+                    direction: scoreData.direction
+                });
+                
+                const score = confidence.score;
                 const blockReason = scoreData.blockReason;
-                scoreHistory.push({ time: getCurrentTimestamp().split(' ')[1], symbol: symbol, score: score });
-                if (scoreHistory.length > 150) scoreHistory.shift();
-                if (symbol === 'BTCUSDT') updateMainScoreUI(scoreData, blockReason);
+                
+                // --- 6. Filtros adicionais ---
+                // ADX < 25 bloqueia entrada (mercado lateral)
+                if (data.adx < 25 && !blockReason) {
+                    const reason = 'ADX < 25 (mercado lateral)';
+                    if (blockReason) blockReason += '; ' + reason;
+                    else blockReason = reason;
+                }
+                
+                // Volume anômalo é exigido como confirmação (opcional, pode ser flexível)
+                // Se não houver anomalia de volume, pode reduzir score ou bloquear
+                if (data.volumeAnomaly && !data.volumeAnomaly.isAnomaly && !blockReason) {
+                    // Não bloqueia, mas reduz score (já é feito no ConfidenceScorer)
+                }
+                
+                // Macro blackout bloqueia entrada
+                if (data.macroBlackout && !blockReason) {
+                    const reason = 'Evento macro de alto impacto (blackout)';
+                    if (blockReason) blockReason += '; ' + reason;
+                    else blockReason = reason;
+                }
+                
+                // Divergência contraditória reduz score (já no ConfidenceScorer)
+                
+                // --- 7. Atualização da UI ---
+                if (symbol === 'BTCUSDT') {
+                    updateMainScoreUI(scoreData, blockReason);
+                    // Atualizar também o painel de confiança
+                    const confEl = document.getElementById('confidence-score');
+                    if (confEl) {
+                        const level = confidence.level;
+                        confEl.textContent = level;
+                        confEl.className = `confidence-level confidence-${level}`;
+                    }
+                }
+                
+                // --- 8. Lógica de entrada (com todos os filtros) ---
                 const prevScore = previousScores[symbol] || 50;
                 if (!activePositions[symbol] && !blockReason && isSafeToTrade()) {
                     const now = Date.now();
@@ -1282,6 +1365,8 @@
                 if (funding) {
                     document.getElementById('funding-rate').textContent = (funding.rate * 100).toFixed(4) + '%';
                     document.getElementById('funding-rate-interp').textContent = funding.interpretacao;
+                    // Armazenar para uso no score
+                    if (assetsData['BTCUSDT']) assetsData['BTCUSDT'].fundingRate = funding.rate;
                 }
 
                 // ===== Open Interest e OI Delta =====
