@@ -20,7 +20,7 @@ export const CONFIG = {
     // CryptoQuant (opcional, não usado mais)
     CRYPTOQUANT_API_KEY: '',
     // Alpha Vantage (para Fed Rate)
-    ALPHAVANTAGE_API_KEY: 'SUA_CHAVE_ALPHA_VANTAGE' // <-- SUBSTITUA PELA CHAVE REAL
+    ALPHAVANTAGE_API_KEY: 'QHIQIJB9SO2NI9IE' // <-- SUBSTITUA PELA CHAVE REAL
 };
 
 export const COLORS = {
