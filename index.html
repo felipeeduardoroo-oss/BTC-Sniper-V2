@@ -277,7 +277,7 @@
                         <tr><td><strong>Funding Rate (atual)</strong></td><td id="funding-rate">Carregando...</td><td id="funding-rate-interp">ℹ️ Neutro</td><td><span class="data-source">Binance</span></td></tr>
                         <tr><td><strong>Open Interest</strong></td><td id="open-interest">Carregando...</td><td id="open-interest-interp">ℹ️ Volume em aberto</td><td><span class="data-source">Binance</span></td></tr>
                         <tr><td><strong>OI Delta (24h)</strong></td><td id="oi-delta">Carregando...</td><td id="oi-delta-interp">--</td><td><span class="data-source">Binance</span></td></tr>
-                        <tr><td><strong>Basis (perp vs spot)</strong></td><td id="basis">Carregando...</td><td>ℹ️ Prêmio/Deságio</td><td><span class="data-source">Binance</span></td></tr>
+                        <tr><td><strong>Basis (perp vs spot)</strong></td><td id="basis">Carregando...</td><td>ℹ️ Prêmio/Deságio</td><td><span class="data-source">Binance / Bybit</span></td></tr>
                         <tr><td><strong>BTC Put/Call Ratio</strong></td><td id="put-call-ratio">Carregando...</td><td id="put-call-interp">--</td><td><span class="data-source">Deribit</span></td></tr>
                         <tr><td><strong>ETH Gas Price</strong></td><td id="eth-gas">Carregando...</td><td>✅ Baixo</td><td><span class="data-source">Etherscan / RPC</span></td></tr>
                     </tbody>
@@ -374,7 +374,7 @@
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>📋 Metodologia V2 + Comitê</h4>
-                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados atualizados</strong> via CoinMetrics, Binance, Deribit, mempool.space, DefiLlama, Alpha Vantage.</p>
+                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados atualizados</strong> via CoinMetrics, Binance, Bybit, Deribit, mempool.space, DefiLlama, Alpha Vantage.</p>
                     <p><strong>Última atualização bem‑sucedida:</strong> <span id="live-update-time">--</span></p>
                 </div>
             </div>
@@ -471,7 +471,7 @@
             'SOLUSDT': { buys: 0, sells: 0, lastTx: null }
         };
         let alertCooldowns = {};
-        let lastMainScore = 50; // para os scores de análise
+        let lastMainScore = 50;
 
         const DOM = {};
         function cacheDOM() {
@@ -1063,15 +1063,13 @@
             const reasonEl = document.getElementById('block-reason');
             if (blockReason) { reasonEl.style.display = 'block'; reasonEl.textContent = '🚫 ' + blockReason; } else { reasonEl.style.display = 'none'; }
             
-            // Atualiza os scores de análise
             lastMainScore = s;
             updateAnalysisScores(s);
         }
 
         // ===== ACTIVE TRADES UI (agora somente backtest) =====
-        // Removemos a seção de posições ativas; a função não é mais necessária, mas mantemos para não quebrar outras chamadas.
         function updateActiveTradesUI() {
-            // Não há mais posições ativas, mas mantemos a função vazia.
+            // Não há mais posições ativas, mantemos a função vazia.
         }
 
         // ===== POSITION MANAGEMENT =====
@@ -1241,7 +1239,7 @@
             if (externalUpdating) return;
             externalUpdating = true;
             try {
-                // ===== MACRO (Alpha Vantage) =====
+                // ===== MACRO (Alpha Vantage com fallback) =====
                 const macro = await fetchMacroStatic();
                 if (macro) {
                     document.getElementById('dxy-value').textContent = macro.dxy !== undefined ? macro.dxy.toFixed(2) : '--';
@@ -1251,7 +1249,6 @@
                     document.getElementById('nasdaq-value').textContent = (nasdaqChange >= 0 ? '+' : '') + nasdaqChange.toFixed(2) + '%';
                     const spChange = macro.spChange !== undefined ? macro.spChange : 0;
                     document.getElementById('sp500-value').textContent = (spChange >= 0 ? '+' : '') + spChange.toFixed(2) + '%';
-                    // Atualiza também o resumo executivo
                     document.getElementById('macro-summary').textContent = `DXY ${macro.dxy || '--'} | US10Y ${macro.us10y || '--'}%`;
                 }
 
@@ -1298,7 +1295,7 @@
                     }
                 }
 
-                // ===== Basis =====
+                // ===== Basis (com fallback Bybit) =====
                 const basis = await fetchBasis('BTCUSDT');
                 setTextOrNA('basis', basis !== null ? (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%' : null);
 
