@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        /* ===== CSS COMPLETO ===== */
+        /* ===== CSS COMPLETO (mesmo da versão anterior) ===== */
         :root {
             --bg-dark: #08090d; --bg-card: #0f1117; --bg-card-hover: #14171f; --primary: #0f1117; --secondary: #1a1d29;
             --border: rgba(255, 255, 255, 0.06); --border-active: rgba(0, 180, 216, 0.5);
@@ -442,6 +442,17 @@
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
     <script type="module">
+        // ===== INTERCEPTADOR GLOBAL (deve vir antes de qualquer fetch) =====
+        const originalFetch = window.fetch;
+        window.fetch = function(url, options) {
+            if (typeof url === 'string' && url.includes('query1.finance.yahoo.com')) {
+                console.log('[Proxy] Redirecionando Yahoo Finance:', url);
+                const proxyUrl = 'https://corsproxy.io/?url=' + encodeURIComponent(url);
+                return originalFetch(proxyUrl, options);
+            }
+            return originalFetch(url, options);
+        };
+
         // ===== IMPORTAÇÕES =====
         import {
             fetchHistoricalCandles,
@@ -473,16 +484,7 @@
         import * as historico from './js/historicos_sinais.js';
         import { CONFIG } from './js/config.js';
         import { runBacktest } from './js/backtest.js';
-// ===== INTERCEPTAÇÃO GLOBAL PARA YAHOO FINANCE =====
-const originalFetch = window.fetch;
-window.fetch = function(url, options) {
-    if (typeof url === 'string' && url.includes('query1.finance.yahoo.com')) {
-        console.log('[Proxy] Redirecionando Yahoo Finance:', url);
-        const proxyUrl = 'https://corsproxy.io/?url=' + encodeURIComponent(url);
-        return originalFetch(proxyUrl, options);
-    }
-    return originalFetch(url, options);
-};
+
         // ===== IMPORTS LIMPOS =====
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
@@ -1436,7 +1438,6 @@ window.fetch = function(url, options) {
                         const atr = data.atr_1H || (data.price * 0.02);
                         if (primaryDirection) {
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
-                            // ===== CORREÇÃO #1: return → continue =====
                             if (expCheck.blocked) continue;
                             
                             const ema20 = calcEMA(data.candles1H.map(c=>c.close), 20).slice(-1)[0] || data.price;
@@ -1477,7 +1478,6 @@ window.fetch = function(url, options) {
                                     tp3 = liqTarget2 || (data.price - (atr * 6));
                                 }
                                 const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
-                                // ===== CORREÇÃO #1: return → continue =====
                                 if (rr1 < 1.5) continue;
                                 
                                 const winRate = banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1);
@@ -1620,204 +1620,227 @@ window.fetch = function(url, options) {
 
         // ===== BOOTSTRAP =====
         async function init() {
-            cacheDOM();
-            loadSignalHistory();
-            renderSignalTable();
-            graficos.initCharts();
-            const candleBTC = graficos.initCandleChart('candle-btc', '#00e896');
-            const candleETH = graficos.initCandleChart('candle-eth', '#00b4d8');
-            const candleSOL = graficos.initCandleChart('candle-sol', '#ffd60a');
-            const candleCharts = { 'BTCUSDT': candleBTC, 'ETHUSDT': candleETH, 'SOLUSDT': candleSOL };
+            try {
+                cacheDOM();
+                loadSignalHistory();
+                renderSignalTable();
+                graficos.initCharts();
+                const candleBTC = graficos.initCandleChart('candle-btc', '#00e896');
+                const candleETH = graficos.initCandleChart('candle-eth', '#00b4d8');
+                const candleSOL = graficos.initCandleChart('candle-sol', '#ffd60a');
+                const candleCharts = { 'BTCUSDT': candleBTC, 'ETHUSDT': candleETH, 'SOLUSDT': candleSOL };
 
-            for (const symbol of CONFIG.ASSETS) {
-                const [c1H, c4H, c1D] = await Promise.all([
-                    fetchHistoricalCandles(symbol, '1h', 200),
-                    fetchHistoricalCandles(symbol, '4h', 210),
-                    fetchHistoricalCandles(symbol, '1d', 210)
-                ]);
-                assetsData[symbol].candles1H = c1H;
-                assetsData[symbol].candles4H = c4H;
-                assetsData[symbol].candles1D = c1D;
-                if (c1H.length > 0) {
-                    const closes = c1H.map(c => c.close);
-                    assetsData[symbol].price = closes[closes.length - 1];
-                    assetsData[symbol].ema50_1H = closes.slice(-50).reduce((a, b) => a + b, 0) / 50;
-                    const closes4H = c4H.map(c => c.close);
-                    assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : closes.slice(-200).reduce((a, b) => a + b, 0) / 200;
-                    assetsData[symbol].atr_1H = calculateATR(c1H, 14);
-                    let gains = 0, losses = 0;
-                    for (let i = closes.length - 14; i < closes.length; i++) {
-                        const diff = closes[i] - closes[i - 1];
-                        if (diff > 0) gains += diff; else losses += Math.abs(diff);
-                    }
-                    const avgGain = gains / 14, avgLoss = losses / 14;
-                    assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
-                    assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
-                    assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], c4H);
-                    if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
-                }
-            }
-
-            initWebSockets();
-            await updateExternalData();
-            await updateMTFAndOI();
-            await evaluateMarkets();
-
-            setTimeout(runCommittee, 1000);
-
-            // Força do Sinal a cada 10s
-            setInterval(async () => {
-                const symbol = 'BTCUSDT';
-                try {
-                    const scoreData = computeScore(symbol, assetsData, liqMap);
-                    const mtfData = await getMTFConfluence(symbol);
-                    const fundingData = await fetchFundingRate(symbol);
-                    const adxData = calculateADX(assetsData[symbol].candles1H);
-                    const obData = await fetchOrderBook(symbol, 10);
-                    const fgData = await fetchFearGreed();
-                    updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData);
-                } catch (e) {
-                    console.warn('Erro ao atualizar Força do Sinal:', e);
-                }
-            }, 10000);
-
-            // Fear & Greed dinâmico
-            setInterval(async () => {
-                const fg = await fetchFearGreed();
-                if (fg) {
-                    document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
-                    document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
-                    const badge = document.querySelector('.badge.sentiment-bearish');
-                    if (badge) {
-                        badge.className = fg.value <= 25 ? 'badge sentiment-bearish' : 'badge sentiment-bullish';
-                        badge.textContent = fg.value <= 25 ? '⚠️ SENTIMENTO: PESSIMISTA' : '✅ SENTIMENTO: OTIMISTA';
-                    }
-                    assetsData['BTCUSDT'].fearGreedData = fg;
-                }
-            }, 600000);
-
-            setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
-                    const c1H = await fetchHistoricalCandles(symbol, '1h', 10);
+                    const [c1H, c4H, c1D] = await Promise.all([
+                        fetchHistoricalCandles(symbol, '1h', 200),
+                        fetchHistoricalCandles(symbol, '4h', 210),
+                        fetchHistoricalCandles(symbol, '1d', 210)
+                    ]);
+                    assetsData[symbol].candles1H = c1H;
+                    assetsData[symbol].candles4H = c4H;
+                    assetsData[symbol].candles1D = c1D;
                     if (c1H.length > 0) {
-                        assetsData[symbol].candles1H = [...assetsData[symbol].candles1H.slice(0, -10), ...c1H];
-                        const closes1H = assetsData[symbol].candles1H.map(c => c.close);
-                        assetsData[symbol].ema50_1H = closes1H.slice(-50).reduce((a, b) => a + b, 0) / 50;
-                        assetsData[symbol].atr_1H = calculateATR(assetsData[symbol].candles1H, 14);
+                        const closes = c1H.map(c => c.close);
+                        assetsData[symbol].price = closes[closes.length - 1];
+                        assetsData[symbol].ema50_1H = closes.slice(-50).reduce((a, b) => a + b, 0) / 50;
+                        const closes4H = c4H.map(c => c.close);
+                        assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : closes.slice(-200).reduce((a, b) => a + b, 0) / 200;
+                        assetsData[symbol].atr_1H = calculateATR(c1H, 14);
                         let gains = 0, losses = 0;
-                        for (let i = closes1H.length - 14; i < closes1H.length; i++) {
-                            const diff = closes1H[i] - closes1H[i - 1];
+                        for (let i = closes.length - 14; i < closes.length; i++) {
+                            const diff = closes[i] - closes[i - 1];
                             if (diff > 0) gains += diff; else losses += Math.abs(diff);
                         }
                         const avgGain = gains / 14, avgLoss = losses / 14;
                         assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
                         assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
-                        if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], assetsData[symbol].candles1H);
-                    }
-                    const c4H = await fetchHistoricalCandles(symbol, '4h', 20);
-                    if (c4H.length > 0) {
-                        assetsData[symbol].candles4H = [...assetsData[symbol].candles4H.slice(0, -20), ...c4H];
-                        const closes4H = assetsData[symbol].candles4H.map(c => c.close);
-                        assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : assetsData[symbol].ema200_4H;
-                        assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
+                        assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], c4H);
+                        if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
                     }
                 }
+
+                initWebSockets();
+                await updateExternalData();
                 await updateMTFAndOI();
                 await evaluateMarkets();
-            }, 300000);
 
-            document.getElementById('test-telegram-btn').addEventListener('click', async function (e) {
-                this.disabled = true;
-                document.getElementById('test-btn-label').innerHTML = '<span class="spinner"></span> Enviando...';
-                const ok = await telegram.sendTelegramAlert('🔔 <b>TESTE DE CONEXÃO V2</b>\n⚛️ Motor Institucional Ativo!\n⏰ ' + getCurrentTimestamp());
-                document.getElementById('test-btn-label').textContent = ok ? '✅ Enviado!' : '❌ Falha';
-                setTimeout(() => {
-                    document.getElementById('test-btn-label').textContent = '📨 Testar Alerta';
-                    this.disabled = false;
-                }, 3000);
-            });
+                setTimeout(runCommittee, 1000);
 
-            // Backtest
-            document.getElementById('run-backtest-btn').addEventListener('click', async function() {
-                this.disabled = true;
-                this.textContent = '⏳ Processando...';
-                document.getElementById('backtest-status').textContent = 'Buscando dados históricos...';
-                try {
-                    const result = await runBacktest('BTCUSDT', 30);
-                    const { trades, summary } = result;
-                    
-                    const summaryDiv = document.getElementById('backtest-summary');
-                    if (summary.error) {
-                        summaryDiv.innerHTML = `<div style="color:var(--accent-red);">❌ Erro: ${summary.error}</div>`;
-                    } else {
-                        summaryDiv.innerHTML = `
-                            <div class="summary-card"><h3>Trades</h3><div class="value">${summary.totalTrades}</div></div>
-                            <div class="summary-card"><h3>Winrate</h3><div class="value ${summary.winrate > 50 ? 'positive' : 'negative'}">${summary.winrate.toFixed(1)}%</div></div>
-                            <div class="summary-card"><h3>P&L Total</h3><div class="value ${summary.totalPnlPct >= 0 ? 'positive' : 'negative'}">${summary.totalPnlPct.toFixed(2)}%</div></div>
-                            <div class="summary-card"><h3>P&L (USD)</h3><div class="value ${summary.totalPnlUsd >= 0 ? 'positive' : 'negative'}">$${summary.totalPnlUsd.toFixed(2)}</div></div>
-                            <div class="summary-card"><h3>Retorno Anualizado</h3><div class="value ${summary.annualizedReturn >= 0 ? 'positive' : 'negative'}">${summary.annualizedReturn.toFixed(2)}%</div></div>
-                            <div class="summary-card"><h3>Drawdown Máx</h3><div class="value negative">${summary.maxDrawdown.toFixed(2)}%</div></div>
-                            <div class="summary-card"><h3>Profit Factor</h3><div class="value">${summary.profitFactor.toFixed(2)}</div></div>
-                            <div class="summary-card"><h3>Equity Final</h3><div class="value ${summary.finalEquity >= 10000 ? 'positive' : 'negative'}">$${summary.finalEquity.toFixed(2)}</div></div>
-                        `;
+                // Força do Sinal a cada 10s
+                setInterval(async () => {
+                    try {
+                        const symbol = 'BTCUSDT';
+                        const scoreData = computeScore(symbol, assetsData, liqMap);
+                        const mtfData = await getMTFConfluence(symbol);
+                        const fundingData = await fetchFundingRate(symbol);
+                        const adxData = calculateADX(assetsData[symbol].candles1H);
+                        const obData = await fetchOrderBook(symbol, 10);
+                        const fgData = await fetchFearGreed();
+                        updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData);
+                    } catch (e) {
+                        console.warn('Erro ao atualizar Força do Sinal:', e);
                     }
+                }, 10000);
 
-                    const tbody = document.getElementById('backtest-tbody');
-                    if (!trades || trades.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum trade gerado no período.</td></tr>';
-                    } else {
-                        let html = '';
-                        trades.forEach(t => {
-                            const pnl = t.pnlPct !== null ? parseFloat(t.pnlPct) : 0;
-                            const pnlClass = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
-                            html += `<tr>
-                                <td>${t.entryTime}</td>
-                                <td>${t.symbol}</td>
-                                <td>${t.direction}</td>
-                                <td>$${t.entryPrice.toFixed(2)}</td>
-                                <td>$${t.stopLoss.toFixed(2)}</td>
-                                <td>$${t.takeProfit1.toFixed(2)}</td>
-                                <td>${t.exitPrice ? '$'+t.exitPrice.toFixed(2) : '--'}</td>
-                                <td>${t.reason}</td>
-                                <td class="${pnlClass}">${t.pnlPct !== null ? (pnl > 0 ? '+' : '') + t.pnlPct + '%' : '--'}</td>
-                                <td>${t.durationHours ? t.durationHours + 'h' : '--'}</td>
-                            </tr>`;
-                        });
-                        tbody.innerHTML = html;
+                // Fear & Greed dinâmico
+                setInterval(async () => {
+                    try {
+                        const fg = await fetchFearGreed();
+                        if (fg) {
+                            document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
+                            document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
+                            const badge = document.querySelector('.badge.sentiment-bearish');
+                            if (badge) {
+                                badge.className = fg.value <= 25 ? 'badge sentiment-bearish' : 'badge sentiment-bullish';
+                                badge.textContent = fg.value <= 25 ? '⚠️ SENTIMENTO: PESSIMISTA' : '✅ SENTIMENTO: OTIMISTA';
+                            }
+                            assetsData['BTCUSDT'].fearGreedData = fg;
+                        }
+                    } catch (e) {
+                        console.warn('Erro ao atualizar Fear & Greed:', e);
                     }
-                    document.getElementById('backtest-status').textContent = `✅ Concluído em ${new Date().toLocaleTimeString()}`;
-                } catch (e) {
-                    console.error(e);
-                    document.getElementById('backtest-status').textContent = '❌ Erro: ' + e.message;
-                } finally {
-                    this.disabled = false;
-                    this.textContent = '▶️ Executar Backtest';
-                }
-            });
+                }, 600000);
 
-            setInterval(() => {
-                const ts = getCurrentTimestamp();
-                const headerEl = DOM['header-timestamp'] || document.getElementById('header-timestamp');
-                if (headerEl) headerEl.textContent = '📅 ' + ts;
-                const lastEl = DOM['last-update'] || document.getElementById('last-update');
-                if (lastEl) lastEl.textContent = ts;
-                document.getElementById('live-update-time').textContent = ts;
-                const badge = document.getElementById('status-badge');
-                if (badge) { badge.textContent = '✅ LIVE'; badge.className = 'status-badge live'; }
+                setInterval(async () => {
+                    try {
+                        for (const symbol of CONFIG.ASSETS) {
+                            const c1H = await fetchHistoricalCandles(symbol, '1h', 10);
+                            if (c1H.length > 0) {
+                                assetsData[symbol].candles1H = [...assetsData[symbol].candles1H.slice(0, -10), ...c1H];
+                                const closes1H = assetsData[symbol].candles1H.map(c => c.close);
+                                assetsData[symbol].ema50_1H = closes1H.slice(-50).reduce((a, b) => a + b, 0) / 50;
+                                assetsData[symbol].atr_1H = calculateATR(assetsData[symbol].candles1H, 14);
+                                let gains = 0, losses = 0;
+                                for (let i = closes1H.length - 14; i < closes1H.length; i++) {
+                                    const diff = closes1H[i] - closes1H[i - 1];
+                                    if (diff > 0) gains += diff; else losses += Math.abs(diff);
+                                }
+                                const avgGain = gains / 14, avgLoss = losses / 14;
+                                assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
+                                assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+                                if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], assetsData[symbol].candles1H);
+                            }
+                            const c4H = await fetchHistoricalCandles(symbol, '4h', 20);
+                            if (c4H.length > 0) {
+                                assetsData[symbol].candles4H = [...assetsData[symbol].candles4H.slice(0, -20), ...c4H];
+                                const closes4H = assetsData[symbol].candles4H.map(c => c.close);
+                                assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : assetsData[symbol].ema200_4H;
+                                assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
+                            }
+                        }
+                        await updateMTFAndOI();
+                        await evaluateMarkets();
+                    } catch (e) {
+                        console.warn('Erro no loop de atualização de candles:', e);
+                    }
+                }, 300000);
 
-                const backendBadge = document.getElementById('backend-status');
-                if (backendBadge) {
-                    backendBadge.textContent = '💤 BACKEND: DORMINDO (fallback)';
-                    backendBadge.className = 'status-badge';
-                    backendBadge.style.borderColor = 'var(--accent-yellow)';
-                    backendBadge.style.color = 'var(--accent-yellow)';
-                }
-            }, 1000);
+                document.getElementById('test-telegram-btn').addEventListener('click', async function (e) {
+                    this.disabled = true;
+                    document.getElementById('test-btn-label').innerHTML = '<span class="spinner"></span> Enviando...';
+                    const ok = await telegram.sendTelegramAlert('🔔 <b>TESTE DE CONEXÃO V2</b>\n⚛️ Motor Institucional Ativo!\n⏰ ' + getCurrentTimestamp());
+                    document.getElementById('test-btn-label').textContent = ok ? '✅ Enviado!' : '❌ Falha';
+                    setTimeout(() => {
+                        document.getElementById('test-btn-label').textContent = '📨 Testar Alerta';
+                        this.disabled = false;
+                    }, 3000);
+                });
 
-            setInterval(() => {
-                graficos.updateWhaleChart(whaleTrades);
-                updateWhaleUI();
-            }, 30000);
+                // Backtest
+                document.getElementById('run-backtest-btn').addEventListener('click', async function() {
+                    this.disabled = true;
+                    this.textContent = '⏳ Processando...';
+                    document.getElementById('backtest-status').textContent = 'Buscando dados históricos...';
+                    try {
+                        const result = await runBacktest('BTCUSDT', 30);
+                        const { trades, summary } = result;
+                        
+                        const summaryDiv = document.getElementById('backtest-summary');
+                        if (summary.error) {
+                            summaryDiv.innerHTML = `<div style="color:var(--accent-red);">❌ Erro: ${summary.error}</div>`;
+                        } else {
+                            summaryDiv.innerHTML = `
+                                <div class="summary-card"><h3>Trades</h3><div class="value">${summary.totalTrades}</div></div>
+                                <div class="summary-card"><h3>Winrate</h3><div class="value ${summary.winrate > 50 ? 'positive' : 'negative'}">${summary.winrate.toFixed(1)}%</div></div>
+                                <div class="summary-card"><h3>P&L Total</h3><div class="value ${summary.totalPnlPct >= 0 ? 'positive' : 'negative'}">${summary.totalPnlPct.toFixed(2)}%</div></div>
+                                <div class="summary-card"><h3>P&L (USD)</h3><div class="value ${summary.totalPnlUsd >= 0 ? 'positive' : 'negative'}">$${summary.totalPnlUsd.toFixed(2)}</div></div>
+                                <div class="summary-card"><h3>Retorno Anualizado</h3><div class="value ${summary.annualizedReturn >= 0 ? 'positive' : 'negative'}">${summary.annualizedReturn.toFixed(2)}%</div></div>
+                                <div class="summary-card"><h3>Drawdown Máx</h3><div class="value negative">${summary.maxDrawdown.toFixed(2)}%</div></div>
+                                <div class="summary-card"><h3>Profit Factor</h3><div class="value">${summary.profitFactor.toFixed(2)}</div></div>
+                                <div class="summary-card"><h3>Equity Final</h3><div class="value ${summary.finalEquity >= 10000 ? 'positive' : 'negative'}">$${summary.finalEquity.toFixed(2)}</div></div>
+                            `;
+                        }
+
+                        const tbody = document.getElementById('backtest-tbody');
+                        if (!trades || trades.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum trade gerado no período.</td></tr>';
+                        } else {
+                            let html = '';
+                            trades.forEach(t => {
+                                const pnl = t.pnlPct !== null ? parseFloat(t.pnlPct) : 0;
+                                const pnlClass = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
+                                html += `<tr>
+                                    <td>${t.entryTime}</td>
+                                    <td>${t.symbol}</td>
+                                    <td>${t.direction}</td>
+                                    <td>$${t.entryPrice.toFixed(2)}</td>
+                                    <td>$${t.stopLoss.toFixed(2)}</td>
+                                    <td>$${t.takeProfit1.toFixed(2)}</td>
+                                    <td>${t.exitPrice ? '$'+t.exitPrice.toFixed(2) : '--'}</td>
+                                    <td>${t.reason}</td>
+                                    <td class="${pnlClass}">${t.pnlPct !== null ? (pnl > 0 ? '+' : '') + t.pnlPct + '%' : '--'}</td>
+                                    <td>${t.durationHours ? t.durationHours + 'h' : '--'}</td>
+                                </tr>`;
+                            });
+                            tbody.innerHTML = html;
+                        }
+                        document.getElementById('backtest-status').textContent = `✅ Concluído em ${new Date().toLocaleTimeString()}`;
+                    } catch (e) {
+                        console.error(e);
+                        document.getElementById('backtest-status').textContent = '❌ Erro: ' + e.message;
+                    } finally {
+                        this.disabled = false;
+                        this.textContent = '▶️ Executar Backtest';
+                    }
+                });
+
+                setInterval(() => {
+                    const ts = getCurrentTimestamp();
+                    const headerEl = DOM['header-timestamp'] || document.getElementById('header-timestamp');
+                    if (headerEl) headerEl.textContent = '📅 ' + ts;
+                    const lastEl = DOM['last-update'] || document.getElementById('last-update');
+                    if (lastEl) lastEl.textContent = ts;
+                    document.getElementById('live-update-time').textContent = ts;
+                    const badge = document.getElementById('status-badge');
+                    if (badge) { badge.textContent = '✅ LIVE'; badge.className = 'status-badge live'; }
+
+                    const backendBadge = document.getElementById('backend-status');
+                    if (backendBadge) {
+                        backendBadge.textContent = '💤 BACKEND: DORMINDO (fallback)';
+                        backendBadge.className = 'status-badge';
+                        backendBadge.style.borderColor = 'var(--accent-yellow)';
+                        backendBadge.style.color = 'var(--accent-yellow)';
+                    }
+                }, 1000);
+
+                setInterval(() => {
+                    try {
+                        graficos.updateWhaleChart(whaleTrades);
+                        updateWhaleUI();
+                    } catch (e) {
+                        console.warn('Erro ao atualizar baleias:', e);
+                    }
+                }, 30000);
+
+            } catch (error) {
+                console.error('Erro FATAL no init:', error);
+                // Mostra erro na tela
+                const body = document.body;
+                const errorDiv = document.createElement('div');
+                errorDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#ff1744;color:#fff;padding:20px;z-index:9999;font-family:monospace;font-size:14px;';
+                errorDiv.textContent = `ERRO FATAL: ${error.message} (veja o console para detalhes)`;
+                body.prepend(errorDiv);
+            }
         }
 
         init();
