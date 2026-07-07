@@ -10,20 +10,15 @@ export const CONFIG = {
     RETRY_DELAY_MS: 1000,
     PROXY_URL: 'https://corsproxy.io/?url=',
     PROXY_FALLBACK: 'https://api.allorigins.win/raw?url=',
-    // FRED (opcional, pode ficar vazio)
-    FRED_API_KEY: '', // não usamos mais, mas mantemos para compatibilidade
-    // Etherscan
+    FRED_API_KEY: '', 
     ETHERSCAN_API_KEY: 'NP3TFWDIPF1FFQ8DBBR9JUIUE9UFSUGSGU',
-    // Twelve Data
     TWELVEDATA_API_KEY: 'bc7d373d2ba24ff1b7e16120a23d6d95',
     BACKEND_URL: 'https://twelvedata-backend.onrender.com',
-    // CryptoQuant (opcional, não usado mais)
     CRYPTOQUANT_API_KEY: '',
-    // Alpha Vantage (para Fed Rate)
-    ALPHAVANTAGE_API_KEY: 'QHIQIJB9SO2NI9IE' // <-- SUBSTITUA PELA CHAVE REAL
-        // ===== NOVO: CONFIGURAÇÕES DO JSONBIN =====
-    JSONBIN_MASTER_KEY: '$2a$10$az2hnvvlu5j9V0M78KGxdujpPxV/Vsl9MwOvllR52XWcyEZ6Nt7sq', // Cole a Master Key que copiou
-    JSONBIN_BIN_ID: '6a4c4be6da38895dfe3841c9'          // Cole o ID do bin que criou
+    ALPHAVANTAGE_API_KEY: 'QHIQIJB9SO2NI9IE', // <-- VÍRGULA AQUI!
+    // ===== NOVO: CONFIGURAÇÕES DO JSONBIN =====
+    JSONBIN_MASTER_KEY: '$2a$10$mbH27dVmnT4JyX.5MAbxM.KknNujEyPzfTW1Z2LnkK7Ga6rXqUE4C',
+    JSONBIN_BIN_ID: '6a4c4be6da38895dfe3841c9'
 };
 
 export const COLORS = {
