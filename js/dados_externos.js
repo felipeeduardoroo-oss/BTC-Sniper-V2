@@ -1,4 +1,4 @@
-// js/dados_externos.js – todas as funções exportadas (corrigido)
+// js/dados_externos.js – apenas funções essenciais para o Score/Sinal
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
@@ -127,7 +127,7 @@ export const fetchFedRate = async () => {
 };
 
 // ============================================================
-// 4. ON-CHAIN – MVRV, Active Addresses (CoinMetrics) e Hashrate (unificada)
+// 4. ON-CHAIN – MVRV, Active Addresses, Hashrate
 // ============================================================
 const CM_BASE = 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics';
 
@@ -157,23 +157,22 @@ function fetchCM(metric) {
 export const fetchMVRV = fetchCM('CapMVRVCur');
 export const fetchCQActiveAddresses = fetchCM('AdrActCnt');
 
-// ===== HASHERATE – prioridade mempool.space, fallback CoinMetrics =====
 export const fetchHashrate = async () => {
     const cacheKey = 'hashrate';
     const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
-    // 1) mempool.space
+    // mempool.space (sem proxy, CORS liberado)
     try {
         const data = await fetchWithRetry('https://mempool.space/api/v1/mining/hashrate/1d', {}, 2);
         if (data?.avgHashrate) {
-            const hashrate = parseFloat(data.avgHashrate); // em TH/s
+            const hashrate = parseFloat(data.avgHashrate);
             setCachedData(cacheKey, hashrate);
             return hashrate;
         }
     } catch (e) { /* silencioso */ }
 
-    // 2) CoinMetrics (fallback)
+    // CoinMetrics (fallback)
     try {
         const url = `${CM_BASE}?assets=btc&metrics=HashRate&frequency=1d&page_size=1`;
         const data = await fetchWithRetry(url, {}, 2);
@@ -189,7 +188,9 @@ export const fetchHashrate = async () => {
     return null;
 };
 
-// ===== BLOCKCHAIR (fallback Active Addresses) =====
+// ============================================================
+// 5. BLOCKCHAIR (fallback para Active Addresses)
+// ============================================================
 export const fetchBlockchairStats = async () => {
     try {
         const btc = await fetchWithRetry('https://api.blockchair.com/bitcoin/stats', {}, 2);
@@ -202,111 +203,7 @@ export const fetchBlockchairStats = async () => {
 };
 
 // ============================================================
-// 5. SOPR e aSOPR (bitcoin-data.com)
-// ============================================================
-export const fetchSOPR = async () => {
-    const cacheKey = 'sopr_data';
-    const cached = getCachedData(cacheKey, 300000);
-    if (cached && !cached.stale) return cached;
-
-    try {
-        const url = 'https://bitcoin-data.com/api/v1/sopr';
-        const data = await fetchWithRetry(url, {}, 2);
-        if (data?.data?.sopr !== undefined) {
-            const sopr = parseFloat(data.data.sopr);
-            const asopr = parseFloat(data.data.asopr);
-            const result = { sopr, asopr };
-            setCachedData(cacheKey, result);
-            return result;
-        }
-        return null;
-    } catch (e) {
-        if (cached) return cached;
-        return null;
-    }
-};
-
-// ============================================================
-// 6. Realized Price (bitcoin-data.com)
-// ============================================================
-export const fetchRealizedPrice = async () => {
-    const cacheKey = 'realized_price';
-    const cached = getCachedData(cacheKey, 300000);
-    if (cached && !cached.stale) return cached;
-
-    try {
-        const url = 'https://bitcoin-data.com/api/v1/realized-price';
-        const data = await fetchWithRetry(url, {}, 2);
-        if (data?.data?.realizedPrice !== undefined) {
-            const price = parseFloat(data.data.realizedPrice);
-            setCachedData(cacheKey, price);
-            return price;
-        }
-        return null;
-    } catch (e) {
-        if (cached) return cached;
-        return null;
-    }
-};
-
-// ============================================================
-// 7. ETF Flows (Farside Investors – scraping com fallback mock)
-// ============================================================
-export const fetchETFData = async () => {
-    const cacheKey = 'etf_flows';
-    const cached = getCachedData(cacheKey, 300000);
-    if (cached && !cached.stale) return cached;
-
-    try {
-        const btcUrl = 'https://farside.co.uk/bitcoin-etf-flow-all-data/';
-        const btcHtml = await fetchWithRetry(btcUrl, {}, 2);
-        let btcFlow = 0;
-        const btcMatch = btcHtml.match(/>Total</i);
-        if (btcMatch) {
-            const valMatch = btcHtml.substring(btcMatch.index).match(/([+-]?\d+\.?\d*)(M|B)/);
-            if (valMatch) {
-                const num = parseFloat(valMatch[1]);
-                const mult = valMatch[2] === 'B' ? 1000 : 1;
-                btcFlow = num * mult;
-            }
-        }
-
-        const ethUrl = 'https://farside.co.uk/ethereum-etf-flow-all-data/';
-        const ethHtml = await fetchWithRetry(ethUrl, {}, 2);
-        let ethFlow = 0;
-        const ethMatch = ethHtml.match(/>Total</i);
-        if (ethMatch) {
-            const valMatch = ethHtml.substring(ethMatch.index).match(/([+-]?\d+\.?\d*)(M|B)/);
-            if (valMatch) {
-                const num = parseFloat(valMatch[1]);
-                const mult = valMatch[2] === 'B' ? 1000 : 1;
-                ethFlow = num * mult;
-            }
-        }
-
-        const result = { btcFlow, ethFlow };
-        setCachedData(cacheKey, result);
-        return result;
-    } catch (e) {
-        // Fallback: mock (evita que o dashboard quebre)
-        const mock = { btcFlow: 0, ethFlow: 0 };
-        setCachedData(cacheKey, mock);
-        return mock;
-    }
-};
-
-// ============================================================
-// 8. Exchange Netflow (indisponível)
-// ============================================================
-export const fetchExchangeNetflow = async () => null;
-
-// ============================================================
-// 9. Miner Outflow (indisponível)
-// ============================================================
-export const fetchMinerOutflow = async () => null;
-
-// ============================================================
-// 10. OI Delta (Binance)
+// 6. OI Delta (Binance)
 // ============================================================
 export const fetchOIDelta = async (symbol = 'BTCUSDT') => {
     const cacheKey = `oi_delta_${symbol}`;
@@ -333,7 +230,7 @@ export const fetchOIDelta = async (symbol = 'BTCUSDT') => {
 };
 
 // ============================================================
-// 11. Put/Call Ratio (Deribit)
+// 7. Put/Call Ratio (Deribit)
 // ============================================================
 export const fetchPutCallRatio = async () => {
     const cacheKey = 'pcr';
@@ -357,7 +254,36 @@ export const fetchPutCallRatio = async () => {
 };
 
 // ============================================================
-// 12. FUNÇÕES ORIGINAIS (mantidas)
+// 8. Basis (perp vs spot) – Binance
+// ============================================================
+export const fetchBasis = async (symbol = 'BTCUSDT') => {
+    const cacheKey = `basis_${symbol}`;
+    const cached = getCachedData(cacheKey, 60000);
+    if (cached && !cached.stale) return cached;
+
+    try {
+        const [perp, spot] = await Promise.all([
+            fetchWithRetry(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`, {}, 2),
+            fetchWithRetry(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, {}, 2)
+        ]);
+        if (perp?.markPrice && spot?.price) {
+            const mark = parseFloat(perp.markPrice);
+            const spotPrice = parseFloat(spot.price);
+            if (spotPrice > 0) {
+                const basis = ((mark - spotPrice) / spotPrice) * 100;
+                setCachedData(cacheKey, basis);
+                return basis;
+            }
+        }
+        return null;
+    } catch (e) {
+        if (cached) return cached;
+        return null;
+    }
+};
+
+// ============================================================
+// 9. Demais funções (Binance, DeFi, etc.)
 // ============================================================
 const SYMBOL_TO_COINGECKO = {
     'BTCUSDT': 'bitcoin',
@@ -478,28 +404,6 @@ export const fetchOpenInterest = async (symbol) => {
             const result = { oi: curr, delta: ((curr - prev) / prev) * 100 };
             setCachedData(cacheKey, result);
             return result;
-        }
-    } catch(e) { /* ignore */ }
-    if (cached) return cached;
-    return null;
-};
-
-export const fetchBasis = async (symbol = 'BTCUSDT') => {
-    const cacheKey = `basis_${symbol}`;
-    const cached = getCachedData(cacheKey, 60000);
-    if (cached && !cached.stale) return cached;
-
-    try {
-        const [perp, spot] = await Promise.all([
-            fetchWithRetry(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`),
-            fetchWithRetry(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`)
-        ]);
-        if (perp?.markPrice && spot?.price) {
-            const mark = parseFloat(perp.markPrice);
-            const spotPrice = parseFloat(spot.price);
-            const basis = ((mark - spotPrice) / spotPrice) * 100;
-            setCachedData(cacheKey, basis);
-            return basis;
         }
     } catch(e) { /* ignore */ }
     if (cached) return cached;
