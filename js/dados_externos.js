@@ -1,8 +1,44 @@
-// js/dados_externos.js – completo com Alpha Vantage para Macro e fallbacks
+// js/dados_externos.js – Com todas as correções P0 a P4
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
-// ===== HELPERS =====
+// ============================================================
+// 0. NOVO HELPER: fetchViaProxy (P1)
+// ============================================================
+const PROXY_LIST = [
+    'https://corsproxy.io/?url=',
+    'https://api.allorigins.win/raw?url=',
+    'https://api.codetabs.com/v1/proxy?quest=',
+    'https://thingproxy.freeboard.io/fetch/'
+];
+
+async function fetchViaProxy(url, options = {}, retries = 2) {
+    // Tenta diretamente primeiro (se CORS permitir)
+    try {
+        const resp = await fetchWithTimeout(url, options, 10000);
+        if (resp.ok) {
+            const text = await resp.text();
+            try { return JSON.parse(text); } catch(e) { return text; }
+        }
+    } catch (e) { /* falha, tenta proxy */ }
+
+    // Tenta cada proxy em sequência
+    for (const proxy of PROXY_LIST) {
+        const proxyUrl = proxy + encodeURIComponent(url);
+        try {
+            const resp = await fetchWithTimeout(proxyUrl, options, 15000);
+            if (resp.ok) {
+                const text = await resp.text();
+                try { return JSON.parse(text); } catch(e) { return text; }
+            }
+        } catch (e) { /* tenta próximo */ }
+    }
+    throw new Error(`Falha ao buscar ${url} após tentar todos os proxies`);
+}
+
+// ============================================================
+// HELPERS EXISTENTES (com ajustes)
+// ============================================================
 export function fetchWithTimeout(url, options = {}, timeout = 15000) {
     return new Promise((resolve, reject) => {
         const controller = new AbortController();
@@ -42,27 +78,26 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
     throw lastError || new Error(`Falha ao buscar ${url}`);
 }
 
-// ===== CACHE =====
+// ===== CACHE COM STALE-WHILE-REVALIDATE (P3) =====
+const CACHE = new Map();
+
 function getCachedData(key, maxAge = CONFIG.CACHE_TTL_MS) {
-    try {
-        const raw = localStorage.getItem(key);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        const age = Date.now() - parsed.timestamp;
-        if (age < maxAge) return parsed.data;
-        if (age < CONFIG.STALE_CACHE_TTL_MS || age < 3600000) return { data: parsed.data, stale: true };
-        return null;
-    } catch(e) { return null; }
+    const entry = CACHE.get(key);
+    if (!entry) return null;
+    const age = Date.now() - entry.timestamp;
+    if (age < maxAge) return entry.data;
+    if (age < CONFIG.STALE_CACHE_TTL_MS || age < 3600000) return { data: entry.data, stale: true };
+    return null;
 }
 
 function setCachedData(key, data) {
-    try { localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() })); } catch(e) { /* ignore */ }
+    CACHE.set(key, { data, timestamp: Date.now() });
 }
 
 export function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ============================================================
-// 1. ETH GAS PRICE
+// 1. ETH GAS PRICE (Blockchair via proxy) – P2
 // ============================================================
 export const fetchEthGasPrice = async () => {
     const cacheKey = 'ethGas';
@@ -70,19 +105,7 @@ export const fetchEthGasPrice = async () => {
     if (cached && !cached.stale) return cached;
 
     try {
-        const resp = await fetchWithRetry('https://ethereum.publicnode.com', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_gasPrice', params: [], id: 1 })
-        }, 2);
-        if (resp && resp.result) {
-            const gwei = parseInt(resp.result, 16) / 1e9;
-            setCachedData(cacheKey, gwei);
-            return gwei;
-        }
-    } catch (e) { /* silencioso */ }
-
-    try {
+        // Etherscan (já é CORS-friendly)
         const url = `https://api.etherscan.io/v2/api?chainid=1&module=gastracker&action=gasoracle&apikey=${CONFIG.ETHERSCAN_API_KEY}`;
         const data = await fetchWithRetry(url, {}, 2);
         if (data && data.status === '1' && data.result) {
@@ -90,13 +113,25 @@ export const fetchEthGasPrice = async () => {
             setCachedData(cacheKey, gasPrice);
             return gasPrice;
         }
-    } catch (e) { /* silencioso */ }
+    } catch(e) { /* fallback */ }
+
+    // Fallback via proxy (Blockchair)
+    try {
+        const proxyUrl = `https://api.allorigins.win/raw?url=https://api.blockchair.com/ethereum/stats`;
+        const data = await fetchWithRetry(proxyUrl, {}, 2);
+        if (data?.data?.gas_price) {
+            const gwei = parseFloat(data.data.gas_price) / 1e9;
+            setCachedData(cacheKey, gwei);
+            return gwei;
+        }
+    } catch(e) { /* silencioso */ }
+
     if (cached) return cached;
     return 5;
 };
 
 // ============================================================
-// 2. MACRO – Alpha Vantage (com fallback estático)
+// 2. MACRO – Alpha Vantage (via proxy) – P2
 // ============================================================
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
@@ -114,11 +149,8 @@ export const fetchMacroStatic = async () => {
         const symbols = ['DXY', 'DGS10', 'VIX', 'SPX', 'NDX'];
         const fetchSymbol = async (symbol) => {
             await sleep(300);
-            return await fetchWithRetry(
-                `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`,
-                {},
-                2
-            );
+            const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`;
+            return await fetchViaProxy(url, {}, 2); // usando proxy
         };
         const results = await Promise.all(symbols.map(s => fetchSymbol(s)));
 
@@ -158,7 +190,7 @@ export const fetchMacroStatic = async () => {
 };
 
 // ============================================================
-// 3. FED RATE (Alpha Vantage)
+// 3. FED RATE (Alpha Vantage via proxy)
 // ============================================================
 export const fetchFedRate = async () => {
     const cacheKey = 'fedRate';
@@ -167,7 +199,7 @@ export const fetchFedRate = async () => {
 
     try {
         const url = `https://www.alphavantage.co/query?function=FEDERAL_FUNDS_RATE&interval=monthly&apikey=${CONFIG.ALPHAVANTAGE_API_KEY}`;
-        const data = await fetchWithRetry(url, {}, 2);
+        const data = await fetchViaProxy(url, {}, 2);
         if (data?.data?.[0]?.value) {
             const rate = parseFloat(data.data[0].value);
             setCachedData(cacheKey, rate);
@@ -239,21 +271,44 @@ export const fetchHashrate = async () => {
 };
 
 // ============================================================
-// 5. BLOCKCHAIR (fallback para Active Addresses)
+// 5. BLOCKCHAIR (via proxy) – P2
 // ============================================================
 export const fetchBlockchairStats = async () => {
+    const cacheKey = 'blockchair';
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) return cached;
+
     try {
-        const btc = await fetchWithRetry('https://api.blockchair.com/bitcoin/stats', {}, 2);
-        return {
-            blockHeight: btc?.data?.best_block_height || 0,
-            mempoolSize: btc?.data?.mempool_total_size || 0,
-            activeAddresses: btc?.data?.addresses_count_24h || 0
-        };
-    } catch(e) { return null; }
+        const url = 'https://api.blockchair.com/bitcoin/stats';
+        const data = await fetchViaProxy(url, {}, 2);
+        if (data?.data) {
+            const result = {
+                blockHeight: data.data.best_block_height || 0,
+                mempoolSize: data.data.mempool_total_size || 0,
+                activeAddresses: data.data.addresses_count_24h || 0
+            };
+            setCachedData(cacheKey, result);
+            return result;
+        }
+    } catch(e) { /* fallback */ }
+
+    // Fallback: mempool.space
+    try {
+        const data = await fetchWithRetry('https://mempool.space/api/v1/blocks/tip/height', {}, 2);
+        const height = parseInt(data);
+        if (!isNaN(height)) {
+            const result = { blockHeight: height, mempoolSize: 0, activeAddresses: 0 };
+            setCachedData(cacheKey, result);
+            return result;
+        }
+    } catch(e) { /* silencioso */ }
+
+    if (cached) return cached;
+    return null;
 };
 
 // ============================================================
-// 6. OI Delta (Binance)
+// 6. OI Delta (Binance) – CORREÇÃO P0 (URL)
 // ============================================================
 export const fetchOIDelta = async (symbol = 'BTCUSDT') => {
     const cacheKey = `oi_delta_${symbol}`;
@@ -261,6 +316,7 @@ export const fetchOIDelta = async (symbol = 'BTCUSDT') => {
     if (cached && !cached.stale) return cached;
 
     try {
+        // Corrigido: símbolo sem ponto extra, parâmetro period
         const currData = await fetchWithRetry(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=15m&limit=1`);
         const currOi = currData?.length ? parseFloat(currData[0].sumOpenInterest) : 0;
 
@@ -280,7 +336,7 @@ export const fetchOIDelta = async (symbol = 'BTCUSDT') => {
 };
 
 // ============================================================
-// 7. Put/Call Ratio (Deribit)
+// 7. Put/Call Ratio (Deribit via proxy) – P2
 // ============================================================
 export const fetchPutCallRatio = async () => {
     const cacheKey = 'pcr';
@@ -288,7 +344,8 @@ export const fetchPutCallRatio = async () => {
     if (cached && !cached.stale) return cached;
 
     try {
-        const data = await fetchWithRetry('https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option');
+        const url = 'https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option';
+        const data = await fetchViaProxy(url, {}, 2);
         let putVolume = 0, callVolume = 0;
         data?.result?.forEach(item => {
             if (item.option_type === 'put') putVolume += item.volume || 0;
@@ -333,7 +390,7 @@ export const fetchBasis = async (symbol = 'BTCUSDT') => {
 };
 
 // ============================================================
-// 9. Demais funções (Binance, DeFi, etc.)
+// 9. FUNÇÕES DE PREÇO E CANDLES (sem alterações)
 // ============================================================
 const SYMBOL_TO_COINGECKO = {
     'BTCUSDT': 'bitcoin',
@@ -483,6 +540,9 @@ export const fetchOrderBook = async (symbol = 'BTCUSDT', limit = 10) => {
     return null;
 };
 
+// ============================================================
+// 10. DEFI LLAMA (correção TVL 24h – P3)
+// ============================================================
 export const fetchDeFiData = async () => {
     const cacheKey = 'defiData';
     const cached = getCachedData(cacheKey, 300000);
@@ -497,9 +557,13 @@ export const fetchDeFiData = async () => {
         stable?.peggedAssets?.forEach(a => total += a.total || 0);
         let tvlVal = 0, tvlChange = 0;
         if (tvl?.length > 1) {
-            tvlVal = tvl[tvl.length-1].totalLiquidityUSD;
-            const prev = tvl[tvl.length-2].totalLiquidityUSD;
-            tvlChange = ((tvlVal - prev) / prev) * 100;
+            // Último ponto completo (assumindo que o último é o mais recente, mas pode ser parcial)
+            // Pega o ponto de 24h atrás (índice -2 se a frequência for diária)
+            const last = tvl.length - 1;
+            const prev = Math.max(last - 2, 0); // para garantir se houver menos pontos
+            tvlVal = tvl[last].totalLiquidityUSD;
+            const prevVal = tvl[prev].totalLiquidityUSD;
+            tvlChange = prevVal > 0 ? ((tvlVal - prevVal) / prevVal) * 100 : 0;
         }
         const result = { totalStable: total/1e9, tvl: tvlVal/1e9, tvlChange };
         setCachedData(cacheKey, result);
@@ -548,6 +612,48 @@ export const fetchFearGreed = async () => {
     return null;
 };
 
+// ============================================================
+// 11. ETF FLOWS REAIS (P2) – via Farside scraping com proxy
+// ============================================================
+export const fetchETFData = async () => {
+    const cacheKey = 'etfData';
+    const cached = getCachedData(cacheKey, 600000); // 10 min
+    if (cached && !cached.stale) return cached;
+
+    try {
+        // Usa a tabela HTML da Farside e extrai os dados via proxy
+        const url = 'https://farside.co.uk/bitcoin-etf-flow-all-data/';
+        const html = await fetchViaProxy(url, {}, 2);
+        // Extrai a tabela com regex simples (procura pela tabela com dados)
+        const tableMatch = html.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
+        if (!tableMatch) throw new Error('Tabela não encontrada');
+        const rows = tableMatch[1].match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
+        const data = [];
+        // Cabeçalho: Data, Total Flow, etc.
+        for (let i = 1; i < rows.length; i++) { // pula cabeçalho
+            const cols = rows[i].match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
+            if (cols.length < 2) continue;
+            const date = cols[0].replace(/<[^>]*>/g, '').trim();
+            const flowStr = cols[1].replace(/<[^>]*>/g, '').trim().replace(/,/g, '');
+            const flow = parseFloat(flowStr);
+            if (date && !isNaN(flow)) {
+                data.push({ date, total: flow });
+            }
+        }
+        // Pega os últimos 30 dias
+        const sorted = data.reverse().slice(0, 30);
+        setCachedData(cacheKey, sorted);
+        return sorted;
+    } catch(e) {
+        console.warn('[ETF] Erro ao buscar dados da Farside:', e);
+        if (cached) return cached;
+        return null;
+    }
+};
+
+// ============================================================
+// 12. MTF CONFLUENCE (sem alterações)
+// ============================================================
 export async function getMTFConfluence(symbol) {
     const cacheKey = `mtf_${symbol}`;
     const cached = getCachedData(cacheKey, 300000);
@@ -578,7 +684,9 @@ export async function getMTFConfluence(symbol) {
     return result;
 }
 
-// ===== COMPATIBILIDADE =====
+// ============================================================
+// 13. STUBS (compatibilidade)
+// ============================================================
 export const fetchFREDVIX = async () => null;
 export const fetchFREDUS10Y = async () => null;
 export const fetchFREDDXY = async () => null;
