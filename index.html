@@ -249,7 +249,7 @@
             </div>
         </section>
 
-        <!-- ===== TABELA ON-CHAIN & DERIVADOS – COMPLETA (com colunas de interpretação) ===== -->
+        <!-- ===== TABELA ON-CHAIN & DERIVADOS – SOMENTE INDICADORES ESSENCIAIS ===== -->
         <section>
             <h2 class="section-title">⛓️ ANÁLISE ON-CHAIN &amp; DERIVADOS</h2>
             <div class="table-wrapper">
@@ -257,20 +257,13 @@
                     <thead><tr><th>Métrica</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
                     <tbody>
                         <tr><td><strong>MVRV (BTC)</strong></td><td id="mvrv">Carregando...</td><td id="mvrv-interp">--</td><td><span class="data-source">CoinMetrics</span></td></tr>
-                        <tr><td><strong>SOPR</strong></td><td id="sopr">Carregando...</td><td id="sopr-interp">--</td><td><span class="data-source">bitcoin-data.com</span></td></tr>
-                        <tr><td><strong>aSOPR (último)</strong></td><td id="asopr">Carregando...</td><td id="asopr-interp">--</td><td><span class="data-source">bitcoin-data.com</span></td></tr>
-                        <tr><td><strong>Realized Price (BTC)</strong></td><td id="realized-price">Carregando...</td><td>ℹ️ Preço médio</td><td><span class="data-source">bitcoin-data.com</span></td></tr>
-                        <tr><td><strong>ETF Flows (BTC)</strong></td><td id="etf-btc-live"><strong>Carregando...</strong></td><td id="etf-btc-interp">--</td><td><span class="data-source">Farside Investors</span></td></tr>
-                        <tr><td><strong>ETF Flows (ETH)</strong></td><td id="etf-eth-live"><strong>Carregando...</strong></td><td id="etf-eth-interp">--</td><td><span class="data-source">Farside Investors</span></td></tr>
-                        <tr><td><strong>Exchange Netflow</strong></td><td id="exchange-netflow">INDISPONÍVEL</td><td id="exchange-netflow-interp">--</td><td><span class="data-source">N/A</span></td></tr>
+                        <tr><td><strong>Active Addresses</strong></td><td id="active-addresses">Carregando...</td><td>ℹ️ Moderado</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>BTC Hashrate</strong></td><td id="btc-hashrate">Carregando...</td><td>✅ Elevado</td><td><span class="data-source">mempool.space / CoinMetrics</span></td></tr>
                         <tr><td><strong>Funding Rate (atual)</strong></td><td id="funding-rate">Carregando...</td><td id="funding-rate-interp">ℹ️ Neutro</td><td><span class="data-source">Binance</span></td></tr>
                         <tr><td><strong>Open Interest</strong></td><td id="open-interest">Carregando...</td><td id="open-interest-interp">ℹ️ Volume em aberto</td><td><span class="data-source">Binance</span></td></tr>
                         <tr><td><strong>OI Delta (24h)</strong></td><td id="oi-delta">Carregando...</td><td id="oi-delta-interp">--</td><td><span class="data-source">Binance</span></td></tr>
                         <tr><td><strong>Basis (perp vs spot)</strong></td><td id="basis">Carregando...</td><td>ℹ️ Prêmio/Deságio</td><td><span class="data-source">Binance</span></td></tr>
                         <tr><td><strong>BTC Put/Call Ratio</strong></td><td id="put-call-ratio">Carregando...</td><td id="put-call-interp">--</td><td><span class="data-source">Deribit</span></td></tr>
-                        <tr><td><strong>BTC Hashrate</strong></td><td id="btc-hashrate">Carregando...</td><td>✅ Elevado</td><td><span class="data-source">mempool.space / CoinMetrics</span></td></tr>
-                        <tr><td><strong>Miner Outflow</strong></td><td id="miner-outflow">INDISPONÍVEL</td><td id="miner-outflow-interp">--</td><td><span class="data-source">N/A</span></td></tr>
-                        <tr><td><strong>Active Addresses</strong></td><td id="active-addresses">Carregando...</td><td>ℹ️ Moderado</td><td><span class="data-source">CoinMetrics</span></td></tr>
                         <tr><td><strong>ETH Gas Price</strong></td><td id="eth-gas">Carregando...</td><td>✅ Baixo</td><td><span class="data-source">Etherscan / RPC</span></td></tr>
                     </tbody>
                 </table>
@@ -361,7 +354,7 @@
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>📋 Metodologia V2 + Comitê</h4>
-                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados atualizados</strong> via CoinMetrics, bitcoin-data.com (via proxy), Binance, Deribit, mempool.space, Farside Investors (via proxy), DefiLlama.</p>
+                    <p>Motor Institucional SMC + MTF + Orderflow (Liquidações) + Macro Filter + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados atualizados</strong> via CoinMetrics, Binance, Deribit, mempool.space, DefiLlama.</p>
                     <p><strong>Última atualização bem‑sucedida:</strong> <span id="live-update-time">--</span></p>
                 </div>
             </div>
@@ -390,12 +383,7 @@
             fetchMVRV,
             fetchCQActiveAddresses,
             fetchHashrate,
-            fetchSOPR,
-            fetchRealizedPrice,
-            fetchETFData,
-            fetchOIDelta,
-            fetchExchangeNetflow,
-            fetchMinerOutflow
+            fetchOIDelta
         } from './js/dados_externos.js';
 
         import * as indicadores from './js/indicadores.js';
@@ -1143,58 +1131,29 @@
             if (externalUpdating) return;
             externalUpdating = true;
             try {
-                // ===== MVRV (CoinMetrics) e Active Addresses =====
-                const [mvrv, cqActive] = await Promise.all([
-                    fetchMVRV(),
-                    fetchCQActiveAddresses()
-                ]);
-
+                // ===== MVRV =====
+                const mvrv = await fetchMVRV();
                 setTextOrNA('mvrv', mvrv);
                 if (mvrv !== null && !isNaN(mvrv)) {
                     document.getElementById('mvrv-interp').textContent = mvrv > 1.0 ? '⚠️ Acima de 1.0' : 'ℹ️ Abaixo de 1.0';
                 } else {
                     document.getElementById('mvrv-interp').textContent = '--';
                 }
-                setTextOrNA('active-addresses', cqActive);
 
-                // ===== SOPR e aSOPR (bitcoin-data.com via proxy) =====
-                const soprData = await fetchSOPR();
-                if (soprData) {
-                    const soprEl = document.getElementById('sopr');
-                    const asoprEl = document.getElementById('asopr');
-                    if (soprEl) soprEl.textContent = soprData.sopr !== null ? soprData.sopr.toFixed(4) : 'INDISPONÍVEL';
-                    if (asoprEl) asoprEl.textContent = soprData.asopr !== null ? soprData.asopr.toFixed(4) : 'INDISPONÍVEL';
-                    const soprInterp = document.getElementById('sopr-interp');
-                    if (soprInterp) {
-                        soprInterp.textContent = soprData.sopr !== null ? (soprData.sopr < 1 ? '🔴 Capitulação' : '🟢 Lucro') : '--';
-                    }
-                    const asoprInterp = document.getElementById('asopr-interp');
-                    if (asoprInterp) {
-                        asoprInterp.textContent = soprData.asopr !== null ? (soprData.asopr < 1 ? '⚠️ Fraco' : 'ℹ️ Neutro') : '--';
+                // ===== Active Addresses =====
+                const cqActive = await fetchCQActiveAddresses();
+                setTextOrNA('active-addresses', cqActive);
+                if (cqActive === null) {
+                    const blockchair = await fetchBlockchairStats();
+                    if (blockchair) {
+                        document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
                     }
                 }
 
-                // ===== Realized Price (via proxy) =====
-                const realizedPrice = await fetchRealizedPrice();
-                setTextOrNA('realized-price', realizedPrice !== null ? '$' + realizedPrice.toFixed(2) : null);
-
-                // ===== ETF Flows (via proxy) =====
-                const etf = await fetchETFData();
-                if (etf) {
-                    const btcEl = document.getElementById('etf-btc-live');
-                    const ethEl = document.getElementById('etf-eth-live');
-                    const btcInterp = document.getElementById('etf-btc-interp');
-                    const ethInterp = document.getElementById('etf-eth-interp');
-                    if (btcEl) {
-                        btcEl.innerHTML = etf.btcFlow !== 0 ? (etf.btcFlow >= 0 ? '+' : '') + etf.btcFlow.toFixed(2) + 'M' : '0M';
-                        btcEl.style.color = etf.btcFlow >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
-                    }
-                    if (ethEl) {
-                        ethEl.innerHTML = etf.ethFlow !== 0 ? (etf.ethFlow >= 0 ? '+' : '') + etf.ethFlow.toFixed(2) + 'M' : '0M';
-                        ethEl.style.color = etf.ethFlow >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
-                    }
-                    if (btcInterp) btcInterp.textContent = etf.btcFlow > 0 ? '🟢 Entrada' : etf.btcFlow < 0 ? '🔴 Saída' : 'ℹ️ Neutro';
-                    if (ethInterp) ethInterp.textContent = etf.ethFlow > 0 ? '🟢 Entrada' : etf.ethFlow < 0 ? '🔴 Saída' : 'ℹ️ Neutro';
+                // ===== Hashrate =====
+                const hashrate = await fetchHashrate();
+                if (hashrate !== null) {
+                    document.getElementById('btc-hashrate').textContent = (hashrate / 1e6).toFixed(2) + ' EH/s';
                 }
 
                 // ===== Funding Rate =====
@@ -1224,24 +1183,6 @@
                 setTextOrNA('put-call-ratio', pcr !== null ? pcr.toFixed(2) : null);
                 if (pcr !== null) {
                     document.getElementById('put-call-interp').textContent = pcr > 1.5 ? '⚠️ Medo' : pcr < 0.7 ? '✅ Otimismo' : 'ℹ️ Neutro';
-                }
-
-                // ===== Hashrate =====
-                const hashrate = await fetchHashrate();
-                if (hashrate !== null) {
-                    document.getElementById('btc-hashrate').textContent = (hashrate / 1e6).toFixed(2) + ' EH/s';
-                }
-
-                // ===== Exchange Netflow e Miner Outflow (indisponíveis) =====
-                document.getElementById('exchange-netflow').textContent = 'INDISPONÍVEL';
-                document.getElementById('exchange-netflow-interp').textContent = '--';
-                document.getElementById('miner-outflow').textContent = 'INDISPONÍVEL';
-                document.getElementById('miner-outflow-interp').textContent = '--';
-
-                // ===== Blockchair fallback =====
-                const blockchair = await fetchBlockchairStats();
-                if (blockchair && cqActive === null) {
-                    document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
                 }
 
                 // ===== ETH Gas =====
