@@ -429,7 +429,7 @@
             checkOnChainFilter, checkVolumeAndOrderflow, checkDerivativesFilter,
             checkPortfolioExposure, checkMTFAlignment, computeScore, isSafeToTrade,
             KellyPositionSize, detectVolumeAnomaly, isHighImpactEventNow,
-            ConfidenceScorer, calculateConfidenceScore
+            ConfidenceScorer, calculateConfidenceScore, calculateVWAP
         } = indicadores;
 
         // ===== STATE =====
@@ -465,7 +465,8 @@
                 minusDI: 0,
                 divergence: null,
                 volumeAnomaly: null,
-                macroBlackout: false
+                macroBlackout: false,
+                vwap: 0
             };
         });
 
@@ -931,7 +932,10 @@
 
         function initWebSockets() {
             const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
-            const streams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
+            // Adiciona streams de kline para 15m (melhoria 9)
+            const tradeStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
+            const klineStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@kline_15m').join('/');
+            const streams = tradeStreams + '/' + klineStreams;
             const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
 
             ws.onopen = () => {
@@ -946,38 +950,54 @@
             ws.onmessage = (event) => {
                 try {
                     const msg = JSON.parse(event.data);
-                    const symbol = msg.data.s;
-                    const price = parseFloat(msg.data.p);
-                    const qty = parseFloat(msg.data.q);
-                    const isBuy = !msg.data.m;
+                    const stream = msg.stream;
+                    const data = msg.data;
+                    
+                    // Trade stream
+                    if (stream.includes('@trade')) {
+                        const symbol = data.s;
+                        const price = parseFloat(data.p);
+                        const qty = parseFloat(data.q);
+                        const isBuy = !data.m;
 
-                    setCurrentPrice(symbol, price);
+                        setCurrentPrice(symbol, price);
 
-                    // ---- WHALE TRACKER ----
-                    const tradeValue = price * qty;
-                    if (tradeValue > 100000) {
-                        if (isBuy) whaleTrades[symbol].buys += tradeValue;
-                        else whaleTrades[symbol].sells += tradeValue;
-                        whaleTrades[symbol].lastTx = {
-                            price,
-                            value: tradeValue,
-                            time: Date.now(),
-                            side: isBuy ? 'BUY' : 'SELL'
-                        };
-                        updateWhaleUI();
-                    }
-
-                    if (assetsData[symbol]) {
-                        const prevPrice = assetsData[symbol].price;
-                        assetsData[symbol].price = price;
-                        if (prevPrice > 0) {
-                            assetsData[symbol].ema50_1H = updateStatefulEMA(assetsData[symbol].ema50_1H, price, 50);
-                            assetsData[symbol].ema200_4H = updateStatefulEMA(assetsData[symbol].ema200_4H, price, 200);
-                            assetsData[symbol].rsiState = updateStatefulRSI(assetsData[symbol].rsiState, price, prevPrice);
-                            assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+                        // Whale tracker
+                        const tradeValue = price * qty;
+                        if (tradeValue > 100000) {
+                            if (isBuy) whaleTrades[symbol].buys += tradeValue;
+                            else whaleTrades[symbol].sells += tradeValue;
+                            whaleTrades[symbol].lastTx = {
+                                price,
+                                value: tradeValue,
+                                time: Date.now(),
+                                side: isBuy ? 'BUY' : 'SELL'
+                            };
+                            updateWhaleUI();
                         }
-                        checkPositionManagement(symbol, price);
-                        updateLivePriceUI(symbol, price);
+
+                        if (assetsData[symbol]) {
+                            const prevPrice = assetsData[symbol].price;
+                            assetsData[symbol].price = price;
+                            if (prevPrice > 0) {
+                                assetsData[symbol].ema50_1H = updateStatefulEMA(assetsData[symbol].ema50_1H, price, 50);
+                                assetsData[symbol].ema200_4H = updateStatefulEMA(assetsData[symbol].ema200_4H, price, 200);
+                                assetsData[symbol].rsiState = updateStatefulRSI(assetsData[symbol].rsiState, price, prevPrice);
+                                assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+                            }
+                            checkPositionManagement(symbol, price);
+                            updateLivePriceUI(symbol, price);
+                        }
+                    }
+                    // Kline stream (melhoria 9)
+                    else if (stream.includes('@kline')) {
+                        const k = data.k;
+                        const symbol = data.s;
+                        if (assetsData[symbol] && k.x) { // candle fechado
+                            console.log(`[WS] Candle 15m fechado para ${symbol}, forçando avaliação.`);
+                            // Forçar atualização do motor principal
+                            setTimeout(() => evaluateMarkets(), 1000);
+                        }
                     }
                 } catch (e) {
                     // ignora mensagens malformadas
@@ -1090,6 +1110,17 @@
             const pos = activePositions[symbol];
             if (!pos) return;
             const data = assetsData[symbol];
+            
+            // --- Time-based exit (melhoria 5) ---
+            const MAX_HOLD_HOURS = 12;
+            if (pos.entryTime) {
+                const hoursOpen = (Date.now() - pos.entryTime) / (1000 * 60 * 60);
+                if (hoursOpen >= MAX_HOLD_HOURS && !pos.movedToBE) {
+                    closePosition(symbol, `TIME EXIT (${MAX_HOLD_HOURS}h)`, false);
+                    return;
+                }
+            }
+            
             let updateUI = false;
             if (pos.type === 'LONG') {
                 if (data.swingLows.length > 0) {
@@ -1189,8 +1220,8 @@
         }
 
         // ===== AVALIAÇÃO DE MERCADO (com todas as melhorias) =====
-        function evaluateMarkets() {
-            CONFIG.ASSETS.forEach(symbol => {
+        async function evaluateMarkets() {
+            for (const symbol of CONFIG.ASSETS) {
                 const data = assetsData[symbol];
                 updateSwingPoints(data);
                 
@@ -1200,23 +1231,44 @@
                 data.plusDI = adxData.plusDI;
                 data.minusDI = adxData.minusDI;
                 
-                // --- 2. Detecção de volume anômalo ---
-                const volAnomaly = detectVolumeAnomaly(data.candles1H);
-                data.volumeAnomaly = volAnomaly;
-                
-                // --- 3. Divergência RSI ---
-                const rsiValues = data.candles1H.map(c => {
-                    // Simplificado: usa o RSI calculado no estado
-                    return data.rsi_1H;
-                });
+                // --- 2. Correção do bug de Divergência RSI (melhoria 1) ---
+                let rsiValues = [];
+                let avgGain = 0, avgLoss = 0;
+                const closes1H = data.candles1H.map(c => c.close);
+                if (closes1H.length > 14) {
+                    for (let i = 1; i < closes1H.length; i++) {
+                        const diff = closes1H[i] - closes1H[i - 1];
+                        const gain = diff > 0 ? diff : 0;
+                        const loss = diff < 0 ? Math.abs(diff) : 0;
+                        if (i === 1) { avgGain = gain; avgLoss = loss; } 
+                        else {
+                            avgGain = (avgGain * 13 + gain) / 14;
+                            avgLoss = (avgLoss * 13 + loss) / 14;
+                        }
+                        const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
+                        rsiValues.push(rsi);
+                    }
+                }
                 const divergence = detectRSIDivergence(data.candles1H, rsiValues);
                 data.divergence = divergence;
                 
-                // --- 4. Macro blackout ---
-                const macroCheck = isHighImpactEventNow();
+                // --- 3. Volume anômalo adaptativo (melhoria 6) ---
+                const currentATR = data.atr_1H || 0;
+                const avgPrice = data.candles1H.slice(-20).reduce((s,c) => s+c.close,0)/20;
+                const volatilityPct = avgPrice > 0 ? (currentATR / avgPrice) * 100 : 1.5;
+                const volThreshold = volatilityPct > 2 ? 2.5 : 1.8; 
+                const volAnomaly = detectVolumeAnomaly(data.candles1H, 20, volThreshold);
+                data.volumeAnomaly = volAnomaly;
+                
+                // --- 4. Cálculo do VWAP (melhoria 4) ---
+                const vwap = calculateVWAP(data.candles1H);
+                data.vwap = vwap;
+                
+                // --- 5. Macro blackout (melhoria 8) ---
+                const macroCheck = await isHighImpactEventNow();
                 data.macroBlackout = macroCheck.isBlackout && macroCheck.impact === 'HIGH';
                 
-                // --- 5. Score com ConfidenceScorer ---
+                // --- 6. Score com ConfidenceScorer ajustado (melhoria 5) ---
                 const scoreData = computeScore(symbol, assetsData, liqMap);
                 const confidence = calculateConfidenceScore({
                     mtfAligned: data.mtfConfluence?.alinhado || false,
@@ -1231,35 +1283,30 @@
                 });
                 
                 const score = confidence.score;
-                const blockReason = scoreData.blockReason;
+                let blockReason = scoreData.blockReason;
                 
-                // --- 6. Filtros adicionais ---
-                // ADX < 25 bloqueia entrada (mercado lateral)
+                // --- 7. Filtros adicionais ---
+                // ADX < 25 bloqueia
                 if (data.adx < 25 && !blockReason) {
                     const reason = 'ADX < 25 (mercado lateral)';
-                    if (blockReason) blockReason += '; ' + reason;
-                    else blockReason = reason;
+                    blockReason = blockReason ? blockReason + '; ' + reason : reason;
                 }
-                
-                // Volume anômalo é exigido como confirmação (opcional, pode ser flexível)
-                // Se não houver anomalia de volume, pode reduzir score ou bloquear
-                if (data.volumeAnomaly && !data.volumeAnomaly.isAnomaly && !blockReason) {
-                    // Não bloqueia, mas reduz score (já é feito no ConfidenceScorer)
-                }
-                
-                // Macro blackout bloqueia entrada
+                // Macro blackout bloqueia
                 if (data.macroBlackout && !blockReason) {
                     const reason = 'Evento macro de alto impacto (blackout)';
-                    if (blockReason) blockReason += '; ' + reason;
-                    else blockReason = reason;
+                    blockReason = blockReason ? blockReason + '; ' + reason : reason;
+                }
+                // VWAP filter (melhoria 4)
+                const primaryDirection = (score >= 70) ? 'LONG' : (score <= 30 ? 'SHORT' : null);
+                if (primaryDirection === 'LONG' && data.price < vwap && !blockReason) {
+                    blockReason = blockReason ? blockReason + '; Preço abaixo de VWAP' : 'Preço abaixo de VWAP';
+                } else if (primaryDirection === 'SHORT' && data.price > vwap && !blockReason) {
+                    blockReason = blockReason ? blockReason + '; Preço acima de VWAP' : 'Preço acima de VWAP';
                 }
                 
-                // Divergência contraditória reduz score (já no ConfidenceScorer)
-                
-                // --- 7. Atualização da UI ---
+                // --- 8. Atualização da UI ---
                 if (symbol === 'BTCUSDT') {
                     updateMainScoreUI(scoreData, blockReason);
-                    // Atualizar também o painel de confiança
                     const confEl = document.getElementById('confidence-score');
                     if (confEl) {
                         const level = confidence.level;
@@ -1268,42 +1315,76 @@
                     }
                 }
                 
-                // --- 8. Lógica de entrada (com todos os filtros) ---
+                // --- 9. Lógica de entrada (com re-teste e BOS real) ---
                 const prevScore = previousScores[symbol] || 50;
                 if (!activePositions[symbol] && !blockReason && isSafeToTrade()) {
                     const now = Date.now();
                     const cooldown = alertCooldowns[symbol] || 0;
                     if (now - cooldown > 1800000) {
                         const atr = data.atr_1H || (data.price * 0.02);
-                        const primaryDirection = (score >= 70) ? 'LONG' : (score <= 30 ? 'SHORT' : null);
                         if (primaryDirection) {
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
                             if (expCheck.blocked) return;
-                            let stop, tp1, tp2, structLevel;
+                            
+                            // --- 10. Confirmação de re-teste (melhoria 3) ---
+                            const ema20 = calcEMA(data.candles1H.map(c=>c.close), 20).slice(-1)[0] || data.price;
+                            let retestConfirmed = false;
                             if (primaryDirection === 'LONG') {
-                                structLevel = Math.min(...data.swingLows) - (atr * 0.3);
-                                stop = Math.min(structLevel, data.price - atr * 1.5);
-                                tp1 = data.price + (atr * 2);
-                                tp2 = data.price + (atr * 4);
-                            } else {
-                                structLevel = Math.max(...data.swingHighs) + (atr * 0.3);
-                                stop = Math.max(structLevel, data.price + atr * 1.5);
-                                tp1 = data.price - (atr * 2);
-                                tp2 = data.price - (atr * 4);
+                                if (data.price <= ema20 * 1.005 && data.price >= ema20 * 0.995) retestConfirmed = true;
+                            } else if (primaryDirection === 'SHORT') {
+                                if (data.price >= ema20 * 0.995 && data.price <= ema20 * 1.005) retestConfirmed = true;
                             }
-                            const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
-                            if (rr1 < 1.5) return;
-                            if (primaryDirection === 'LONG' && findSMCSetup(data, 'LONG')) {
+                            
+                            // Usar findSMCSetup real (agora implementado em indicadores.js)
+                            const smcSetup = findSMCSetup(data, primaryDirection);
+                            
+                            if (smcSetup && retestConfirmed) {
+                                let stop, tp1, tp2, structLevel;
+                                // --- Alvos baseados em liquidação (melhoria 3) ---
+                                let liqTarget1 = null, liqTarget2 = null;
+                                const liqs = liquidationLevels[symbol] || [];
+                                if (liqs.length > 0) {
+                                    if (primaryDirection === 'LONG') {
+                                        liqTarget1 = Math.max(...liqs.filter(l => l > data.price));
+                                        liqTarget2 = liqTarget1 ? liqTarget1 * 1.02 : null;
+                                    } else {
+                                        liqTarget1 = Math.min(...liqs.filter(l => l < data.price));
+                                        liqTarget2 = liqTarget1 ? liqTarget1 * 0.98 : null;
+                                    }
+                                }
+                                
+                                if (primaryDirection === 'LONG') {
+                                    structLevel = Math.min(...data.swingLows) - (atr * 0.3);
+                                    stop = Math.min(structLevel, data.price - atr * 1.5);
+                                    tp1 = data.price + (atr * 2);
+                                    tp2 = liqTarget1 || (data.price + (atr * 4));
+                                    tp3 = liqTarget2 || (data.price + (atr * 6));
+                                } else {
+                                    structLevel = Math.max(...data.swingHighs) + (atr * 0.3);
+                                    stop = Math.max(structLevel, data.price + atr * 1.5);
+                                    tp1 = data.price - (atr * 2);
+                                    tp2 = liqTarget1 || (data.price - (atr * 4));
+                                    tp3 = liqTarget2 || (data.price - (atr * 6));
+                                }
+                                const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
+                                if (rr1 < 1.5) return;
+                                
                                 const riskPct = KellyPositionSize(banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1), rr1);
-                                telegram.sendTradeAlert(symbol, 'long', score, data.price, stop, [{price: tp1, rr: rr1}, {price: tp2, rr: rr1*2}], `MTF Long + BOS Bullish + SMC Setup`, riskPct, null);
-                                activePositions[symbol] = { type: 'LONG', entryPrice: data.price, stop: stop, tp1: tp1, tp2: tp2, movedToBE: false, trailingStop: stop, partialTaken: false, sizeRemaining: 1, realizedPNL: 0 };
-                                addSignal(symbol, 'LONG', data.price, stop, tp1);
-                                updateActiveTradesUI();
-                            } else if (primaryDirection === 'SHORT' && findSMCSetup(data, 'SHORT')) {
-                                const riskPct = KellyPositionSize(banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1), rr1);
-                                telegram.sendTradeAlert(symbol, 'short', score, data.price, stop, [{price: tp1, rr: rr1}, {price: tp2, rr: rr1*2}], `MTF Short + BOS Bearish + SMC Setup`, riskPct, null);
-                                activePositions[symbol] = { type: 'SHORT', entryPrice: data.price, stop: stop, tp1: tp1, tp2: tp2, movedToBE: false, trailingStop: stop, partialTaken: false, sizeRemaining: 1, realizedPNL: 0 };
-                                addSignal(symbol, 'SHORT', data.price, stop, tp1);
+                                telegram.sendTradeAlert(symbol, primaryDirection.toLowerCase(), score, data.price, stop, [{price: tp1, rr: rr1}, {price: tp2, rr: rr1*2}, {price: tp3, rr: rr1*3}], `MTF ${primaryDirection} + BOS + Re-teste + VWAP`, riskPct, null);
+                                activePositions[symbol] = { 
+                                    type: primaryDirection, 
+                                    entryPrice: data.price, 
+                                    stop: stop, 
+                                    tp1: tp1, 
+                                    tp2: tp2, 
+                                    movedToBE: false, 
+                                    trailingStop: stop, 
+                                    partialTaken: false, 
+                                    sizeRemaining: 1, 
+                                    realizedPNL: 0, 
+                                    entryTime: Date.now() // melhoria 5
+                                };
+                                addSignal(symbol, primaryDirection, data.price, stop, tp1);
                                 updateActiveTradesUI();
                             }
                         }
@@ -1312,7 +1393,7 @@
                 if (prevScore < 50 && score >= 50) telegram.sendTelegramAlert(`🔄 <b>TENDÊNCIA MUDOU (${symbol})</b>\nScore subiu para ${score}. Possível reversão Long.`);
                 if (prevScore > 50 && score <= 50) telegram.sendTelegramAlert(`🔄 <b>TENDÊNCIA MUDOU (${symbol})</b>\nScore caiu para ${score}. Possível reversão Short.`);
                 previousScores[symbol] = score;
-            });
+            }
             graficos.updateScoreChart(scoreHistory);
         }
 
@@ -1365,7 +1446,6 @@
                 if (funding) {
                     document.getElementById('funding-rate').textContent = (funding.rate * 100).toFixed(4) + '%';
                     document.getElementById('funding-rate-interp').textContent = funding.interpretacao;
-                    // Armazenar para uso no score
                     if (assetsData['BTCUSDT']) assetsData['BTCUSDT'].fundingRate = funding.rate;
                 }
 
@@ -1504,7 +1584,7 @@
                     }
                 }
                 await updateMTFAndOI();
-                evaluateMarkets();
+                await evaluateMarkets();
             }, 300000);
 
             document.getElementById('test-telegram-btn').addEventListener('click', async function (e) {
