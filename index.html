@@ -466,7 +466,10 @@
                 divergence: null,
                 volumeAnomaly: null,
                 macroBlackout: false,
-                vwap: 0
+                vwap: 0,
+                mvrv: null,
+                sopr: null,
+                realizedPrice: null
             };
         });
 
@@ -932,7 +935,7 @@
 
         function initWebSockets() {
             const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
-            // Adiciona streams de kline para 15m (melhoria 9)
+            // Adiciona streams de kline para 15m
             const tradeStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
             const klineStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@kline_15m').join('/');
             const streams = tradeStreams + '/' + klineStreams;
@@ -976,20 +979,14 @@
                             updateWhaleUI();
                         }
 
+                        // 🔥 CORREÇÃO #1: REMOVIDA A CONTAMINAÇÃO POR TICK
+                        // Apenas atualiza o preço, sem mexer em EMA/RSI/ATR
                         if (assetsData[symbol]) {
-                            const prevPrice = assetsData[symbol].price;
                             assetsData[symbol].price = price;
-                            if (prevPrice > 0) {
-                                assetsData[symbol].ema50_1H = updateStatefulEMA(assetsData[symbol].ema50_1H, price, 50);
-                                assetsData[symbol].ema200_4H = updateStatefulEMA(assetsData[symbol].ema200_4H, price, 200);
-                                assetsData[symbol].rsiState = updateStatefulRSI(assetsData[symbol].rsiState, price, prevPrice);
-                                assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
-                            }
-                            checkPositionManagement(symbol, price);
                             updateLivePriceUI(symbol, price);
                         }
                     }
-                    // Kline stream (melhoria 9)
+                    // Kline stream
                     else if (stream.includes('@kline')) {
                         const k = data.k;
                         const symbol = data.s;
@@ -1111,7 +1108,7 @@
             if (!pos) return;
             const data = assetsData[symbol];
             
-            // --- Time-based exit (melhoria 5) ---
+            // Time-based exit (melhoria 5)
             const MAX_HOLD_HOURS = 12;
             if (pos.entryTime) {
                 const hoursOpen = (Date.now() - pos.entryTime) / (1000 * 60 * 60);
@@ -1219,7 +1216,7 @@
             }));
         }
 
-        // ===== AVALIAÇÃO DE MERCADO (com todas as melhorias) =====
+        // ===== AVALIAÇÃO DE MERCADO (com todas as correções) =====
         async function evaluateMarkets() {
             for (const symbol of CONFIG.ASSETS) {
                 const data = assetsData[symbol];
@@ -1231,7 +1228,7 @@
                 data.plusDI = adxData.plusDI;
                 data.minusDI = adxData.minusDI;
                 
-                // --- 2. Correção do bug de Divergência RSI (melhoria 1) ---
+                // --- 2. Divergência RSI (corrigida) ---
                 let rsiValues = [];
                 let avgGain = 0, avgLoss = 0;
                 const closes1H = data.candles1H.map(c => c.close);
@@ -1252,7 +1249,7 @@
                 const divergence = detectRSIDivergence(data.candles1H, rsiValues);
                 data.divergence = divergence;
                 
-                // --- 3. Volume anômalo adaptativo (melhoria 6) ---
+                // --- 3. Volume anômalo adaptativo ---
                 const currentATR = data.atr_1H || 0;
                 const avgPrice = data.candles1H.slice(-20).reduce((s,c) => s+c.close,0)/20;
                 const volatilityPct = avgPrice > 0 ? (currentATR / avgPrice) * 100 : 1.5;
@@ -1260,15 +1257,15 @@
                 const volAnomaly = detectVolumeAnomaly(data.candles1H, 20, volThreshold);
                 data.volumeAnomaly = volAnomaly;
                 
-                // --- 4. Cálculo do VWAP (melhoria 4) ---
+                // --- 4. Cálculo do VWAP ---
                 const vwap = calculateVWAP(data.candles1H);
                 data.vwap = vwap;
                 
-                // --- 5. Macro blackout (melhoria 8) ---
+                // --- 5. Macro blackout (dinâmico) ---
                 const macroCheck = await isHighImpactEventNow();
                 data.macroBlackout = macroCheck.isBlackout && macroCheck.impact === 'HIGH';
                 
-                // --- 6. Score com ConfidenceScorer ajustado (melhoria 5) ---
+                // --- 6. Score com ConfidenceScorer ajustado ---
                 const scoreData = computeScore(symbol, assetsData, liqMap);
                 const confidence = calculateConfidenceScore({
                     mtfAligned: data.mtfConfluence?.alinhado || false,
@@ -1285,23 +1282,35 @@
                 const score = confidence.score;
                 let blockReason = scoreData.blockReason;
                 
-                // --- 7. Filtros adicionais ---
-                // ADX < 25 bloqueia
+                // --- 7. Filtros de bloqueio ---
+                // ADX < 25
                 if (data.adx < 25 && !blockReason) {
-                    const reason = 'ADX < 25 (mercado lateral)';
-                    blockReason = blockReason ? blockReason + '; ' + reason : reason;
+                    blockReason = blockReason ? blockReason + '; ADX < 25 (lateral)' : 'ADX < 25 (lateral)';
                 }
-                // Macro blackout bloqueia
+                // Macro blackout
                 if (data.macroBlackout && !blockReason) {
-                    const reason = 'Evento macro de alto impacto (blackout)';
-                    blockReason = blockReason ? blockReason + '; ' + reason : reason;
+                    blockReason = blockReason ? blockReason + '; Macro blackout' : 'Macro blackout';
                 }
-                // VWAP filter (melhoria 4)
+                // VWAP
                 const primaryDirection = (score >= 70) ? 'LONG' : (score <= 30 ? 'SHORT' : null);
                 if (primaryDirection === 'LONG' && data.price < vwap && !blockReason) {
-                    blockReason = blockReason ? blockReason + '; Preço abaixo de VWAP' : 'Preço abaixo de VWAP';
+                    blockReason = blockReason ? blockReason + '; Preço abaixo do VWAP' : 'Preço abaixo do VWAP';
                 } else if (primaryDirection === 'SHORT' && data.price > vwap && !blockReason) {
-                    blockReason = blockReason ? blockReason + '; Preço acima de VWAP' : 'Preço acima de VWAP';
+                    blockReason = blockReason ? blockReason + '; Preço acima do VWAP' : 'Preço acima do VWAP';
+                }
+                
+                // 🔥 CORREÇÃO #2: Viés HTF 4H (restaurado)
+                if (primaryDirection === 'LONG' && data.htfStructure.bias === 'BEARISH' && !blockReason) {
+                    blockReason = blockReason ? blockReason + '; HTF 4H Bearish' : 'HTF 4H Bearish';
+                }
+                if (primaryDirection === 'SHORT' && data.htfStructure.bias === 'BULLISH' && !blockReason) {
+                    blockReason = blockReason ? blockReason + '; HTF 4H Bullish' : 'HTF 4H Bullish';
+                }
+                
+                // 🔥 CORREÇÃO #3: Filtro de derivativos reativado
+                if (!blockReason) {
+                    const derivCheck = checkDerivativesFilter(data.fundingRate, data.oiDelta);
+                    if (!derivCheck.allow) blockReason = derivCheck.reason;
                 }
                 
                 // --- 8. Atualização da UI ---
@@ -1315,7 +1324,7 @@
                     }
                 }
                 
-                // --- 9. Lógica de entrada (com re-teste e BOS real) ---
+                // --- 9. Lógica de entrada (com todos os filtros) ---
                 const prevScore = previousScores[symbol] || 50;
                 if (!activePositions[symbol] && !blockReason && isSafeToTrade()) {
                     const now = Date.now();
@@ -1323,10 +1332,11 @@
                     if (now - cooldown > 1800000) {
                         const atr = data.atr_1H || (data.price * 0.02);
                         if (primaryDirection) {
+                            // 🔥 CORREÇÃO #5: Exposição correlacionada voltou a 1 por direção
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
                             if (expCheck.blocked) return;
                             
-                            // --- 10. Confirmação de re-teste (melhoria 3) ---
+                            // Confirmação de re-teste
                             const ema20 = calcEMA(data.candles1H.map(c=>c.close), 20).slice(-1)[0] || data.price;
                             let retestConfirmed = false;
                             if (primaryDirection === 'LONG') {
@@ -1335,12 +1345,11 @@
                                 if (data.price >= ema20 * 0.995 && data.price <= ema20 * 1.005) retestConfirmed = true;
                             }
                             
-                            // Usar findSMCSetup real (agora implementado em indicadores.js)
                             const smcSetup = findSMCSetup(data, primaryDirection);
                             
                             if (smcSetup && retestConfirmed) {
-                                let stop, tp1, tp2, structLevel;
-                                // --- Alvos baseados em liquidação (melhoria 3) ---
+                                let stop, tp1, tp2, tp3, structLevel;
+                                // Alvos baseados em liquidação
                                 let liqTarget1 = null, liqTarget2 = null;
                                 const liqs = liquidationLevels[symbol] || [];
                                 if (liqs.length > 0) {
@@ -1369,7 +1378,9 @@
                                 const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
                                 if (rr1 < 1.5) return;
                                 
-                                const riskPct = KellyPositionSize(banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1), rr1);
+                                // 🔥 CORREÇÃO #4: Kelly fracionado (25%, teto 5%)
+                                const winRate = banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1);
+                                const riskPct = KellyPositionSize(winRate, rr1);
                                 telegram.sendTradeAlert(symbol, primaryDirection.toLowerCase(), score, data.price, stop, [{price: tp1, rr: rr1}, {price: tp2, rr: rr1*2}, {price: tp3, rr: rr1*3}], `MTF ${primaryDirection} + BOS + Re-teste + VWAP`, riskPct, null);
                                 activePositions[symbol] = { 
                                     type: primaryDirection, 
@@ -1382,7 +1393,7 @@
                                     partialTaken: false, 
                                     sizeRemaining: 1, 
                                     realizedPNL: 0, 
-                                    entryTime: Date.now() // melhoria 5
+                                    entryTime: Date.now()
                                 };
                                 addSignal(symbol, primaryDirection, data.price, stop, tp1);
                                 updateActiveTradesUI();
@@ -1421,6 +1432,7 @@
                 setTextOrNA('mvrv', mvrv);
                 if (mvrv !== null && !isNaN(mvrv)) {
                     document.getElementById('mvrv-interp').textContent = mvrv > 1.0 ? '⚠️ Acima de 1.0' : 'ℹ️ Abaixo de 1.0';
+                    if (assetsData['BTCUSDT']) assetsData['BTCUSDT'].mvrv = mvrv;
                 } else {
                     document.getElementById('mvrv-interp').textContent = '--';
                 }
@@ -1545,6 +1557,7 @@
                     const avgGain = gains / 14, avgLoss = losses / 14;
                     assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
                     assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
+                    // 🔥 CORREÇÃO #2: Detectar HTF real
                     assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], c4H);
                     if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
                 }
@@ -1580,6 +1593,7 @@
                         assetsData[symbol].candles4H = [...assetsData[symbol].candles4H.slice(0, -20), ...c4H];
                         const closes4H = assetsData[symbol].candles4H.map(c => c.close);
                         assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : assetsData[symbol].ema200_4H;
+                        // 🔥 CORREÇÃO #2: Atualiza HTF real periodicamente
                         assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
                     }
                 }
