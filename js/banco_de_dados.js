@@ -867,4 +867,18 @@ export async function getMTFConfluence(symbol) {
 }
 
 // ============================================================
-// 13. STUBS (
+// 13. STUBS 
+// Adicione esta função e exporte-a
+export function getCurrentTimestamp() {
+    const now = new Date();
+    return now.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+// ... resto do código do banco_de_dados.js
