@@ -36,8 +36,7 @@ async function fetchHistoricalFunding(symbol, startTime, endTime) {
 
 // ===== BUSCAR OI HISTÓRICO (limitado a 500 registros para evitar 400) =====
 async function fetchHistoricalOI(symbol, startTime, endTime) {
-    // A Binance limita a 500 registros para period=1h, então pegamos os últimos 500 pontos
-    // Ajustamos o startTime para ser apenas os últimos 500 * 60 * 60 * 1000 ms = 500 horas atrás
+    // Ajusta o startTime para os últimos 500 * 60 * 60 * 1000 ms = 500 horas
     const adjustedStart = Math.max(startTime, endTime - 500 * 60 * 60 * 1000);
     const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=1h&startTime=${adjustedStart}&endTime=${endTime}&limit=500`;
     logDebug('Buscando OI Histórico (limitado):', url);
@@ -114,17 +113,18 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         logDebug('Macro obtido com sucesso');
 
         // ===== SIMULAÇÃO =====
+        // CORREÇÃO: usar candles1H (maiúsculo) para compatibilidade com updateSwingPoints
         const state = {
-            candles1h: [],
+            candles1H: [],              // <-- maiúsculo!
             candles4h: candles4h || [],
-            ema20_1h: 0,
-            ema50_1h: 0,
-            ema200_4h: 0,
+            ema20_1H: 0,
+            ema50_1H: 0,
+            ema200_4H: 0,
             rsiState: { avgGain: 0, avgLoss: 0, rsi: 50 },
-            atr_1h: 0,
+            atr_1H: 0,
             atrHistory: [],
-            swingHighs: [],   // garantido como array
-            swingLows: [],    // garantido como array
+            swingHighs: [],
+            swingLows: [],
             currentBOS: 'NEUTRAL',
             htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity },
             price: 0,
@@ -145,7 +145,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         let equity = 10000;
         let highWaterMark = equity;
 
-        // ===== FUNÇÃO UPDATE INDICADORES COM PROTEÇÃO =====
+        // ===== FUNÇÃO UPDATE INDICADORES =====
         function updateIndicators(candles) {
             try {
                 if (!candles || candles.length < 14) {
@@ -153,10 +153,10 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                     return;
                 }
                 const closes = candles.map(c => c.close);
-                state.ema20_1h = calcEMA(closes, 20).slice(-1)[0] || closes[closes.length - 1];
-                state.ema50_1h = calcEMA(closes, 50).slice(-1)[0] || closes[closes.length - 1];
-                state.atr_1h = calculateATR(candles, 14);
-                state.atrHistory.push(state.atr_1h);
+                state.ema20_1H = calcEMA(closes, 20).slice(-1)[0] || closes[closes.length - 1];
+                state.ema50_1H = calcEMA(closes, 50).slice(-1)[0] || closes[closes.length - 1];
+                state.atr_1H = calculateATR(candles, 14);
+                state.atrHistory.push(state.atr_1H);
                 if (state.atrHistory.length > 100) state.atrHistory.shift();
 
                 let avgGain = 0, avgLoss = 0;
@@ -181,9 +181,9 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 const volMA = candles.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
                 state.volumeAnomaly = candles[candles.length - 1].volume > volMA * 2.0 ? 'ALTO' : 'NORMAL';
 
-                // Atualizar swings com proteção
+                // 🔥 CORREÇÃO: updateSwingPoints espera apenas o state
                 if (typeof updateSwingPoints === 'function') {
-                    updateSwingPoints(state, candles);
+                    updateSwingPoints(state);   // sem o segundo argumento
                 } else {
                     logDebug('updateSwingPoints não está definida, ignorando.');
                 }
@@ -195,7 +195,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 }
             } catch (error) {
                 logDebug('ERRO em updateIndicators:', error.message);
-                throw error; // relança para ser capturado no loop
+                throw error;
             }
         }
 
@@ -203,7 +203,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         function checkEntry(candle, index, allCandles) {
             try {
                 let score = 50;
-                if (state.ema20_1h > state.ema50_1h) score += 10;
+                if (state.ema20_1H > state.ema50_1H) score += 10;
                 if (state.adx > 25) score += 10;
                 if (state.rsiState.rsi > 50) score += 10;
                 if (state.volumeAnomaly === 'ALTO') score += 10;
@@ -226,8 +226,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         // ===== LOOP PRINCIPAL =====
         for (let i = 0; i < filteredCandles.length; i++) {
             const candle = filteredCandles[i];
-            state.candles1h.push(candle);
-            if (state.candles1h.length > 200) state.candles1h.shift();
+            state.candles1H.push(candle);          // agora com H maiúsculo
+            if (state.candles1H.length > 200) state.candles1H.shift();
 
             // Atualizar funding e OI
             const fundingAtTime = fundingHist.find(f => f.time <= candle.time * 1000) || fundingHist[0];
@@ -244,12 +244,12 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             state.macroBlackout = false;
 
             // Atualizar indicadores (com proteção)
-            if (state.candles1h.length >= 50) {
+            if (state.candles1H.length >= 50) {
                 try {
-                    updateIndicators(state.candles1h);
+                    updateIndicators(state.candles1H);
                 } catch (err) {
                     logDebug(`Erro ao atualizar indicadores no candle ${i}:`, err.message);
-                    continue; // pula este candle
+                    continue;
                 }
             } else {
                 continue;
@@ -269,7 +269,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                     else if (high >= position.tp1 && !position.partialTaken) {
                         position.partialTaken = true;
                         position.sizeRemaining = 0.5;
-                        position.trailingStop = Math.max(position.trailingStop, position.entryPrice + state.atr_1h * 0.1);
+                        position.trailingStop = Math.max(position.trailingStop, position.entryPrice + state.atr_1H * 0.1);
                     }
                 } else { // SHORT
                     if (low <= position.tp2) { exitPrice = position.tp2; closed = true; reason = 'TP2'; }
@@ -277,7 +277,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                     else if (low <= position.tp1 && !position.partialTaken) {
                         position.partialTaken = true;
                         position.sizeRemaining = 0.5;
-                        position.trailingStop = Math.min(position.trailingStop, position.entryPrice - state.atr_1h * 0.1);
+                        position.trailingStop = Math.min(position.trailingStop, position.entryPrice - state.atr_1H * 0.1);
                     }
                 }
 
@@ -304,11 +304,11 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 } else {
                     if (position.type === 'LONG') {
                         const newLow = Math.min(...state.swingLows);
-                        const newStop = newLow - state.atr_1h * 0.2;
+                        const newStop = newLow - state.atr_1H * 0.2;
                         if (newStop > position.trailingStop) position.trailingStop = newStop;
                     } else {
                         const newHigh = Math.max(...state.swingHighs);
-                        const newStop = newHigh + state.atr_1h * 0.2;
+                        const newStop = newHigh + state.atr_1H * 0.2;
                         if (newStop < position.trailingStop) position.trailingStop = newStop;
                     }
                 }
@@ -318,7 +318,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             if (!position) {
                 const { score, direction, blockReason } = checkEntry(candle, i, filteredCandles);
                 if (direction && !blockReason && score >= 70) {
-                    const atr = state.atr_1h || (candle.close * 0.02);
+                    const atr = state.atr_1H || (candle.close * 0.02);
                     const entry = candle.close;
                     let stop, tp1, tp2;
                     if (direction === 'LONG') {
