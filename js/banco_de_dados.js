@@ -1,104 +1,71 @@
-// js/banco_de_dados.js – Gerenciamento de banco de dados local (localStorage)
+// js/banco_de_dados.js
+// Gerencia as estatísticas de trades (winrate, total, etc.) com persistência no localStorage
 
-const DB_KEYS = {
-    ALERTS: 'btc_sniper_alerts',
-    SIGNALS: 'btc_sniper_signals',
-    TRADES: 'btc_sniper_trades'
+const STORAGE_KEY = 'tradeStats';
+
+// Estrutura padrão para evitar erros de campos undefined
+const DEFAULT_STATS = {
+    wins: 0,
+    losses: 0,
+    totalTrades: 0
 };
 
-// ===== TIMESTAMP =====
-export function getCurrentTimestamp() {
-    const now = new Date();
-    return now.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
+/**
+ * Recupera as estatísticas de trades salvas no localStorage.
+ * @returns {Object} { wins: number, losses: number, totalTrades: number }
+ */
+export function getTradeStats() {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            // Garante que todos os campos existam, mesmo se o JSON estiver corrompido
+            return {
+                wins: typeof parsed.wins === 'number' ? parsed.wins : 0,
+                losses: typeof parsed.losses === 'number' ? parsed.losses : 0,
+                totalTrades: typeof parsed.totalTrades === 'number' ? parsed.totalTrades : 0
+            };
+        }
+    } catch (e) {
+        console.warn('[Banco] Erro ao ler estatísticas:', e);
+    }
+    // Retorna o padrão se não houver dados ou der erro
+    return { ...DEFAULT_STATS };
 }
 
-// ===== ALERTAS (TELEGRAM) =====
-export function setAlertLog(alertData) {
+/**
+ * Salva as estatísticas de trades no localStorage.
+ * Atualiza automaticamente o campo `totalTrades` baseado em wins + losses.
+ * @param {Object} stats - { wins: number, losses: number }
+ */
+export function setTradeStats(stats) {
     try {
-        const logs = getAlertLog();
-        logs.unshift({ ...alertData, timestamp: getCurrentTimestamp() });
-        // Mantém apenas os últimos 100 alertas
-        if (logs.length > 100) logs.length = 100;
-        localStorage.setItem(DB_KEYS.ALERTS, JSON.stringify(logs));
+        // Garante que wins e losses sejam números
+        const wins = typeof stats.wins === 'number' ? stats.wins : 0;
+        const losses = typeof stats.losses === 'number' ? stats.losses : 0;
+        
+        const data = {
+            wins: wins,
+            losses: losses,
+            totalTrades: wins + losses
+        };
+        
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) {
-        console.error('[DB] Erro ao salvar alerta:', e);
+        console.warn('[Banco] Erro ao salvar estatísticas:', e);
     }
 }
 
-export function getAlertLog() {
+/**
+ * Reseta todas as estatísticas para zero.
+ * Útil para testes ou reinício da carteira.
+ * @returns {Object} Estatísticas resetadas { wins: 0, losses: 0, totalTrades: 0 }
+ */
+export function resetTradeStats() {
     try {
-        const raw = localStorage.getItem(DB_KEYS.ALERTS);
-        return raw ? JSON.parse(raw) : [];
+        localStorage.removeItem(STORAGE_KEY);
     } catch (e) {
-        console.error('[DB] Erro ao ler alertas:', e);
-        return [];
+        console.warn('[Banco] Erro ao resetar estatísticas:', e);
     }
-}
-
-// ===== HISTÓRICO DE SINAIS =====
-export function saveSignal(signalData) {
-    try {
-        const signals = getSignals();
-        signals.unshift({ ...signalData, timestamp: getCurrentTimestamp() });
-        // Mantém apenas os últimos 500 sinais
-        if (signals.length > 500) signals.length = 500;
-        localStorage.setItem(DB_KEYS.SIGNALS, JSON.stringify(signals));
-    } catch (e) {
-        console.error('[DB] Erro ao salvar sinal:', e);
-    }
-}
-
-export function getSignals() {
-    try {
-        const raw = localStorage.getItem(DB_KEYS.SIGNALS);
-        return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-        console.error('[DB] Erro ao ler sinais:', e);
-        return [];
-    }
-}
-
-export function clearSignals() {
-    try {
-        localStorage.removeItem(DB_KEYS.SIGNALS);
-    } catch (e) {
-        console.error('[DB] Erro ao limpar sinais:', e);
-    }
-}
-
-// ===== TRADES (BACKTEST / LIVE) =====
-export function saveTrade(tradeData) {
-    try {
-        const trades = getTrades();
-        trades.unshift({ ...tradeData, timestamp: getCurrentTimestamp() });
-        if (trades.length > 1000) trades.length = 1000;
-        localStorage.setItem(DB_KEYS.TRADES, JSON.stringify(trades));
-    } catch (e) {
-        console.error('[DB] Erro ao salvar trade:', e);
-    }
-}
-
-export function getTrades() {
-    try {
-        const raw = localStorage.getItem(DB_KEYS.TRADES);
-        return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-        console.error('[DB] Erro ao ler trades:', e);
-        return [];
-    }
-}
-
-export function clearTrades() {
-    try {
-        localStorage.removeItem(DB_KEYS.TRADES);
-    } catch (e) {
-        console.error('[DB] Erro ao limpar trades:', e);
-    }
+    return { ...DEFAULT_STATS };
 }
