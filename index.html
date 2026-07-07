@@ -474,16 +474,16 @@
         import { CONFIG } from './js/config.js';
         import { runBacktest } from './js/backtest.js';
 
+        // ===== IMPORTS LIMPOS (corrigido #5) =====
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
             generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
             calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
-            computeChoppiness, calculateBB, detectHTFStructure, updateSwingPoints,
-            findSMCSetup, getSMCZones, checkLateralMarket, checkHTFAlignment,
-            checkOnChainFilter, checkVolumeAndOrderflow, checkDerivativesFilter,
-            checkPortfolioExposure, checkMTFAlignment, computeScore, isSafeToTrade,
+            detectHTFStructure, updateSwingPoints, findSMCSetup, checkLateralMarket,
+            checkOnChainFilter, checkDerivativesFilter,
+            checkPortfolioExposure, computeScore, isSafeToTrade,
             KellyPositionSize, detectVolumeAnomaly, isHighImpactEventNow,
-            ConfidenceScorer, calculateConfidenceScore, calculateVWAP
+            calculateConfidenceScore, calculateVWAP
         } = indicadores;
 
         // ===== STATE =====
@@ -523,7 +523,8 @@
                 vwap: 0,
                 mvrv: null,
                 sopr: null,
-                realizedPrice: null
+                realizedPrice: null,
+                fearGreedData: null   // <-- adicionado para armazenar F&G
             };
         });
 
@@ -1036,6 +1037,8 @@
                         if (assetsData[symbol]) {
                             assetsData[symbol].price = price;
                             updateLivePriceUI(symbol, price);
+                            // ===== CORREÇÃO #1: GESTÃO DE POSIÇÃO NO TICK =====
+                            if (activePositions[symbol]) checkPositionManagement(symbol, price);
                         }
                     } else if (stream.includes('@kline')) {
                         const k = data.k;
@@ -1114,6 +1117,7 @@
                             if (assetsData[symbol]) {
                                 assetsData[symbol].price = price;
                                 updateLivePriceUI(symbol, price);
+                                if (activePositions[symbol]) checkPositionManagement(symbol, price);
                             }
                         }
                     } catch(e) { /* ignora */ }
@@ -1365,6 +1369,11 @@
                 data.macroBlackout = macroCheck.isBlackout && macroCheck.impact === 'HIGH';
                 
                 const scoreData = computeScore(symbol, assetsData, liqMap);
+
+                // ===== CORREÇÃO #2: ALIMENTAR BOS REAL =====
+                const bosConfirmed = scoreData.direction !== 'NEUTRAL' && findSMCSetup(data, scoreData.direction);
+                data.currentBOS = bosConfirmed ? 'BOS' : 'NEUTRAL';
+
                 const confidence = calculateConfidenceScore({
                     mtfAligned: data.mtfConfluence?.alinhado || false,
                     adx: data.adx,
@@ -1405,8 +1414,9 @@
                     if (!derivCheck.allow) blockReason = derivCheck.reason;
                 }
                 
+                // ===== CORREÇÃO #4: EXIBIR CONFIDENCE.SCORE =====
                 if (symbol === 'BTCUSDT') {
-                    updateMainScoreUI(scoreData, blockReason);
+                    updateMainScoreUI({ ...scoreData, score: confidence.score }, blockReason);
                     const confEl = document.getElementById('confidence-score');
                     if (confEl) {
                         const level = confidence.level;
@@ -1466,23 +1476,30 @@
                                 if (rr1 < 1.5) return;
                                 
                                 const winRate = banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1);
-                                const riskPct = KellyPositionSize(winRate, rr1);
-                                telegram.sendTradeAlert(symbol, primaryDirection.toLowerCase(), score, data.price, stop, [{price: tp1, rr: rr1}, {price: tp2, rr: rr1*2}, {price: tp3, rr: rr1*3}], `MTF ${primaryDirection} + BOS + Re-teste + VWAP`, riskPct, null);
-                                activePositions[symbol] = { 
-                                    type: primaryDirection, 
-                                    entryPrice: data.price, 
-                                    stop: stop, 
-                                    tp1: tp1, 
-                                    tp2: tp2, 
-                                    movedToBE: false, 
-                                    trailingStop: stop, 
-                                    partialTaken: false, 
-                                    sizeRemaining: 1, 
-                                    realizedPNL: 0, 
-                                    entryTime: Date.now()
-                                };
-                                addSignal(symbol, primaryDirection, data.price, stop, tp1);
-                                updateActiveTradesUI();
+
+                                // ===== CORREÇÃO #3: FEAR & GREED NO MOTOR =====
+                                const fgFilt = fearGreedFilter(data.fearGreedData, primaryDirection);
+                                if (!fgFilt.pass && !blockReason) blockReason = fgFilt.reason;
+                                const riskPct = KellyPositionSize(winRate, rr1) * (fgFilt.multiplier || 1);
+
+                                if (!blockReason) {
+                                    telegram.sendTradeAlert(symbol, primaryDirection.toLowerCase(), score, data.price, stop, [{price: tp1, rr: rr1}, {price: tp2, rr: rr1*2}, {price: tp3, rr: rr1*3}], `MTF ${primaryDirection} + BOS + Re-teste + VWAP`, riskPct, null);
+                                    activePositions[symbol] = { 
+                                        type: primaryDirection, 
+                                        entryPrice: data.price, 
+                                        stop: stop, 
+                                        tp1: tp1, 
+                                        tp2: tp2, 
+                                        movedToBE: false, 
+                                        trailingStop: stop, 
+                                        partialTaken: false, 
+                                        sizeRemaining: 1, 
+                                        realizedPNL: 0, 
+                                        entryTime: Date.now()
+                                    };
+                                    addSignal(symbol, primaryDirection, data.price, stop, tp1);
+                                    updateActiveTradesUI();
+                                }
                             }
                         }
                     }
@@ -1585,6 +1602,8 @@
                 if (fg) {
                     document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
                     document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
+                    // ===== CORREÇÃO #3: SALVAR F&G NO ASSET =====
+                    assetsData['BTCUSDT'].fearGreedData = fg;
                 }
 
             } catch (e) {
@@ -1669,6 +1688,7 @@
                         badge.className = fg.value <= 25 ? 'badge sentiment-bearish' : 'badge sentiment-bullish';
                         badge.textContent = fg.value <= 25 ? '⚠️ SENTIMENTO: PESSIMISTA' : '✅ SENTIMENTO: OTIMISTA';
                     }
+                    assetsData['BTCUSDT'].fearGreedData = fg;
                 }
             }, 600000); // 10 minutos
 
