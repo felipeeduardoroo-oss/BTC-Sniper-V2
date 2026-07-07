@@ -1,4 +1,4 @@
-// js/dados_externos.js – completo com Alpha Vantage para Macro
+// js/dados_externos.js – Com WebSocket para candles 15m e polling reduzido
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
@@ -59,7 +59,7 @@ function setCachedData(key, data) {
     try { localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() })); } catch(e) { /* ignore */ }
 }
 
-// ===== SLEEP (para evitar rate limit) =====
+// ===== SLEEP =====
 export function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ============================================================
@@ -82,16 +82,6 @@ export const fetchEthGasPrice = async () => {
             return gwei;
         }
     } catch (e) { /* silencioso */ }
-
-    try {
-        const url = `https://api.etherscan.io/v2/api?chainid=1&module=gastracker&action=gasoracle&apikey=${CONFIG.ETHERSCAN_API_KEY}`;
-        const data = await fetchWithRetry(url, {}, 2);
-        if (data && data.status === '1' && data.result) {
-            const gasPrice = parseFloat(data.result.ProposeGasPrice);
-            setCachedData(cacheKey, gasPrice);
-            return gasPrice;
-        }
-    } catch (e) { /* silencioso */ }
     if (cached) return cached;
     return 5;
 };
@@ -106,7 +96,6 @@ export const fetchMacroStatic = async () => {
 
     const apiKey = CONFIG.ALPHAVANTAGE_API_KEY;
     if (!apiKey) {
-        console.warn('[Macro] Alpha Vantage API key não configurada. Usando fallback estático.');
         if (cached) return cached;
         return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
     }
@@ -146,20 +135,19 @@ export const fetchMacroStatic = async () => {
         };
 
         if (macro.dxy === 101.5 && macro.us10y === 4.28 && macro.vix === 20.5) {
-            throw new Error('Dados inválidos retornados da Alpha Vantage');
+            throw new Error('Dados inválidos');
         }
 
         setCachedData(cacheKey, macro);
         return macro;
     } catch (e) {
-        console.warn('[Macro] Alpha Vantage falhou, usando fallback:', e);
         if (cached) return cached;
         return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
     }
 };
 
 // ============================================================
-// 3. FED RATE (Alpha Vantage)
+// 3. FED RATE
 // ============================================================
 export const fetchFedRate = async () => {
     const cacheKey = 'fedRate';
@@ -180,7 +168,7 @@ export const fetchFedRate = async () => {
 };
 
 // ============================================================
-// 4. ON-CHAIN – MVRV, Active Addresses, Hashrate
+// 4. ON-CHAIN
 // ============================================================
 const CM_BASE = 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics';
 
@@ -223,24 +211,12 @@ export const fetchHashrate = async () => {
             return hashrate;
         }
     } catch (e) { /* silencioso */ }
-
-    try {
-        const url = `${CM_BASE}?assets=btc&metrics=HashRate&frequency=1d&page_size=1`;
-        const data = await fetchWithRetry(url, {}, 2);
-        const val = data?.data?.[0]?.HashRate;
-        if (val !== undefined && val !== null) {
-            const num = parseFloat(val);
-            setCachedData(cacheKey, num);
-            return num;
-        }
-    } catch (e) { /* silencioso */ }
-
     if (cached) return cached;
     return null;
 };
 
 // ============================================================
-// 5. BLOCKCHAIR (fallback para Active Addresses)
+// 5. BLOCKCHAIR (fallback)
 // ============================================================
 export const fetchBlockchairStats = async () => {
     try {
@@ -254,68 +230,49 @@ export const fetchBlockchairStats = async () => {
 };
 
 // ============================================================
-// 6. OI Delta (Binance)
+// 6. FUNDING RATE (em tempo real, sem cache)
 // ============================================================
-export const fetchOIDelta = async (symbol = 'BTCUSDT') => {
-    const cacheKey = `oi_delta_${symbol}`;
-    const cached = getCachedData(cacheKey, 60000);
-    if (cached && !cached.stale) return cached;
-
+export const fetchFundingRate = async (symbol = 'BTCUSDT') => {
     try {
-        const currData = await fetchWithRetry(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=15m&limit=1`);
-        const currOi = currData?.length ? parseFloat(currData[0].sumOpenInterest) : 0;
-
-        const histData = await fetchWithRetry(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=15m&limit=97`);
-        if (histData?.length >= 97) {
-            const pastOi = parseFloat(histData[histData.length - 97].sumOpenInterest);
-            const delta = pastOi > 0 ? ((currOi - pastOi) / pastOi) * 100 : 0;
-            const result = { oi: currOi, delta };
-            setCachedData(cacheKey, result);
-            return result;
+        const data = await fetchWithRetry(`https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`, {}, 1);
+        if (data?.length) {
+            const rate = parseFloat(data[0].fundingRate);
+            let interpretacao = 'EQUILIBRADO';
+            if (rate > 0.01) interpretacao = 'LONGS SOBRE-APOSTADOS';
+            else if (rate < -0.01) interpretacao = 'SHORTS SOBRE-APOSTADOS';
+            return { rate, interpretacao };
         }
         return null;
-    } catch (e) {
-        if (cached) return cached;
-        return null;
-    }
+    } catch(e) { return null; }
 };
 
 // ============================================================
-// 7. Put/Call Ratio (Deribit)
+// 7. OPEN INTEREST com histórico (para delta)
 // ============================================================
-export const fetchPutCallRatio = async () => {
-    const cacheKey = 'pcr';
-    const cached = getCachedData(cacheKey, 60000);
-    if (cached && !cached.stale) return cached;
-
+export const fetchOpenInterest = async (symbol = 'BTCUSDT') => {
     try {
-        const data = await fetchWithRetry('https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option');
-        let putVolume = 0, callVolume = 0;
-        data?.result?.forEach(item => {
-            if (item.option_type === 'put') putVolume += item.volume || 0;
-            if (item.option_type === 'call') callVolume += item.volume || 0;
-        });
-        const ratio = callVolume > 0 ? putVolume / callVolume : 0;
-        setCachedData(cacheKey, ratio);
-        return ratio;
-    } catch (e) {
-        if (cached) return cached;
+        const data = await fetchWithRetry(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=15m&limit=8`, {}, 1);
+        if (data?.length >= 2) {
+            const prev = parseFloat(data[0].sumOpenInterest);
+            const curr = parseFloat(data[data.length-1].sumOpenInterest);
+            return { oi: curr, delta: ((curr - prev) / prev) * 100 };
+        }
         return null;
-    }
+    } catch(e) { return null; }
 };
 
 // ============================================================
-// 8. Basis (perp vs spot) – Binance
+// 8. BASIS (perp vs spot)
 // ============================================================
 export const fetchBasis = async (symbol = 'BTCUSDT') => {
     const cacheKey = `basis_${symbol}`;
-    const cached = getCachedData(cacheKey, 60000);
+    const cached = getCachedData(cacheKey, 30000); // 30 segundos
     if (cached && !cached.stale) return cached;
 
     try {
         const [perp, spot] = await Promise.all([
-            fetchWithRetry(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`, {}, 2),
-            fetchWithRetry(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, {}, 2)
+            fetchWithRetry(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`, {}, 1),
+            fetchWithRetry(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, {}, 1)
         ]);
         if (perp?.markPrice && spot?.price) {
             const mark = parseFloat(perp.markPrice);
@@ -327,14 +284,14 @@ export const fetchBasis = async (symbol = 'BTCUSDT') => {
             }
         }
         return null;
-    } catch (e) {
+    } catch(e) {
         if (cached) return cached;
         return null;
     }
 };
 
 // ============================================================
-// 9. Demais funções (Binance, DeFi, etc.)
+// 9. DEMANDAS GERAIS (candles, etc.)
 // ============================================================
 const SYMBOL_TO_COINGECKO = {
     'BTCUSDT': 'bitcoin',
@@ -352,9 +309,11 @@ let _currentPrices = { 'BTCUSDT':0,'ETHUSDT':0,'SOLUSDT':0 };
 export function setCurrentPrice(symbol, price) { _currentPrices[symbol] = price; }
 export function getCurrentPrice(symbol) { return _currentPrices[symbol] || 0; }
 
+// ===== FETCH CANDLES (com cache curto para 15m) =====
 export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
     const cacheKey = `candles_${symbol}_${interval}_${limit}`;
-    const cached = getCachedData(cacheKey, 60000);
+    const maxAge = interval === '15m' ? 30000 : 60000; // 30s para 15m
+    const cached = getCachedData(cacheKey, maxAge);
     if (cached && !cached.stale) return cached;
 
     try {
@@ -374,6 +333,7 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
         }
     } catch(e) { /* ignore */ }
 
+    // fallback Bybit
     try {
         const map = { '15m':'15','1h':'60','4h':'240','1d':'D' };
         const bybitInterval = map[interval] || '60';
@@ -393,97 +353,27 @@ export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
         }
     } catch(e) { /* ignore */ }
 
-    try {
-        const coinId = SYMBOL_TO_COINGECKO[symbol];
-        if (coinId) {
-            const minutes = TIMEFRAME_TO_MINUTES[interval] || 60;
-            let days = Math.ceil((limit * minutes) / 1440) + 1;
-            days = Math.min(Math.max(days, 1), 90);
-            const url = `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`;
-            const data = await fetchWithRetry(url, {}, 2);
-            if (data && data.length > 0) {
-                const candles = data.map(k => ({
-                    time: k[0]/1000,
-                    open: parseFloat(k[1]),
-                    high: parseFloat(k[2]),
-                    low: parseFloat(k[3]),
-                    close: parseFloat(k[4]),
-                    volume: 0
-                })).slice(-limit);
-                setCachedData(cacheKey, candles);
-                return candles;
-            }
-        }
-    } catch(e) { /* ignore */ }
-
     if (cached) return cached;
     return [];
 }
 
-export const fetchFundingRate = async (symbol) => {
-    const cacheKey = `funding_${symbol}`;
-    const cached = getCachedData(cacheKey, 60000);
-    if (cached && !cached.stale) return cached;
+// ============================================================
+// 10. WEBSOCKET PARA CANDLES 15M (mantido externamente)
+// ============================================================
+// A lógica de WebSocket será implementada no index.html,
+// mas esta função fornece um callback para atualização.
+let wsCandleCallback = null;
+export function setWebSocketCandleCallback(callback) {
+    wsCandleCallback = callback;
+}
+// Chamado quando um novo candle 15m é recebido via WS
+export function onWebSocketCandle(candle) {
+    if (wsCandleCallback) wsCandleCallback(candle);
+}
 
-    try {
-        const data = await fetchWithRetry(`https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`);
-        if (data?.length) {
-            const rate = parseFloat(data[0].fundingRate);
-            let interpretacao = 'EQUILIBRADO';
-            if (rate > 0.01) interpretacao = 'LONGS SOBRE-APOSTADOS';
-            else if (rate < -0.01) interpretacao = 'SHORTS SOBRE-APOSTADOS';
-            const result = { rate, interpretacao };
-            setCachedData(cacheKey, result);
-            return result;
-        }
-    } catch(e) { /* ignore */ }
-    if (cached) return cached;
-    return null;
-};
-
-export const fetchOpenInterest = async (symbol) => {
-    const cacheKey = `oi_${symbol}`;
-    const cached = getCachedData(cacheKey, 60000);
-    if (cached && !cached.stale) return cached;
-
-    try {
-        const data = await fetchWithRetry(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=15m&limit=8`);
-        if (data?.length >= 2) {
-            const prev = parseFloat(data[0].sumOpenInterest);
-            const curr = parseFloat(data[data.length-1].sumOpenInterest);
-            const result = { oi: curr, delta: ((curr - prev) / prev) * 100 };
-            setCachedData(cacheKey, result);
-            return result;
-        }
-    } catch(e) { /* ignore */ }
-    if (cached) return cached;
-    return null;
-};
-
-export const fetchOrderBook = async (symbol = 'BTCUSDT', limit = 10) => {
-    const cacheKey = `ob_${symbol}`;
-    const cached = getCachedData(cacheKey, 15000);
-    if (cached && !cached.stale) return cached;
-
-    try {
-        const data = await fetchWithRetry(`https://api.binance.com/api/v3/depth?symbol=${symbol}&limit=${limit}`);
-        if (data?.bids && data?.asks) {
-            const bidTotal = data.bids.reduce((s, b) => s + parseFloat(b[1]) * parseFloat(b[0]), 0);
-            const askTotal = data.asks.reduce((s, a) => s + parseFloat(a[1]) * parseFloat(a[0]), 0);
-            const result = {
-                bids: data.bids.slice(0,5).map(b => ({ price: +b[0], qty: +b[1] })),
-                asks: data.asks.slice(0,5).map(a => ({ price: +a[0], qty: +a[1] })),
-                bidTotal, askTotal,
-                imbalance: ((bidTotal - askTotal) / (bidTotal + askTotal) * 100)
-            };
-            setCachedData(cacheKey, result);
-            return result;
-        }
-    } catch(e) { /* ignore */ }
-    if (cached) return cached;
-    return null;
-};
-
+// ============================================================
+// 11. DEMAIS FUNÇÕES (DeFi, Tether, FearGreed, etc.)
+// ============================================================
 export const fetchDeFiData = async () => {
     const cacheKey = 'defiData';
     const cached = getCachedData(cacheKey, 300000);
@@ -549,6 +439,31 @@ export const fetchFearGreed = async () => {
     return null;
 };
 
+export const fetchOrderBook = async (symbol = 'BTCUSDT', limit = 10) => {
+    const cacheKey = `ob_${symbol}`;
+    const cached = getCachedData(cacheKey, 15000);
+    if (cached && !cached.stale) return cached;
+
+    try {
+        const data = await fetchWithRetry(`https://api.binance.com/api/v3/depth?symbol=${symbol}&limit=${limit}`);
+        if (data?.bids && data?.asks) {
+            const bidTotal = data.bids.reduce((s, b) => s + parseFloat(b[1]) * parseFloat(b[0]), 0);
+            const askTotal = data.asks.reduce((s, a) => s + parseFloat(a[1]) * parseFloat(a[0]), 0);
+            const result = {
+                bids: data.bids.slice(0,5).map(b => ({ price: +b[0], qty: +b[1] })),
+                asks: data.asks.slice(0,5).map(a => ({ price: +a[0], qty: +a[1] })),
+                bidTotal, askTotal,
+                imbalance: ((bidTotal - askTotal) / (bidTotal + askTotal) * 100)
+            };
+            setCachedData(cacheKey, result);
+            return result;
+        }
+    } catch(e) { /* ignore */ }
+    if (cached) return cached;
+    return null;
+};
+
+// ===== MTF CONFLUENCE =====
 export async function getMTFConfluence(symbol) {
     const cacheKey = `mtf_${symbol}`;
     const cached = getCachedData(cacheKey, 300000);
@@ -578,8 +493,3 @@ export async function getMTFConfluence(symbol) {
     setCachedData(cacheKey, result);
     return result;
 }
-
-// ===== COMPATIBILIDADE =====
-export const fetchFREDVIX = async () => null;
-export const fetchFREDUS10Y = async () => null;
-export const fetchFREDDXY = async () => null;
