@@ -1,4 +1,4 @@
-// js/indicadores.js – Motor completo com todas as melhorias do Comitê
+// js/indicadores.js – Motor completo com todas as correções da rodada 2
 import { CONFIG } from './config.js';
 
 // ============================================================
@@ -58,7 +58,6 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
     const priceData = candles.slice(-lookback);
     const rsiData = rsiValues.slice(-lookback);
     
-    // Encontrar picos e vales (janela de 5 barras)
     const findPeaks = (arr) => {
         const peaks = [];
         for (let i = 2; i < arr.length - 2; i++) {
@@ -83,7 +82,6 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
     const rsiHighs = findPeaks(rsiData);
     const rsiLows = findTroughs(rsiData);
     
-    // Divergência regular de alta
     if (priceLows.length >= 2 && rsiLows.length >= 2) {
         const p1 = priceLows[priceLows.length - 2];
         const p2 = priceLows[priceLows.length - 1];
@@ -93,7 +91,6 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
             return { type: 'BULLISH_REGULAR', strength: (r2.value - r1.value) / r1.value };
         }
     }
-    // Divergência regular de baixa
     if (priceHighs.length >= 2 && rsiHighs.length >= 2) {
         const p1 = priceHighs[priceHighs.length - 2];
         const p2 = priceHighs[priceHighs.length - 1];
@@ -199,21 +196,21 @@ export function generateTrailingStopParams(candles, entryPrice, direction, atrMu
 }
 
 // ============================================================
-// 6. SCORE DE CONFIANÇA (com ajuste de pesos e penalidades)
+// 6. SCORE DE CONFIANÇA (com ajuste de pesos)
 // ============================================================
 
 export function calculateConfidenceScore(symbolData) {
     let score = 0;
     const reasons = [];
     const weights = {
-        mtfAlignment: 0.25,   // aumentado
+        mtfAlignment: 0.25,
         adxTrend: 0.15,
         volumeAnomaly: 0.15,
         fundingRate: 0.10,
         openInterest: 0.10,
         rsiDivergence: 0.15,
         macroFilter: 0.05,
-        smcStructure: 0.15    // aumentado
+        smcStructure: 0.15
     };
     
     if (symbolData.mtfAligned) { score += weights.mtfAlignment; reasons.push('MTF_ALIGNED'); }
@@ -222,22 +219,19 @@ export function calculateConfidenceScore(symbolData) {
     if (symbolData.fundingRate < -0.0001) { score += weights.fundingRate; reasons.push('FUNDING_NEGATIVE'); }
     else if (symbolData.fundingRate > 0.0001) { score -= weights.fundingRate * 0.5; reasons.push('FUNDING_POSITIVE'); }
     if (symbolData.openInterestTrend === 'INCREASING') { score += weights.openInterest; reasons.push('OI_RISING'); }
-    
-    // Divergência com penalidade maior para contradição
     if (symbolData.divergence) {
         if ((symbolData.direction === 'LONG' && symbolData.divergence.type === 'BULLISH_REGULAR') ||
             (symbolData.direction === 'SHORT' && symbolData.divergence.type === 'BEARISH_REGULAR')) {
             score += weights.rsiDivergence;
             reasons.push('DIVERGENCE_CONFIRMED');
         } else {
-            score -= weights.rsiDivergence * 1.5; // penalidade maior
+            score -= weights.rsiDivergence * 1.5;
             reasons.push('DIVERGENCE_HARD_CONTRADICT');
         }
     }
     if (!symbolData.macroBlackout) { score += weights.macroFilter; reasons.push('MACRO_CLEAR'); }
     if (symbolData.smcStructure === 'BOS') { score += weights.smcStructure; reasons.push('SMC_BOS'); }
     
-    // Exigir MTF para score alto
     if (!symbolData.mtfAligned && score > 0.4) {
         score = 0.4;
         reasons.push('MTF_REQUIRED_FOR_HIGH_SCORE');
@@ -257,12 +251,11 @@ export function calculateConfidenceScore(symbolData) {
 }
 
 // ============================================================
-// 7. FILTRO MACRO (calendário de eventos) – com API dinâmica
+// 7. FILTRO MACRO (dinâmico)
 // ============================================================
 
 export async function isHighImpactEventNow() {
     try {
-        // Usando uma API pública de calendário (fallback para estático se falhar)
         const response = await fetch('https://nfs.faireconomy.media/cc/fred.json', { signal: AbortSignal.timeout(5000) });
         const events = await response.json();
         const now = new Date();
@@ -280,7 +273,6 @@ export async function isHighImpactEventNow() {
             }
         }
     } catch(e) {
-        // Fallback para eventos manuais (atualizado)
         const staticEvents = [
             { date: '2026-07-10', time: '14:00', event: 'FOMC Minutes', impact: 'HIGH' },
             { date: '2026-07-12', time: '08:30', event: 'CPI Data', impact: 'HIGH' },
@@ -304,7 +296,7 @@ export async function isHighImpactEventNow() {
 }
 
 // ============================================================
-// 8. NOVO: CÁLCULO DE VWAP (melhoria 4)
+// 8. CÁLCULO DE VWAP
 // ============================================================
 
 export function calculateVWAP(candles) {
@@ -320,29 +312,84 @@ export function calculateVWAP(candles) {
 }
 
 // ============================================================
-// 9. DETECÇÃO REAL DE BREAK OF STRUCTURE (BOS) – melhoria 2
+// 9. DETECÇÃO REAL DE BREAK OF STRUCTURE (BOS)
 // ============================================================
 
 export function findSMCSetup(data, direction) {
     if (data.swingHighs.length < 2 || data.swingLows.length < 2) return false;
     const lastHigh = data.swingHighs[data.swingHighs.length - 1];
-    const prevHigh = data.swingHighs[data.swingHighs.length - 2];
     const lastLow = data.swingLows[data.swingLows.length - 1];
-    const prevLow = data.swingLows[data.swingLows.length - 2];
     const currentPrice = data.price;
 
     if (direction === 'LONG') {
-        // BOS Bullish: preço quebra o último swing high
         return currentPrice > lastHigh;
     } else if (direction === 'SHORT') {
-        // BOS Bearish: preço quebra o último swing low
         return currentPrice < lastLow;
     }
     return false;
 }
 
 // ============================================================
-// 10. FUNÇÕES EXISTENTES (mantidas para compatibilidade)
+// 10. DETECÇÃO DE HTF (4H) REAL – CORREÇÃO #2
+// ============================================================
+
+export function detectHTFStructure(data, candles4H) {
+    if (!candles4H || candles4H.length < 20) return { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity };
+    let highs = [], lows = [];
+    for (let i = 5; i < candles4H.length - 5; i++) {
+        if (candles4H[i].high > candles4H[i-1].high && candles4H[i].high > candles4H[i+1].high) highs.push(candles4H[i].high);
+        if (candles4H[i].low < candles4H[i-1].low && candles4H[i].low < candles4H[i+1].low) lows.push(candles4H[i].low);
+    }
+    const lastSwingHigh = highs.length ? highs[highs.length - 1] : 0;
+    const lastSwingLow = lows.length ? lows[lows.length - 1] : Infinity;
+    const lastClose = candles4H[candles4H.length - 1].close;
+    let bias = 'NEUTRAL';
+    if (lastClose > lastSwingHigh) bias = 'BULLISH';
+    else if (lastClose < lastSwingLow) bias = 'BEARISH';
+    return { bias, lastSwingHigh, lastSwingLow };
+}
+
+// ============================================================
+// 11. FILTRO DE DERIVATIVOS REATIVADO – CORREÇÃO #3
+// ============================================================
+
+export function checkDerivativesFilter(fundingRate, oiDelta) {
+    const fr = fundingRate || 0;
+    const oi = oiDelta || 0;
+    if (fr > 0.0003 && oi > 3) {
+        return { allow: false, reason: `Funding alto (${(fr*100).toFixed(3)}%) + OI subindo (${oi.toFixed(1)}%) — superaquecido` };
+    }
+    if (fr < -0.0003 && oi < -3) {
+        return { allow: false, reason: `Funding negativo + OI caindo — sobrevendido` };
+    }
+    return { allow: true, reason: 'Derivativos neutros' };
+}
+
+// ============================================================
+// 12. KELLY FRACIONADO (QUARTER-KELLY) – CORREÇÃO #4
+// ============================================================
+
+export function KellyPositionSize(winRate, rr) {
+    if (winRate <= 0 || rr <= 0) return 0.01;
+    const kelly = (winRate * (rr - 1) - (1 - winRate)) / (rr - 1);
+    const fractional = kelly * 0.25; // quarter-Kelly
+    return Math.max(0.005, Math.min(0.05, fractional));
+}
+
+// ============================================================
+// 13. EXPOSIÇÃO CORRELACIONADA – CORREÇÃO #5
+// ============================================================
+
+export function checkPortfolioExposure(activePositions, direction) {
+    const total = Object.keys(activePositions).length;
+    if (total >= 3) return { blocked: true, reason: 'Máximo de 3 posições' };
+    const sameDir = Object.values(activePositions).filter(p => p.type === direction).length;
+    if (sameDir >= 1) return { blocked: true, reason: `Já há posição ${direction} aberta (exposição correlacionada)` };
+    return { blocked: false };
+}
+
+// ============================================================
+// 14. FUNÇÕES EXISTENTES (mantidas para compatibilidade)
 // ============================================================
 
 export function updateSwingPoints(data) {
@@ -373,8 +420,6 @@ export function checkMTFAlignment(mtfData) {
 export function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
 }
-
-// ===== FUNÇÕES DE FILTRO (usadas no motor) =====
 
 export function adxFilter(candles) {
     const adx = calculateADX(candles);
@@ -425,25 +470,8 @@ export function fearGreedFilter(fgData, direction) {
     return { pass: true, reason: 'F&G neutro', multiplier: 1 };
 }
 
-export function checkPortfolioExposure(activePositions, direction) {
-    const total = Object.keys(activePositions).length;
-    if (total >= 3) return { blocked: true, reason: 'Máximo de 3 posições' };
-    const sameDir = Object.values(activePositions).filter(p => p.type === direction).length;
-    if (sameDir >= 2) return { blocked: true, reason: `Máximo de 2 posições ${direction}` };
-    return { blocked: false };
-}
-
 export function isSafeToTrade() {
     return true;
-}
-
-export function KellyPositionSize(winRate, rr) {
-    if (winRate <= 0 || rr <= 0) return 0.02;
-    const b = rr - 1;
-    const p = winRate;
-    const q = 1 - p;
-    const kelly = (p * b - q) / b;
-    return Math.max(0.01, Math.min(0.1, kelly));
 }
 
 export function computeScore(symbol, assetsData, liqMap) {
@@ -488,14 +516,6 @@ export function checkVolumeAndOrderflow(volAnomaly, obImbalance) {
     return volAnomaly?.isAnomaly || false;
 }
 
-export function checkDerivativesFilter(funding, oiDelta) {
-    return funding < 0.01 && oiDelta > 0;
-}
-
-export function detectHTFStructure(data, candles4H) {
-    return { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity };
-}
-
 export function updateStatefulEMA(prevEma, price, period) {
     const k = 2 / (period + 1);
     return price * k + prevEma * (1 - k);
@@ -530,3 +550,5 @@ export function calculateSignalScore(indicators) {
     const label = clamped >= 70 ? 'MUITO FORTE' : clamped >= 55 ? 'FORTE' : clamped >= 45 ? 'MODERADO' : clamped >= 30 ? 'MODERADO CONTRA' : 'FORTE CONTRA';
     return { score: clamped, direction, label, reasons };
 }
+
+// ===== STUBS REMOVIDOS: bbWidth, calculateBB (não são mais usados) =====
