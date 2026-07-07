@@ -1,4 +1,4 @@
-// js/dados_externos.js – completo com Alpha Vantage para Macro
+// js/dados_externos.js – completo com Alpha Vantage para Macro e fallbacks
 import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
@@ -59,7 +59,6 @@ function setCachedData(key, data) {
     try { localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() })); } catch(e) { /* ignore */ }
 }
 
-// ===== SLEEP (para evitar rate limit) =====
 export function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ============================================================
