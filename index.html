@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        /* ===== CSS COMPLETO (mesmo da versão anterior) ===== */
+        /* ===== CSS COMPLETO ===== */
         :root {
             --bg-dark: #08090d; --bg-card: #0f1117; --bg-card-hover: #14171f; --primary: #0f1117; --secondary: #1a1d29;
             --border: rgba(255, 255, 255, 0.06); --border-active: rgba(0, 180, 216, 0.5);
@@ -300,7 +300,7 @@
             </div>
         </section>
 
-        <!-- ===== INDICADORES MACROECONÔMICOS (ATUALIZADO) ===== -->
+        <!-- ===== INDICADORES MACROECONÔMICOS ===== -->
         <section>
             <h2 class="section-title">🌍 INDICADORES MACROECONÔMICOS</h2>
             <div class="table-wrapper">
@@ -471,7 +471,7 @@
             'SOLUSDT': { buys: 0, sells: 0, lastTx: null }
         };
         let alertCooldowns = {};
-        let lastMainScore = 50; // para os scores de análise
+        let lastMainScore = 50;
 
         const DOM = {};
         function cacheDOM() {
@@ -522,7 +522,7 @@
             document.getElementById('exit-fill').style.width = exit + '%';
         }
 
-        // ===== HISTÓRICO DE SINAIS COM PERSISTÊNCIA =====
+        // ===== HISTÓRICO DE SINAIS (apenas localStorage) =====
         let signalHistory = [];
 
         function loadSignalHistory() {
@@ -1063,15 +1063,13 @@
             const reasonEl = document.getElementById('block-reason');
             if (blockReason) { reasonEl.style.display = 'block'; reasonEl.textContent = '🚫 ' + blockReason; } else { reasonEl.style.display = 'none'; }
             
-            // Atualiza os scores de análise
             lastMainScore = s;
             updateAnalysisScores(s);
         }
 
         // ===== ACTIVE TRADES UI (agora somente backtest) =====
-        // Removemos a seção de posições ativas; a função não é mais necessária, mas mantemos para não quebrar outras chamadas.
         function updateActiveTradesUI() {
-            // Não há mais posições ativas, mas mantemos a função vazia.
+            // Não há mais posições ativas, mantido para compatibilidade
         }
 
         // ===== POSITION MANAGEMENT =====
@@ -1251,7 +1249,6 @@
                     document.getElementById('nasdaq-value').textContent = (nasdaqChange >= 0 ? '+' : '') + nasdaqChange.toFixed(2) + '%';
                     const spChange = macro.spChange !== undefined ? macro.spChange : 0;
                     document.getElementById('sp500-value').textContent = (spChange >= 0 ? '+' : '') + spChange.toFixed(2) + '%';
-                    // Atualiza também o resumo executivo
                     document.getElementById('macro-summary').textContent = `DXY ${macro.dxy || '--'} | US10Y ${macro.us10y || '--'}%`;
                 }
 
