@@ -901,8 +901,8 @@
     const val = document.getElementById('scoreValue');
     const label = document.getElementById('scoreLabel');
 
-    if (bar) bar.style.width = scoreData.score + '%';
-    if (val) val.textContent = scoreData.score;
+    if (bar) bar.style.width = (scoreData?.score ?? 50) + '%';
+    if (val) val.textContent = scoreData?.score ?? 50;
 
     const colors = {
         'MUITO FORTE': { bg: 'rgba(0,230,118,0.2)', color: '#00e676', border: '#00e676' },
@@ -914,59 +914,82 @@
         'MUITO FORTE CONTRA': { bg: 'rgba(255,23,68,0.2)', color: '#ff1744', border: '#ff1744' }
     };
 
-    const c = colors[scoreData.label] || colors['NEUTRO'];
+    const c = colors[scoreData?.label] || colors['NEUTRO'];
     if (label) {
         label.style.background = c.bg;
         label.style.color = c.color;
         label.style.border = `1px solid ${c.border}`;
-        label.textContent = scoreData.label;
+        label.textContent = scoreData?.label || 'NEUTRO';
     }
 
+    // MTF Badges
     const mtfContainer = document.getElementById('mtfBadges');
-    if (mtfContainer && mtfData && mtfData.directions) {
+    if (mtfContainer && mtfData && Array.isArray(mtfData.directions)) {
         mtfContainer.innerHTML = mtfData.directions.map(d => {
             const cls = d.dir === 'BULL' ? 'mtf-bull' : d.dir === 'BEAR' ? 'mtf-bear' : 'mtf-neutral';
             return `<span class="mtf-badge ${cls}">${d.tf} ${d.dir}</span>`;
         }).join('');
+    } else if (mtfContainer) {
+        mtfContainer.innerHTML = '';
     }
 
+    // Reasons
     const reasonsContainer = document.getElementById('scoreReasons');
-    if (reasonsContainer) {
+    if (reasonsContainer && scoreData && Array.isArray(scoreData.reasons)) {
         reasonsContainer.innerHTML = scoreData.reasons.map(r => {
             const cls = r.includes('Contra') || r.includes('Baixo') || r.includes('Sem') || r.includes('Sobrecompra') || r.includes('Perigoso') ? 'negative' : 'positive';
             return `<span class="reason-tag ${cls}">${r}</span>`;
         }).join('');
+    } else if (reasonsContainer) {
+        reasonsContainer.innerHTML = '';
     }
 
+    // Funding Rate
     const fundEl = document.getElementById('fundingDisplay');
-    if (fundEl && fundingData && fundingData.rate !== undefined) {
+    if (fundEl && fundingData && fundingData.rate !== undefined && fundingData.rate !== null) {
         const fColor = fundingData.rate > 0.01 ? '#ff5252' : fundingData.rate < -0.01 ? '#00e676' : '#ffc107';
         fundEl.style.color = fColor;
         fundEl.textContent = `${(fundingData.rate * 100).toFixed(4)}% — ${fundingData.interpretacao || 'EQUILIBRADO'}`;
+    } else if (fundEl) {
+        fundEl.textContent = '--';
     }
 
+    // ADX
     const adxEl = document.getElementById('adxDisplay');
-    if (adxEl && adxData) {
+    if (adxEl && adxData && adxData.adx !== undefined) {
         const aColor = adxData.adx < 20 ? '#ff5252' : adxData.adx > 50 ? '#ff9800' : '#00e676';
         adxEl.style.color = aColor;
         adxEl.textContent = `${adxData.adx.toFixed(1)} ${adxData.adx < 20 ? '(Sem tendência)' : adxData.trend || '(Tendência)'}`;
+    } else if (adxEl) {
+        adxEl.textContent = '--';
     }
 
+    // Order Book
     const obContainer = document.getElementById('orderbookMini');
-    if (obContainer) obContainer.innerHTML = renderMiniOrderBook(obData);
+    if (obContainer) {
+        if (obData && Array.isArray(obData.bids) && Array.isArray(obData.asks)) {
+            obContainer.innerHTML = renderMiniOrderBook(obData);
+        } else {
+            obContainer.innerHTML = '<span style="color:#8b949e;">Order Book indisponível</span>';
+        }
+    }
 
-    // ===== 🔥 CORREÇÃO: ATUALIZAR O TEXTO CENTRAL =====
+    // ===== 🔥 TEXTO CENTRAL (MAIN SIGNAL) =====
     const mainSignalEl = document.getElementById('mainSignal');
     if (mainSignalEl) {
-        if (scoreData.direction) {
-            const color = scoreData.direction === 'LONG' ? '#00e676' : '#ff1744';
+        const dir = scoreData?.direction;
+        const score = scoreData?.score ?? 50;
+        const labelText = scoreData?.label || 'NEUTRO';
+
+        if (dir === 'LONG' || dir === 'SHORT') {
+            const color = dir === 'LONG' ? '#00e676' : '#ff1744';
             mainSignalEl.innerHTML = `
-                <div style="color:${color};font-size:20px;font-weight:900;">${scoreData.direction}</div>
-                <div style="color:#8b949e;font-size:11px;">Score: ${scoreData.score}/100 — ${scoreData.label}</div>
+                <div style="color:${color};font-size:20px;font-weight:900;">${dir}</div>
+                <div style="color:#8b949e;font-size:11px;">Score: ${score}/100 — ${labelText}</div>
             `;
         } else {
             mainSignalEl.innerHTML = `
-                <div style="color:#8b949e;font-size:14px;">Sem direção definida (Score: ${scoreData.score}/100)</div>
+                <div style="color:#8b949e;font-size:14px;">Sem direção definida (Score: ${score}/100)</div>
             `;
         }
     }
