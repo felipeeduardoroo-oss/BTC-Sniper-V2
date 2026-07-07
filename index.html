@@ -133,6 +133,22 @@
         .confidence-MEDIUM { background: rgba(255,193,7,0.15); color: #ffc107; border: 1px solid #ffc107; }
         .confidence-LOW { background: rgba(255,152,0,0.15); color: #ff9800; border: 1px solid #ff9800; }
         .confidence-VERY_LOW { background: rgba(255,82,82,0.15); color: #ff5252; border: 1px solid #ff5252; }
+
+        /* Estilo para o botão de backtest */
+        .backtest-btn {
+            background: var(--accent-purple);
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 10px 25px -5px rgba(124, 58, 237, 0.4);
+        }
+        .backtest-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(124, 58, 237, 0.6); }
+        .backtest-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
     </style>
 </head>
 <body>
@@ -242,6 +258,42 @@
                         <tr><td colspan="8" style="text-align:center;color:var(--text-muted);">Aguardando sinais...</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </section>
+
+        <!-- ===== BACKTEST 30 DIAS (NOVO) ===== -->
+        <section>
+            <h2 class="section-title">📈 BACKTEST — ÚLTIMOS 30 DIAS (DADOS REAIS)</h2>
+            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
+                <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
+                    <button id="run-backtest-btn" class="backtest-btn">▶️ Executar Backtest</button>
+                    <span id="backtest-status" style="color:var(--text-muted);">Aguardando execução</span>
+                </div>
+                <div id="backtest-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:16px;"></div>
+            </div>
+            <div class="table-wrapper" id="backtest-table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Entrada (UTC)</th>
+                            <th>Ativo</th>
+                            <th>Direção</th>
+                            <th>Preço Entrada</th>
+                            <th>Stop Loss</th>
+                            <th>Take Profit 1</th>
+                            <th>Preço Saída</th>
+                            <th>Motivo</th>
+                            <th>P&L (%)</th>
+                            <th>Duração (h)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="backtest-tbody">
+                        <tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum backtest executado ainda.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="backtest-legend" style="font-size:0.75rem;color:var(--text-muted);margin-top:8px;background:var(--bg-card);padding:12px;border-radius:8px;border:1px solid var(--border);">
+                <strong>Legenda:</strong> Dados utilizados: Preços (Binance 1h/4h), Funding Rate (Binance), Open Interest (Binance), MVRV (CoinMetrics), Macro (Alpha Vantage). <strong>Order Book desconsiderado</strong> (indisponível historicamente). Carteira inicial: $10.000 USD.
             </div>
         </section>
 
@@ -419,6 +471,9 @@
         import * as banco from './js/banco_de_dados.js';
         import * as historico from './js/historicos_sinais.js';
         import { CONFIG } from './js/config.js';
+        
+        // ===== IMPORTAÇÃO DO BACKTEST =====
+        import { runBacktest } from './js/backtest.js';
 
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
@@ -935,7 +990,6 @@
 
         function initWebSockets() {
             const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
-            // Adiciona streams de kline para 15m
             const tradeStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
             const klineStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@kline_15m').join('/');
             const streams = tradeStreams + '/' + klineStreams;
@@ -956,7 +1010,6 @@
                     const stream = msg.stream;
                     const data = msg.data;
                     
-                    // Trade stream
                     if (stream.includes('@trade')) {
                         const symbol = data.s;
                         const price = parseFloat(data.p);
@@ -965,7 +1018,6 @@
 
                         setCurrentPrice(symbol, price);
 
-                        // Whale tracker
                         const tradeValue = price * qty;
                         if (tradeValue > 100000) {
                             if (isBuy) whaleTrades[symbol].buys += tradeValue;
@@ -979,20 +1031,16 @@
                             updateWhaleUI();
                         }
 
-                        // 🔥 CORREÇÃO #1: REMOVIDA A CONTAMINAÇÃO POR TICK
-                        // Apenas atualiza o preço, sem mexer em EMA/RSI/ATR
                         if (assetsData[symbol]) {
                             assetsData[symbol].price = price;
                             updateLivePriceUI(symbol, price);
                         }
                     }
-                    // Kline stream
                     else if (stream.includes('@kline')) {
                         const k = data.k;
                         const symbol = data.s;
-                        if (assetsData[symbol] && k.x) { // candle fechado
+                        if (assetsData[symbol] && k.x) {
                             console.log(`[WS] Candle 15m fechado para ${symbol}, forçando avaliação.`);
-                            // Forçar atualização do motor principal
                             setTimeout(() => evaluateMarkets(), 1000);
                         }
                     }
@@ -1108,7 +1156,6 @@
             if (!pos) return;
             const data = assetsData[symbol];
             
-            // Time-based exit (melhoria 5)
             const MAX_HOLD_HOURS = 12;
             if (pos.entryTime) {
                 const hoursOpen = (Date.now() - pos.entryTime) / (1000 * 60 * 60);
@@ -1283,15 +1330,12 @@
                 let blockReason = scoreData.blockReason;
                 
                 // --- 7. Filtros de bloqueio ---
-                // ADX < 25
                 if (data.adx < 25 && !blockReason) {
                     blockReason = blockReason ? blockReason + '; ADX < 25 (lateral)' : 'ADX < 25 (lateral)';
                 }
-                // Macro blackout
                 if (data.macroBlackout && !blockReason) {
                     blockReason = blockReason ? blockReason + '; Macro blackout' : 'Macro blackout';
                 }
-                // VWAP
                 const primaryDirection = (score >= 70) ? 'LONG' : (score <= 30 ? 'SHORT' : null);
                 if (primaryDirection === 'LONG' && data.price < vwap && !blockReason) {
                     blockReason = blockReason ? blockReason + '; Preço abaixo do VWAP' : 'Preço abaixo do VWAP';
@@ -1299,7 +1343,6 @@
                     blockReason = blockReason ? blockReason + '; Preço acima do VWAP' : 'Preço acima do VWAP';
                 }
                 
-                // 🔥 CORREÇÃO #2: Viés HTF 4H (restaurado)
                 if (primaryDirection === 'LONG' && data.htfStructure.bias === 'BEARISH' && !blockReason) {
                     blockReason = blockReason ? blockReason + '; HTF 4H Bearish' : 'HTF 4H Bearish';
                 }
@@ -1307,7 +1350,6 @@
                     blockReason = blockReason ? blockReason + '; HTF 4H Bullish' : 'HTF 4H Bullish';
                 }
                 
-                // 🔥 CORREÇÃO #3: Filtro de derivativos reativado
                 if (!blockReason) {
                     const derivCheck = checkDerivativesFilter(data.fundingRate, data.oiDelta);
                     if (!derivCheck.allow) blockReason = derivCheck.reason;
@@ -1332,11 +1374,9 @@
                     if (now - cooldown > 1800000) {
                         const atr = data.atr_1H || (data.price * 0.02);
                         if (primaryDirection) {
-                            // 🔥 CORREÇÃO #5: Exposição correlacionada voltou a 1 por direção
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
                             if (expCheck.blocked) return;
                             
-                            // Confirmação de re-teste
                             const ema20 = calcEMA(data.candles1H.map(c=>c.close), 20).slice(-1)[0] || data.price;
                             let retestConfirmed = false;
                             if (primaryDirection === 'LONG') {
@@ -1349,7 +1389,6 @@
                             
                             if (smcSetup && retestConfirmed) {
                                 let stop, tp1, tp2, tp3, structLevel;
-                                // Alvos baseados em liquidação
                                 let liqTarget1 = null, liqTarget2 = null;
                                 const liqs = liquidationLevels[symbol] || [];
                                 if (liqs.length > 0) {
@@ -1378,7 +1417,6 @@
                                 const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
                                 if (rr1 < 1.5) return;
                                 
-                                // 🔥 CORREÇÃO #4: Kelly fracionado (25%, teto 5%)
                                 const winRate = banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1);
                                 const riskPct = KellyPositionSize(winRate, rr1);
                                 telegram.sendTradeAlert(symbol, primaryDirection.toLowerCase(), score, data.price, stop, [{price: tp1, rr: rr1}, {price: tp2, rr: rr1*2}, {price: tp3, rr: rr1*3}], `MTF ${primaryDirection} + BOS + Re-teste + VWAP`, riskPct, null);
@@ -1414,7 +1452,6 @@
             if (externalUpdating) return;
             externalUpdating = true;
             try {
-                // ===== MACRO (Alpha Vantage com fallback) =====
                 const macro = await fetchMacroStatic();
                 if (macro) {
                     document.getElementById('dxy-value').textContent = macro.dxy !== undefined ? macro.dxy.toFixed(2) : '--';
@@ -1427,7 +1464,6 @@
                     document.getElementById('macro-summary').textContent = `DXY ${macro.dxy || '--'} | US10Y ${macro.us10y || '--'}%`;
                 }
 
-                // ===== MVRV =====
                 const mvrv = await fetchMVRV();
                 setTextOrNA('mvrv', mvrv);
                 if (mvrv !== null && !isNaN(mvrv)) {
@@ -1437,7 +1473,6 @@
                     document.getElementById('mvrv-interp').textContent = '--';
                 }
 
-                // ===== Active Addresses =====
                 const cqActive = await fetchCQActiveAddresses();
                 setTextOrNA('active-addresses', cqActive);
                 if (cqActive === null) {
@@ -1447,13 +1482,11 @@
                     }
                 }
 
-                // ===== Hashrate =====
                 const hashrate = await fetchHashrate();
                 if (hashrate !== null) {
                     document.getElementById('btc-hashrate').textContent = (hashrate / 1e6).toFixed(2) + ' EH/s';
                 }
 
-                // ===== Funding Rate =====
                 const funding = await fetchFundingRate('BTCUSDT');
                 if (funding) {
                     document.getElementById('funding-rate').textContent = (funding.rate * 100).toFixed(4) + '%';
@@ -1461,7 +1494,6 @@
                     if (assetsData['BTCUSDT']) assetsData['BTCUSDT'].fundingRate = funding.rate;
                 }
 
-                // ===== Open Interest e OI Delta =====
                 const oiData = await fetchOIDelta('BTCUSDT');
                 if (oiData) {
                     document.getElementById('open-interest').textContent = '$' + (oiData.oi / 1e6).toFixed(2) + 'M';
@@ -1472,22 +1504,18 @@
                     }
                 }
 
-                // ===== Basis (com fallback Bybit) =====
                 const basis = await fetchBasis('BTCUSDT');
                 setTextOrNA('basis', basis !== null ? (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%' : null);
 
-                // ===== Put/Call Ratio =====
                 const pcr = await fetchPutCallRatio();
                 setTextOrNA('put-call-ratio', pcr !== null ? pcr.toFixed(2) : null);
                 if (pcr !== null) {
                     document.getElementById('put-call-interp').textContent = pcr > 1.5 ? '⚠️ Medo' : pcr < 0.7 ? '✅ Otimismo' : 'ℹ️ Neutro';
                 }
 
-                // ===== ETH Gas =====
                 const ethGas = await fetchEthGasPrice();
                 setTextOrNA('eth-gas', ethGas, '', ' Gwei');
 
-                // ===== Tether Premium =====
                 const premium = await fetchTetherPremium();
                 const tetherEl = document.getElementById('tether-premium');
                 if (tetherEl) {
@@ -1495,11 +1523,9 @@
                     tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
                 }
 
-                // ===== Fed Rate =====
                 const fedRate = await fetchFedRate();
                 setTextOrNA('fed-rate', fedRate, '', '%');
 
-                // ===== DeFi =====
                 const defi = await fetchDeFiData();
                 if (defi) {
                     document.getElementById('stablecoin-supply').textContent = '$' + defi.totalStable.toFixed(0) + 'B';
@@ -1507,7 +1533,6 @@
                     document.getElementById('defi-tvl-change').textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
                 }
 
-                // ===== Fear & Greed =====
                 const fg = await fetchFearGreed();
                 if (fg) {
                     document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
@@ -1557,7 +1582,6 @@
                     const avgGain = gains / 14, avgLoss = losses / 14;
                     assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
                     assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
-                    // 🔥 CORREÇÃO #2: Detectar HTF real
                     assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], c4H);
                     if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
                 }
@@ -1569,6 +1593,22 @@
             await evaluateMarkets();
 
             setTimeout(runCommittee, 1000);
+
+            // ===== FORÇA DO SINAL ATUALIZANDO A CADA 10 SEGUNDOS (AJUSTE SOLICITADO) =====
+            setInterval(async () => {
+                const symbol = 'BTCUSDT';
+                try {
+                    const scoreData = computeScore(symbol, assetsData, liqMap);
+                    const mtfData = await getMTFConfluence(symbol);
+                    const fundingData = await fetchFundingRate(symbol);
+                    const adxData = calculateADX(assetsData[symbol].candles1H);
+                    const obData = await fetchOrderBook(symbol, 10);
+                    const fgData = await fetchFearGreed();
+                    updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData);
+                } catch (e) {
+                    console.warn('Erro ao atualizar Força do Sinal:', e);
+                }
+            }, 10000); // <--- 10 segundos
 
             setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
@@ -1593,7 +1633,6 @@
                         assetsData[symbol].candles4H = [...assetsData[symbol].candles4H.slice(0, -20), ...c4H];
                         const closes4H = assetsData[symbol].candles4H.map(c => c.close);
                         assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : assetsData[symbol].ema200_4H;
-                        // 🔥 CORREÇÃO #2: Atualiza HTF real periodicamente
                         assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
                     }
                 }
@@ -1610,6 +1649,64 @@
                     document.getElementById('test-btn-label').textContent = '📨 Testar Alerta';
                     this.disabled = false;
                 }, 3000);
+            });
+
+            // ===== BACKTEST: EVENT LISTENER =====
+            document.getElementById('run-backtest-btn').addEventListener('click', async function() {
+                this.disabled = true;
+                this.textContent = '⏳ Processando...';
+                document.getElementById('backtest-status').textContent = 'Buscando dados históricos...';
+                try {
+                    const result = await runBacktest('BTCUSDT', 30);
+                    const { trades, summary } = result;
+                    
+                    const summaryDiv = document.getElementById('backtest-summary');
+                    if (summary.error) {
+                        summaryDiv.innerHTML = `<div style="color:var(--accent-red);">❌ Erro: ${summary.error}</div>`;
+                    } else {
+                        summaryDiv.innerHTML = `
+                            <div class="summary-card"><h3>Trades</h3><div class="value">${summary.totalTrades}</div></div>
+                            <div class="summary-card"><h3>Winrate</h3><div class="value ${summary.winrate > 50 ? 'positive' : 'negative'}">${summary.winrate.toFixed(1)}%</div></div>
+                            <div class="summary-card"><h3>P&L Total</h3><div class="value ${summary.totalPnlPct >= 0 ? 'positive' : 'negative'}">${summary.totalPnlPct.toFixed(2)}%</div></div>
+                            <div class="summary-card"><h3>P&L (USD)</h3><div class="value ${summary.totalPnlUsd >= 0 ? 'positive' : 'negative'}">$${summary.totalPnlUsd.toFixed(2)}</div></div>
+                            <div class="summary-card"><h3>Retorno Anualizado</h3><div class="value ${summary.annualizedReturn >= 0 ? 'positive' : 'negative'}">${summary.annualizedReturn.toFixed(2)}%</div></div>
+                            <div class="summary-card"><h3>Drawdown Máx</h3><div class="value negative">${summary.maxDrawdown.toFixed(2)}%</div></div>
+                            <div class="summary-card"><h3>Profit Factor</h3><div class="value">${summary.profitFactor.toFixed(2)}</div></div>
+                            <div class="summary-card"><h3>Equity Final</h3><div class="value ${summary.finalEquity >= 10000 ? 'positive' : 'negative'}">$${summary.finalEquity.toFixed(2)}</div></div>
+                        `;
+                    }
+
+                    const tbody = document.getElementById('backtest-tbody');
+                    if (!trades || trades.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum trade gerado no período.</td></tr>';
+                    } else {
+                        let html = '';
+                        trades.forEach(t => {
+                            const pnl = t.pnlPct !== null ? parseFloat(t.pnlPct) : 0;
+                            const pnlClass = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
+                            html += `<tr>
+                                <td>${t.entryTime}</td>
+                                <td>${t.symbol}</td>
+                                <td>${t.direction}</td>
+                                <td>$${t.entryPrice.toFixed(2)}</td>
+                                <td>$${t.stopLoss.toFixed(2)}</td>
+                                <td>$${t.takeProfit1.toFixed(2)}</td>
+                                <td>${t.exitPrice ? '$'+t.exitPrice.toFixed(2) : '--'}</td>
+                                <td>${t.reason}</td>
+                                <td class="${pnlClass}">${t.pnlPct !== null ? (pnl > 0 ? '+' : '') + t.pnlPct + '%' : '--'}</td>
+                                <td>${t.durationHours ? t.durationHours + 'h' : '--'}</td>
+                            </tr>`;
+                        });
+                        tbody.innerHTML = html;
+                    }
+                    document.getElementById('backtest-status').textContent = `✅ Concluído em ${new Date().toLocaleTimeString()}`;
+                } catch (e) {
+                    console.error(e);
+                    document.getElementById('backtest-status').textContent = '❌ Erro: ' + e.message;
+                } finally {
+                    this.disabled = false;
+                    this.textContent = '▶️ Executar Backtest';
+                }
             });
 
             setInterval(() => {
