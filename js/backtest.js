@@ -1,4 +1,4 @@
-// js/backtest.js (versão corrigida com debug)
+// js/backtest.js – Backtest com dados reais dos últimos 30 dias
 import { CONFIG } from './config.js';
 import {
     fetchHistoricalCandles,
@@ -10,12 +10,10 @@ import {
     calculateATR,
     calcEMA,
     updateSwingPoints,
-    detectHTFStructure,
-    isSafeToTrade,
-    KellyPositionSize
+    detectHTFStructure
 } from './indicadores.js';
 
-// ===== HELPERS PARA DEBUG =====
+// ===== HELPERS DE DEBUG =====
 function logDebug(message, data = null) {
     console.log(`[Backtest] ${message}`, data || '');
 }
@@ -54,7 +52,6 @@ async function fetchHistoricalOI(symbol, startTime, endTime) {
 
 // ===== BUSCAR MVRV HISTÓRICO (CoinMetrics) =====
 async function fetchHistoricalMVRV(startDate, endDate) {
-    // startDate e endDate devem ser strings YYYY-MM-DD
     const url = `https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=CapMVRVCur&frequency=1d&start_time=${startDate}&end_time=${endDate}&page_size=100`;
     logDebug('Buscando MVRV Histórico:', url);
     try {
@@ -81,13 +78,13 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
     logDebug(`Período: ${startDateStr} a ${endDateStr}`);
 
     try {
-        // 1. Buscar candles (essenciais)
+        // 1. Buscar candles (sempre garantir que são arrays)
         logDebug('Buscando candles 1h...');
-        const candles1h = await fetchHistoricalCandles(symbol, '1h', 800);
+        const candles1h = (await fetchHistoricalCandles(symbol, '1h', 800)) || [];
         logDebug(`Candles 1h obtidos: ${candles1h.length}`);
-        
+
         logDebug('Buscando candles 4h...');
-        const candles4h = await fetchHistoricalCandles(symbol, '4h', 200);
+        const candles4h = (await fetchHistoricalCandles(symbol, '4h', 200)) || [];
         logDebug(`Candles 4h obtidos: ${candles4h.length}`);
 
         // Filtrar pelo período
@@ -97,17 +94,17 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             return { trades: [], summary: { error: 'Nenhum candle encontrado no período. Verifique as datas.' } };
         }
 
-        // 2. Buscar dados complementares (com fallback silencioso se falharem)
+        // 2. Buscar dados complementares com fallback para arrays vazios
         logDebug('Buscando Funding Rate...');
-        const fundingHist = await fetchHistoricalFunding(symbol, startTime, endTime);
+        const fundingHist = (await fetchHistoricalFunding(symbol, startTime, endTime)) || [];
         logDebug(`Funding obtido: ${fundingHist.length} registros`);
 
         logDebug('Buscando Open Interest...');
-        const oiHist = await fetchHistoricalOI(symbol, startTime, endTime);
+        const oiHist = (await fetchHistoricalOI(symbol, startTime, endTime)) || [];
         logDebug(`OI obtido: ${oiHist.length} registros`);
 
         logDebug('Buscando MVRV...');
-        const mvrvHist = await fetchHistoricalMVRV(startDateStr, endDateStr);
+        const mvrvHist = (await fetchHistoricalMVRV(startDateStr, endDateStr)) || [];
         logDebug(`MVRV obtido: ${mvrvHist.length} registros`);
 
         logDebug('Buscando Macro (estático)...');
@@ -115,9 +112,9 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         logDebug('Macro obtido com sucesso');
 
         // ===== SIMULAÇÃO =====
-        let state = {
+        const state = {
             candles1h: [],
-            candles4h: candles4h,
+            candles4h: candles4h || [],
             ema20_1h: 0,
             ema50_1h: 0,
             ema200_4h: 0,
@@ -147,36 +144,41 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         let highWaterMark = equity;
 
         function updateIndicators(candles) {
-            if (candles.length < 14) return;
+            if (!candles || candles.length < 14) return;
             const closes = candles.map(c => c.close);
             state.ema20_1h = calcEMA(closes, 20).slice(-1)[0] || closes[closes.length - 1];
             state.ema50_1h = calcEMA(closes, 50).slice(-1)[0] || closes[closes.length - 1];
             state.atr_1h = calculateATR(candles, 14);
             state.atrHistory.push(state.atr_1h);
             if (state.atrHistory.length > 100) state.atrHistory.shift();
-            
-            let avgGain = 0, avgLoss = 0;
+
+            let avgGain = 0,
+                avgLoss = 0;
             for (let i = closes.length - 14; i < closes.length; i++) {
                 const diff = closes[i] - closes[i - 1];
-                if (diff > 0) avgGain += diff; else avgLoss += Math.abs(diff);
+                if (diff > 0) avgGain += diff;
+                else avgLoss += Math.abs(diff);
             }
-            avgGain /= 14; avgLoss /= 14;
+            avgGain /= 14;
+            avgLoss /= 14;
             state.rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
-            
+
             const adxData = calculateADX(candles);
-            state.adx = adxData.adx;
-            state.plusDI = adxData.plusDI;
-            state.minusDI = adxData.minusDI;
-            
-            let cumVol = 0, cumVal = 0;
-            candles.forEach(c => { cumVol += c.volume; cumVal += c.close * c.volume; });
+            state.adx = adxData.adx || 0;
+            state.plusDI = adxData.plusDI || 0;
+            state.minusDI = adxData.minusDI || 0;
+
+            let cumVol = 0,
+                cumVal = 0;
+            candles.forEach(c => { cumVol += c.volume;
+                cumVal += c.close * c.volume; });
             state.vwap = cumVol > 0 ? cumVal / cumVol : closes[closes.length - 1];
-            
+
             const volMA = candles.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
             state.volumeAnomaly = candles[candles.length - 1].volume > volMA * 2.0 ? 'ALTO' : 'NORMAL';
-            
+
             updateSwingPoints(state, candles);
-            if (state.candles4h.length > 50) {
+            if (state.candles4h && state.candles4h.length > 50) {
                 state.htfStructure = detectHTFStructure(state, state.candles4h);
             }
         }
@@ -188,13 +190,13 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             if (state.rsiState.rsi > 50) score += 10;
             if (state.volumeAnomaly === 'ALTO') score += 10;
             if (state.htfStructure.bias === 'BULLISH') score += 10;
-            
+
             let blockReason = null;
             if (state.adx < 25) blockReason = 'ADX < 25';
             if (state.macroBlackout) blockReason = 'Macro blackout';
             if (state.htfStructure.bias === 'BEARISH' && score > 50) blockReason = 'HTF 4H Bearish';
             if (state.fundingRate > 0.01) blockReason = 'Funding alto (longs caros)';
-            
+
             const direction = score >= 70 ? 'LONG' : (score <= 30 ? 'SHORT' : null);
             return { score, direction, blockReason };
         }
@@ -205,16 +207,16 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             state.candles1h.push(candle);
             if (state.candles1h.length > 200) state.candles1h.shift();
 
-            // Atualizar funding e OI
+            // Atualizar funding e OI (com verificações)
             const fundingAtTime = fundingHist.find(f => f.time <= candle.time * 1000) || fundingHist[0];
             state.fundingRate = fundingAtTime ? fundingAtTime.rate : 0;
-            
+
             const oiAtTime = oiHist.find(o => o.time <= candle.time * 1000) || oiHist[0];
             if (oiAtTime) {
                 const oi24h = oiHist.find(o => o.time <= (candle.time - 86400) * 1000);
                 state.oiDelta = oi24h ? ((oiAtTime.oi - oi24h.oi) / oi24h.oi * 100) : 0;
             }
-            
+
             const mvrvAtTime = mvrvHist.find(m => m.time <= candle.time);
             state.mvrv = mvrvAtTime ? mvrvAtTime.value : null;
             state.macroBlackout = false;
@@ -232,25 +234,29 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 let closed = false;
                 let exitPrice = 0;
                 let reason = '';
-                
+
                 if (position.type === 'LONG') {
-                    if (high >= position.tp2) { exitPrice = position.tp2; closed = true; reason = 'TP2'; }
-                    else if (low <= position.trailingStop) { exitPrice = position.trailingStop; closed = true; reason = 'Trailing Stop'; }
-                    else if (high >= position.tp1 && !position.partialTaken) {
+                    if (high >= position.tp2) { exitPrice = position.tp2;
+                        closed = true;
+                        reason = 'TP2'; } else if (low <= position.trailingStop) { exitPrice = position.trailingStop;
+                        closed = true;
+                        reason = 'Trailing Stop'; } else if (high >= position.tp1 && !position.partialTaken) {
                         position.partialTaken = true;
                         position.sizeRemaining = 0.5;
                         position.trailingStop = Math.max(position.trailingStop, position.entryPrice + state.atr_1h * 0.1);
                     }
                 } else { // SHORT
-                    if (low <= position.tp2) { exitPrice = position.tp2; closed = true; reason = 'TP2'; }
-                    else if (high >= position.trailingStop) { exitPrice = position.trailingStop; closed = true; reason = 'Trailing Stop'; }
-                    else if (low <= position.tp1 && !position.partialTaken) {
+                    if (low <= position.tp2) { exitPrice = position.tp2;
+                        closed = true;
+                        reason = 'TP2'; } else if (high >= position.trailingStop) { exitPrice = position.trailingStop;
+                        closed = true;
+                        reason = 'Trailing Stop'; } else if (low <= position.tp1 && !position.partialTaken) {
                         position.partialTaken = true;
                         position.sizeRemaining = 0.5;
                         position.trailingStop = Math.min(position.trailingStop, position.entryPrice - state.atr_1h * 0.1);
                     }
                 }
-                
+
                 if (closed) {
                     const pnlPct = position.type === 'LONG' ? (exitPrice - position.entryPrice) / position.entryPrice * 100 : (position.entryPrice - exitPrice) / position.entryPrice * 100;
                     const pnlUsd = equity * (pnlPct / 100) * position.sizeRemaining;
@@ -288,7 +294,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             if (!position) {
                 const { score, direction, blockReason } = checkEntry(candle, i, filteredCandles);
                 if (direction && !blockReason && score >= 70) {
-                    const atr = state.atr_1h;
+                    const atr = state.atr_1h || (candle.close * 0.02);
                     const entry = candle.close;
                     let stop, tp1, tp2;
                     if (direction === 'LONG') {
@@ -348,19 +354,19 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             position = null;
         }
 
-        // Estatísticas
-        const closedTrades = trades.filter(t => t.exitTime !== null);
+        // Estatísticas (com verificações)
+        const closedTrades = trades.filter(t => t.exitTime !== null && t.pnlPct !== null);
         const totalTrades = closedTrades.length;
         const wins = closedTrades.filter(t => parseFloat(t.pnlPct) > 0).length;
         const losses = totalTrades - wins;
         const winrate = totalTrades > 0 ? (wins / totalTrades * 100) : 0;
         const totalPnlPct = closedTrades.reduce((sum, t) => sum + parseFloat(t.pnlPct), 0);
-        const totalPnlUsd = closedTrades.reduce((sum, t) => sum + parseFloat(t.pnlUsd), 0);
+        const totalPnlUsd = closedTrades.reduce((sum, t) => sum + parseFloat(t.pnlUsd || 0), 0);
         const avgWin = wins > 0 ? closedTrades.filter(t => parseFloat(t.pnlPct) > 0).reduce((s, t) => s + parseFloat(t.pnlPct), 0) / wins : 0;
         const avgLoss = losses > 0 ? closedTrades.filter(t => parseFloat(t.pnlPct) < 0).reduce((s, t) => s + parseFloat(t.pnlPct), 0) / losses : 0;
         const profitFactor = avgLoss !== 0 ? (avgWin / Math.abs(avgLoss)) : 0;
-        const maxDrawdown = ((highWaterMark - equity) / highWaterMark * 100);
-        const annualizedReturn = totalPnlPct !== 0 ? (Math.pow(1 + totalPnlPct / 100, 365 / days) - 1) * 100 : 0;
+        const maxDrawdown = highWaterMark > 0 ? ((highWaterMark - equity) / highWaterMark * 100) : 0;
+        const annualizedReturn = totalPnlPct !== 0 && totalPnlPct !== undefined ? (Math.pow(1 + totalPnlPct / 100, 365 / days) - 1) * 100 : 0;
 
         const summary = {
             totalTrades,
