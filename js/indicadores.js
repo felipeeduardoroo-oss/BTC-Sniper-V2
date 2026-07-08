@@ -1,4 +1,4 @@
-// js/indicadores.js – Motor completo com todas as correções da rodada 3
+// js/indicadores.js – Motor completo com todas as correções da rodada 2
 import { CONFIG } from './config.js';
 
 // ============================================================
@@ -6,7 +6,6 @@ import { CONFIG } from './config.js';
 // ============================================================
 
 export function calcEMA(data, period) {
-    if (!data || data.length === 0) return [];
     const k = 2 / (period + 1);
     let ema = data[0];
     const result = [ema];
@@ -18,7 +17,7 @@ export function calcEMA(data, period) {
 }
 
 export function calculateATR(candles, period = 14) {
-    if (!candles || candles.length < period + 1) return 0;
+    if (candles.length < period + 1) return 0;
     let tr = 0;
     for (let i = 1; i <= period; i++) {
         const high = candles[i].high;
@@ -51,7 +50,7 @@ export function calculateRSI(candles, period = 14) {
 }
 
 // ============================================================
-// 2. DETECÇÃO DE DIVERGÊNCIA RSI
+// 2. DETECÇÃO DE DIVERGÊNCIA RSI (corrigida)
 // ============================================================
 
 export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
@@ -113,7 +112,7 @@ export function detectVolumeAnomaly(candles, lookback = 20, threshold = 2.0) {
     const volumes = candles.slice(-lookback).map(c => c.volume);
     const avg = volumes.reduce((a, b) => a + b, 0) / lookback;
     const current = candles[candles.length - 1].volume;
-    const ratio = avg > 0 ? current / avg : 0;
+    const ratio = current / avg;
     return {
         isAnomaly: ratio >= threshold,
         ratio,
@@ -123,21 +122,16 @@ export function detectVolumeAnomaly(candles, lookback = 20, threshold = 2.0) {
 }
 
 // ============================================================
-// 4. CÁLCULO DE ADX COMPLETO — CORREÇÃO #1
+// 4. CÁLCULO DE ADX COMPLETO
 // ============================================================
 
 export function calculateADX(candles, period = 14) {
-    if (!candles || candles.length < period * 2 + 1) return { adx: 0, plusDI: 0, minusDI: 0 };
-    
+    if (candles.length < period + 1) return { adx: 0, plusDI: 0, minusDI: 0 };
     const high = candles.map(c => c.high);
     const low = candles.map(c => c.low);
     const close = candles.map(c => c.close);
     
-    // True Range e Directional Movement
-    const tr = [];
-    const plusDM = [];
-    const minusDM = [];
-    
+    let tr = [], plusDM = [], minusDM = [];
     for (let i = 1; i < candles.length; i++) {
         const h = high[i], l = low[i], pc = close[i-1];
         tr.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
@@ -147,52 +141,31 @@ export function calculateADX(candles, period = 14) {
         minusDM.push((down > up && down > 0) ? down : 0);
     }
     
-    // Wilder's smoothing para o primeiro período
-    let atr = tr.slice(0, period).reduce((a,b) => a+b, 0);
-    let plus = plusDM.slice(0, period).reduce((a,b) => a+b, 0);
-    let minus = minusDM.slice(0, period).reduce((a,b) => a+b, 0);
+    let atr = tr.slice(0, period).reduce((a,b) => a+b, 0) / period;
+    let plus = plusDM.slice(0, period).reduce((a,b) => a+b, 0) / period;
+    let minus = minusDM.slice(0, period).reduce((a,b) => a+b, 0) / period;
     
-    // Arrays para armazenar os valores suavizados
-    const atrArr = [atr];
-    const plusArr = [plus];
-    const minusArr = [minus];
-    const dxArr = [];
-    
-    // Continua o smoothing para os períodos restantes
     for (let i = period; i < tr.length; i++) {
         atr = (atr * (period - 1) + tr[i]) / period;
         plus = (plus * (period - 1) + plusDM[i]) / period;
         minus = (minus * (period - 1) + minusDM[i]) / period;
-        atrArr.push(atr);
-        plusArr.push(plus);
-        minusArr.push(minus);
-        
-        // Calcula DX para cada ponto
-        const plusDI = atr > 0 ? (plus / atr) * 100 : 0;
-        const minusDI = atr > 0 ? (minus / atr) * 100 : 0;
-        const sum = plusDI + minusDI;
-        const dx = sum > 0 ? (Math.abs(plusDI - minusDI) / sum) * 100 : 0;
-        dxArr.push(dx);
     }
     
-    // ADX é a média móvel do DX
-    let adx = 0;
-    if (dxArr.length >= period) {
-        const startIdx = dxArr.length - period;
+    const plusDI = (plus / atr) * 100;
+    const minusDI = (minus / atr) * 100;
+    const dx = (Math.abs(plusDI - minusDI) / (plusDI + minusDI)) * 100;
+    let adx = dx;
+    if (tr.length >= period * 2) {
         let sum = 0;
-        for (let i = startIdx; i < dxArr.length; i++) {
-            sum += dxArr[i];
+        for (let i = tr.length - period; i < tr.length; i++) {
+            const p = plusDM[i] || 0;
+            const m = minusDM[i] || 0;
+            const d = (Math.abs(p - m) / (p + m)) * 100;
+            sum += d;
         }
         adx = sum / period;
-    } else if (dxArr.length > 0) {
-        adx = dxArr.reduce((a,b) => a+b, 0) / dxArr.length;
     }
-    
-    // DI finais
-    const finalPlusDI = atr > 0 ? (plus / atr) * 100 : 0;
-    const finalMinusDI = atr > 0 ? (minus / atr) * 100 : 0;
-    
-    return { adx, plusDI: finalPlusDI, minusDI: finalMinusDI };
+    return { adx, plusDI, minusDI };
 }
 
 // ============================================================
@@ -223,7 +196,7 @@ export function generateTrailingStopParams(candles, entryPrice, direction, atrMu
 }
 
 // ============================================================
-// 6. SCORE DE CONFIANÇA — CORREÇÃO #5 (macro blackout integrado)
+// 6. SCORE DE CONFIANÇA (com ajuste de pesos)
 // ============================================================
 
 export function calculateConfidenceScore(symbolData) {
@@ -241,20 +214,11 @@ export function calculateConfidenceScore(symbolData) {
     };
     
     if (symbolData.mtfAligned) { score += weights.mtfAlignment; reasons.push('MTF_ALIGNED'); }
-    
-    // CORREÇÃO: extrair valor numérico do ADX
-    const adxValue = typeof symbolData.adx === 'object' ? symbolData.adx.adx : symbolData.adx;
-    if (adxValue > 25) { score += weights.adxTrend; reasons.push('ADX_STRONG'); }
-    
+    if (symbolData.adx > 25) { score += weights.adxTrend; reasons.push('ADX_STRONG'); }
     if (symbolData.volumeAnomaly?.isAnomaly) { score += weights.volumeAnomaly; reasons.push('VOLUME_SPIKE'); }
-    
-    // CORREÇÃO: extrair valor numérico do fundingRate
-    const frValue = typeof symbolData.fundingRate === 'object' ? symbolData.fundingRate.rate : symbolData.fundingRate;
-    if (frValue < -0.0001) { score += weights.fundingRate; reasons.push('FUNDING_NEGATIVE'); }
-    else if (frValue > 0.0001) { score -= weights.fundingRate * 0.5; reasons.push('FUNDING_POSITIVE'); }
-    
+    if (symbolData.fundingRate < -0.0001) { score += weights.fundingRate; reasons.push('FUNDING_NEGATIVE'); }
+    else if (symbolData.fundingRate > 0.0001) { score -= weights.fundingRate * 0.5; reasons.push('FUNDING_POSITIVE'); }
     if (symbolData.openInterestTrend === 'INCREASING') { score += weights.openInterest; reasons.push('OI_RISING'); }
-    
     if (symbolData.divergence) {
         if ((symbolData.direction === 'LONG' && symbolData.divergence.type === 'BULLISH_REGULAR') ||
             (symbolData.direction === 'SHORT' && symbolData.divergence.type === 'BEARISH_REGULAR')) {
@@ -265,15 +229,7 @@ export function calculateConfidenceScore(symbolData) {
             reasons.push('DIVERGENCE_HARD_CONTRADICT');
         }
     }
-    
-    // NOVO: integração dinâmica do macro blackout
-    if (!symbolData.macroBlackout) {
-        score += weights.macroFilter;
-        reasons.push('MACRO_CLEAR');
-    } else {
-        reasons.push(`MACRO_BLACKOUT:${symbolData.macroBlackout.event || 'EVENT'}`);
-    }
-    
+    if (!symbolData.macroBlackout) { score += weights.macroFilter; reasons.push('MACRO_CLEAR'); }
     if (symbolData.smcStructure === 'BOS') { score += weights.smcStructure; reasons.push('SMC_BOS'); }
     
     if (!symbolData.mtfAligned && score > 0.4) {
@@ -295,15 +251,12 @@ export function calculateConfidenceScore(symbolData) {
 }
 
 // ============================================================
-// 7. FILTRO MACRO (dinâmico) — CORREÇÃO #11 (datas dinâmicas)
+// 7. FILTRO MACRO (dinâmico)
 // ============================================================
 
 export async function isHighImpactEventNow() {
     try {
-        const response = await fetch('https://nfs.faireconomy.media/cc/fred.json', { 
-            signal: AbortSignal.timeout(5000) 
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const response = await fetch('https://nfs.faireconomy.media/cc/fred.json', { signal: AbortSignal.timeout(5000) });
         const events = await response.json();
         const now = new Date();
         const today = now.toISOString().split('T')[0];
@@ -311,7 +264,7 @@ export async function isHighImpactEventNow() {
         
         for (const ev of events) {
             if (ev.country === 'US' && ev.date && ev.date.includes(today) && ev.impact === 'high') {
-                const eventHour = parseInt(ev.date.split('T')[1]?.split(':')[0] || '12');
+                const eventHour = parseInt(ev.date.split('T')[1].split(':')[0]);
                 const blackoutStart = (eventHour - 1 + 24) % 24;
                 const blackoutEnd = (eventHour + 1) % 24;
                 if (currentHour >= blackoutStart && currentHour <= blackoutEnd) {
@@ -320,18 +273,23 @@ export async function isHighImpactEventNow() {
             }
         }
     } catch(e) {
-        console.warn('[Macro Filter] FRED calendar indisponível:', e.message);
-        // CORREÇÃO: fallback genérico baseado em dia da semana (não datas hard-coded)
+        const staticEvents = [
+            { date: '2026-07-10', time: '14:00', event: 'FOMC Minutes', impact: 'HIGH' },
+            { date: '2026-07-12', time: '08:30', event: 'CPI Data', impact: 'HIGH' },
+            { date: '2026-07-15', time: '10:00', event: 'Fed Chair Speech', impact: 'MEDIUM' }
+        ];
         const now = new Date();
-        const day = now.getDay();
-        const hour = now.getHours();
-        // Quarta-feira (dia 3) após 14h: possível FOMC
-        if (day === 3 && hour >= 13 && hour <= 16) {
-            return { isBlackout: true, event: 'Possível FOMC (quarta à tarde)', impact: 'MEDIUM' };
-        }
-        // Primeira sexta do mês: possível NFP
-        if (day === 5 && now.getDate() <= 7 && hour >= 8 && hour <= 10) {
-            return { isBlackout: true, event: 'Possível NFP (primeira sexta)', impact: 'HIGH' };
+        const today = now.toISOString().split('T')[0];
+        const currentHour = now.getHours();
+        for (const ev of staticEvents) {
+            if (ev.date === today) {
+                const eventHour = parseInt(ev.time.split(':')[0]);
+                const blackoutStart = (eventHour - 1 + 24) % 24;
+                const blackoutEnd = (eventHour + 1) % 24;
+                if (currentHour >= blackoutStart && currentHour <= blackoutEnd) {
+                    return { isBlackout: true, event: ev.event, impact: ev.impact };
+                }
+            }
         }
     }
     return { isBlackout: false };
@@ -342,7 +300,7 @@ export async function isHighImpactEventNow() {
 // ============================================================
 
 export function calculateVWAP(candles) {
-    if (!candles || !candles.length) return 0;
+    if (!candles.length) return 0;
     let cumulativeTP = 0;
     let cumulativeVol = 0;
     for (const c of candles) {
@@ -354,21 +312,14 @@ export function calculateVWAP(candles) {
 }
 
 // ============================================================
-// 9. DETECÇÃO REAL DE BREAK OF STRUCTURE (BOS) — CORREÇÃO #12
+// 9. DETECÇÃO REAL DE BREAK OF STRUCTURE (BOS)
 // ============================================================
 
 export function findSMCSetup(data, direction) {
-    if (!data || !data.swingHighs || !data.swingLows) return false;
     if (data.swingHighs.length < 2 || data.swingLows.length < 2) return false;
-    
-    // CORREÇÃO: filtra valores inválidos
-    const validHighs = data.swingHighs.filter(h => h && h > 0);
-    const validLows = data.swingLows.filter(l => l && l > 0 && l !== Infinity);
-    if (validHighs.length < 2 || validLows.length < 2) return false;
-    
-    const lastHigh = validHighs[validHighs.length - 1];
-    const lastLow = validLows[validLows.length - 1];
-    const currentPrice = data.price || 0;
+    const lastHigh = data.swingHighs[data.swingHighs.length - 1];
+    const lastLow = data.swingLows[data.swingLows.length - 1];
+    const currentPrice = data.price;
 
     if (direction === 'LONG') {
         return currentPrice > lastHigh;
@@ -379,7 +330,7 @@ export function findSMCSetup(data, direction) {
 }
 
 // ============================================================
-// 10. DETECÇÃO DE HTF (4H) REAL
+// 10. DETECÇÃO DE HTF (4H) REAL – CORREÇÃO #2
 // ============================================================
 
 export function detectHTFStructure(data, candles4H) {
@@ -399,14 +350,12 @@ export function detectHTFStructure(data, candles4H) {
 }
 
 // ============================================================
-// 11. FILTRO DE DERIVATIVOS — CORREÇÃO #2 (trata objeto fundingRate)
+// 11. FILTRO DE DERIVATIVOS REATIVADO – CORREÇÃO #3
 // ============================================================
 
 export function checkDerivativesFilter(fundingRate, oiDelta) {
-    // CORREÇÃO: aceita tanto número quanto objeto {rate, interpretacao}
-    const fr = typeof fundingRate === 'object' ? (fundingRate?.rate || 0) : (fundingRate || 0);
-    const oi = typeof oiDelta === 'object' ? (oiDelta?.delta || oiDelta?.oi || 0) : (oiDelta || 0);
-    
+    const fr = fundingRate || 0;
+    const oi = oiDelta || 0;
     if (fr > 0.0003 && oi > 3) {
         return { allow: false, reason: `Funding alto (${(fr*100).toFixed(3)}%) + OI subindo (${oi.toFixed(1)}%) — superaquecido` };
     }
@@ -417,21 +366,18 @@ export function checkDerivativesFilter(fundingRate, oiDelta) {
 }
 
 // ============================================================
-// 12. KELLY FRACIONADO — CORREÇÃO #3 (divisão por zero)
+// 12. KELLY FRACIONADO (QUARTER-KELLY) – CORREÇÃO #4
 // ============================================================
 
 export function KellyPositionSize(winRate, rr) {
     if (winRate <= 0 || rr <= 0) return 0.01;
-    // CORREÇÃO: previne rr === 1 (divisão por zero)
-    if (Math.abs(rr - 1) < 0.001) return 0.01;
     const kelly = (winRate * (rr - 1) - (1 - winRate)) / (rr - 1);
-    if (isNaN(kelly) || kelly <= 0) return 0.01;
     const fractional = kelly * 0.25; // quarter-Kelly
     return Math.max(0.005, Math.min(0.05, fractional));
 }
 
 // ============================================================
-// 13. EXPOSIÇÃO CORRELACIONADA
+// 13. EXPOSIÇÃO CORRELACIONADA – CORREÇÃO #5
 // ============================================================
 
 export function checkPortfolioExposure(activePositions, direction) {
@@ -443,11 +389,11 @@ export function checkPortfolioExposure(activePositions, direction) {
 }
 
 // ============================================================
-// 14. FUNÇÕES DE COMPATIBILIDADE
+// 14. FUNÇÕES EXISTENTES (mantidas para compatibilidade)
 // ============================================================
 
 export function updateSwingPoints(data) {
-    if (!data || !data.candles1H || data.candles1H.length < 10) return;
+    if (data.candles1H.length < 10) return;
     const closes = data.candles1H.map(c => c.close);
     data.swingHighs = [];
     data.swingLows = [];
@@ -484,7 +430,7 @@ export function adxFilter(candles) {
 
 export function fundingFilter(fundingData, direction) {
     if (!fundingData) return { pass: true, reason: 'Sem dados de funding' };
-    const rate = typeof fundingData === 'object' ? fundingData.rate : fundingData;
+    const rate = fundingData.rate;
     if (direction === 'LONG' && rate > 0.01) {
         return { pass: false, reason: 'Funding muito positivo (longs caros)' };
     }
@@ -508,7 +454,7 @@ export function orderBookFilter(obData, direction) {
 
 export function fearGreedFilter(fgData, direction) {
     if (!fgData) return { pass: true, reason: 'Sem dados F&G', multiplier: 1 };
-    const value = typeof fgData === 'object' ? fgData.value : fgData;
+    const value = fgData.value;
     if (direction === 'LONG' && value < 20) {
         return { pass: true, reason: 'Extreme Fear (oportunidade)', multiplier: 1.5 };
     }
@@ -528,27 +474,16 @@ export function isSafeToTrade() {
     return true;
 }
 
-// ============================================================
-// 15. COMPUTE SCORE — CORREÇÃO #4 (extrai adx.adx)
-// ============================================================
-
 export function computeScore(symbol, assetsData, liqMap) {
     const data = assetsData[symbol];
-    if (!data) return { score: 50, direction: 'NEUTRAL', components: {}, blockReason: 'Sem dados' };
-    
     const base = 50;
     const mtfScore = data.mtfConfluence?.score || 0;
-    
-    // CORREÇÃO: extrai valor numérico do ADX (pode ser objeto ou número)
-    const adxRaw = data.adx;
-    const adxValue = typeof adxRaw === 'object' ? (adxRaw?.adx || 0) : (adxRaw || 0);
-    
+    const adx = data.adx || 0;
     const rsi = data.rsi_1H || 50;
     let score = base + mtfScore * 5;
-    if (adxValue > 25) score += 10;
+    if (adx > 25) score += 10;
     if (rsi > 70) score -= 15;
     if (rsi < 30) score += 15;
-    
     const clamped = Math.max(0, Math.min(100, score));
     return {
         score: clamped,
@@ -556,7 +491,7 @@ export function computeScore(symbol, assetsData, liqMap) {
         components: {
             mtf: mtfScore > 0 ? 'ALINHADO' : 'NEUTRO',
             smc: 'NEUTRO',
-            mom: adxValue > 25 ? 'FORTE' : 'FRACO',
+            mom: adx > 25 ? 'FORTE' : 'FRACO',
             of: 'NEUTRO',
             macro: 'NEUTRO',
             oi: data.oiDelta > 0 ? 'CRESCENDO' : 'DIMINUINDO'
@@ -570,8 +505,7 @@ export function checkHTFAlignment(mtfData) {
 }
 
 export function checkLateralMarket(adx) {
-    const val = typeof adx === 'object' ? adx.adx : adx;
-    return val < 25;
+    return adx < 25;
 }
 
 export function checkOnChainFilter(mvrv, fear) {
@@ -616,3 +550,5 @@ export function calculateSignalScore(indicators) {
     const label = clamped >= 70 ? 'MUITO FORTE' : clamped >= 55 ? 'FORTE' : clamped >= 45 ? 'MODERADO' : clamped >= 30 ? 'MODERADO CONTRA' : 'FORTE CONTRA';
     return { score: clamped, direction, label, reasons };
 }
+
+// ===== STUBS REMOVIDOS: bbWidth, calculateBB (não são mais usados) =====
