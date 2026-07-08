@@ -616,21 +616,3 @@ export function calculateSignalScore(indicators) {
     const label = clamped >= 70 ? 'MUITO FORTE' : clamped >= 55 ? 'FORTE' : clamped >= 45 ? 'MODERADO' : clamped >= 30 ? 'MODERADO CONTRA' : 'FORTE CONTRA';
     return { score: clamped, direction, label, reasons };
 }
-// ============================================================
-// 16. STUBS PARA COMPATIBILIDADE (evitam que o index.html quebre)
-// ============================================================
-
-export function computeChoppiness(candles, period = 14) {
-    // Stub para compatibilidade
-    return 50;
-}
-
-export function calculateBB(candles, period = 20, mult = 2) {
-    // Stub para compatibilidade
-    return { upper: 0, middle: 0, lower: 0, bbWidth: 0 };
-}
-
-export function getSMCZones(data) {
-    // Stub para compatibilidade
-    return { demand: [], supply: [] };
-}
