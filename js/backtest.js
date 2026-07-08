@@ -463,7 +463,9 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     : 'score_neutro');
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
-                if (smcSetup && retestConfirmed) {
+       //         if (smcSetup && retestConfirmed) {
+              // Forçar entrada para teste (remover depois)
+if (true) {  
                     let stop, tp1, tp2;
                     if (primaryDirection === 'LONG') {
                         const structLevel = Math.min(...state.swingLows) - (atr * 0.3);
