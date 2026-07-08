@@ -423,127 +423,124 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             }
 
             // ===== ENTRADA =====
-                        // ===== ENTRADA =====
-            if (!position && !blockReason && primaryDirection) {
-                const atr = state.atr_1H || (state.price * 0.02);
-                
-                // Retest do nível estrutural
-                let retestConfirmed = false;
-                let brokenLevel = null;
+          // ===== ENTRADA (CORRIGIDO – BOS com lookback de 5 candles) =====
+if (!position && !blockReason && primaryDirection) {
+    const atr = state.atr_1H || (state.price * 0.02);
+    
+    // 1. Retest do nível estrutural
+    let retestConfirmed = false;
+    let brokenLevel = null;
 
-                if (primaryDirection === 'LONG') {
-                    const highsBelow = state.swingHighs.filter(h => h < state.price);
-                    if (highsBelow.length > 0) {
-                        brokenLevel = Math.max(...highsBelow);
-                    }
-                } else if (primaryDirection === 'SHORT') {
-                    const lowsAbove = state.swingLows.filter(l => l > state.price);
-                    if (lowsAbove.length > 0) {
-                        brokenLevel = Math.min(...lowsAbove);
-                    }
-                }
+    if (primaryDirection === 'LONG') {
+        const highsBelow = state.swingHighs.filter(h => h < state.price);
+        if (highsBelow.length > 0) {
+            brokenLevel = Math.max(...highsBelow);
+        }
+    } else if (primaryDirection === 'SHORT') {
+        const lowsAbove = state.swingLows.filter(l => l > state.price);
+        if (lowsAbove.length > 0) {
+            brokenLevel = Math.min(...lowsAbove);
+        }
+    }
 
-                if (brokenLevel !== null && brokenLevel > 0) {
-                    const distPct = Math.abs(state.price - brokenLevel) / brokenLevel;
-                    retestConfirmed = distPct < retestDistPct;
-                }
+    if (brokenLevel !== null && brokenLevel > 0) {
+        const distPct = Math.abs(state.price - brokenLevel) / brokenLevel;
+        retestConfirmed = distPct < retestDistPct;
+    }
 
-                // Fallback: EMA20
-                if (!retestConfirmed && emaRetest) {
-                    const ema20 = calcEMA(state.candles1H.map(c => c.close), 20).slice(-1)[0] || state.price;
-                    const emaDist = Math.abs(state.price - ema20) / ema20;
-                    retestConfirmed = emaDist < 0.005;
-                }
+    // Fallback: EMA20
+    if (!retestConfirmed && emaRetest) {
+        const ema20 = calcEMA(state.candles1H.map(c => c.close), 20).slice(-1)[0] || state.price;
+        const emaDist = Math.abs(state.price - ema20) / ema20;
+        retestConfirmed = emaDist < 0.005;
+    }
 
-                // BOS com lookback de 5 candles
-                let smcSetup = false;
-                const lookback = 5;
-                const startIdx = Math.max(0, state.candles1H.length - lookback);
-                const recentCandles = state.candles1H.slice(startIdx);
+    // 2. BOS com lookback de 5 candles (substitui findSMCSetup)
+    let smcSetup = false;
+    const lookback = 5;
+    const startIdx = Math.max(0, state.candles1H.length - lookback);
+    const recentCandles = state.candles1H.slice(startIdx);
 
-                if (primaryDirection === 'LONG') {
-                    const highs = recentCandles.map(c => c.high);
-                    const maxHigh = Math.max(...highs);
-                    const lastSwingHigh = Math.max(...state.swingHighs);
-                    if (maxHigh > lastSwingHigh && state.price < maxHigh && state.price > lastSwingHigh) {
-                        smcSetup = true;
-                    }
-                } else if (primaryDirection === 'SHORT') {
-                    const lows = recentCandles.map(c => c.low);
-                    const minLow = Math.min(...lows);
-                    const lastSwingLow = Math.min(...state.swingLows);
-                    if (minLow < lastSwingLow && state.price > minLow && state.price < lastSwingLow) {
-                        smcSetup = true;
-                    }
-                }
+    if (primaryDirection === 'LONG') {
+        const highs = recentCandles.map(c => c.high);
+        const maxHigh = Math.max(...highs);
+        const lastSwingHigh = Math.max(...state.swingHighs);
+        if (maxHigh > lastSwingHigh && state.price < maxHigh && state.price > lastSwingHigh) {
+            smcSetup = true;
+        }
+    } else if (primaryDirection === 'SHORT') {
+        const lows = recentCandles.map(c => c.low);
+        const minLow = Math.min(...lows);
+        const lastSwingLow = Math.min(...state.swingLows);
+        if (minLow < lastSwingLow && state.price > minLow && state.price < lastSwingLow) {
+            smcSetup = true;
+        }
+    }
 
-                // Contabiliza diagnóstico
-                const reasonKey = blockReason || (primaryDirection ? 
-                    (retestConfirmed ? (smcSetup ? 'passou_filtros' : 'sem_BOS') : 'sem_retest') 
-                    : 'score_neutro');
-                blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
+    // 3. Contabiliza diagnóstico (só se chegou até aqui)
+    totalCandlesProcessed++; // ← INCREMENTO ADICIONADO
+    const reasonKey = blockReason || (primaryDirection ? 
+        (retestConfirmed ? (smcSetup ? 'passou_filtros' : 'sem_BOS') : 'sem_retest') 
+        : 'score_neutro');
+    blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
-                // ===== ABRIR POSIÇÃO (se todas as condições forem atendidas) =====
-                if (smcSetup && retestConfirmed) {
-                    let stop, tp1, tp2;
-                    if (primaryDirection === 'LONG') {
-                        const structLevel = Math.min(...state.swingLows) - (atr * 0.3);
-                        stop = Math.min(structLevel, state.price - atr * 1.5);
-                        tp1 = state.price + (atr * 2);
-                        tp2 = state.price + (atr * 4);
-                    } else {
-                        const structLevel = Math.max(...state.swingHighs) + (atr * 0.3);
-                        stop = Math.max(structLevel, state.price + atr * 1.5);
-                        tp1 = state.price - (atr * 2);
-                        tp2 = state.price - (atr * 4);
-                    }
-                    const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
-                    if (rr1 < rrMin) {
-                        // Se R:R não atingir o mínimo, não entra (mas já contabilizamos como 'passou_filtros'? Vamos ajustar)
-                        // Para não contar como 'passou_filtros' quando não entra por R:R, podemos registrar outro motivo.
-                        // Mas vou manter como 'passou_filtros' e apenas não abrir a posição.
-                        // Se quiser separar, pode adicionar um blockReason específico.
-                        continue;
-                    }
+    // 4. Abrir posição se todas as condições forem atendidas
+    if (smcSetup && retestConfirmed) {
+        let stop, tp1, tp2;
+        if (primaryDirection === 'LONG') {
+            const structLevel = Math.min(...state.swingLows) - (atr * 0.3);
+            stop = Math.min(structLevel, state.price - atr * 1.5);
+            tp1 = state.price + (atr * 2);
+            tp2 = state.price + (atr * 4);
+        } else {
+            const structLevel = Math.max(...state.swingHighs) + (atr * 0.3);
+            stop = Math.max(structLevel, state.price + atr * 1.5);
+            tp1 = state.price - (atr * 2);
+            tp2 = state.price - (atr * 4);
+        }
+        const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
+        if (rr1 < rrMin) {
+            // R:R insuficiente – não abre posição, mas já contabilizamos como 'passou_filtros'
+            continue;
+        }
 
-                    // Kelly sizing
-                    const totalTrades = winCount + lossCount;
-                    const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
-                    const kellyPct = KellyPositionSize(winRate, rr1);
-                    const fgMultiplier = 1;
-                    const riskFraction = Math.min(kellyPct * fgMultiplier, 0.05);
+        // Kelly sizing
+        const totalTrades = winCount + lossCount;
+        const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
+        const kellyPct = KellyPositionSize(winRate, rr1);
+        const riskFraction = Math.min(kellyPct, 0.05); // máximo 5% do equity
 
-                    const stopDistancePct = primaryDirection === 'LONG' ? (state.price - stop) / state.price : (stop - state.price) / state.price;
-                    const positionSizeUSD = (riskFraction * equity) / stopDistancePct;
-                    const sizeMultiplier = Math.min(positionSizeUSD / equity, 1.0);
+        const stopDistancePct = primaryDirection === 'LONG' ? (state.price - stop) / state.price : (stop - state.price) / state.price;
+        const positionSizeUSD = (riskFraction * equity) / stopDistancePct;
+        const sizeMultiplier = Math.min(positionSizeUSD / equity, 1.0);
 
-                    position = {
-                        type: primaryDirection,
-                        entryPrice: state.price,
-                        stop: stop,
-                        tp1: tp1,
-                        tp2: tp2,
-                        trailingStop: stop,
-                        partialTaken: false,
-                        sizeRemaining: sizeMultiplier,
-                        entryTime: candle.time * 1000
-                    };
-                    trades.push({
-                        entryTime: new Date(candle.time * 1000).toISOString(),
-                        exitTime: null,
-                        symbol,
-                        direction: primaryDirection,
-                        entryPrice: state.price,
-                        stopLoss: stop,
-                        takeProfit1: tp1,
-                        exitPrice: null,
-                        pnlPct: null,
-                        pnlUsd: null,
-                        durationHours: null,
-                        reason: 'Aberta'
-                    });
-                }
-            }
+        position = {
+            type: primaryDirection,
+            entryPrice: state.price,
+            stop: stop,
+            tp1: tp1,
+            tp2: tp2,
+            trailingStop: stop,
+            partialTaken: false,
+            sizeRemaining: sizeMultiplier,
+            entryTime: candle.time * 1000
+        };
+        trades.push({
+            entryTime: new Date(candle.time * 1000).toISOString(),
+            exitTime: null,
+            symbol,
+            direction: primaryDirection,
+            entryPrice: state.price,
+            stopLoss: stop,
+            takeProfit1: tp1,
+            exitPrice: null,
+            pnlPct: null,
+            pnlUsd: null,
+            durationHours: null,
+            reason: 'Aberta'
+        });
+    }
+}
         // Fechar posição remanescente
         if (position) {
             const lastCandle = filteredCandles[filteredCandles.length - 1];
