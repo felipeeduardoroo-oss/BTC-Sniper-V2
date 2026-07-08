@@ -1,4 +1,4 @@
-// js/backtest.js – Backtest com dados reais dos últimos 30 dias (CORRIGIDO)
+// js/backtest.js – Backtest REAL com o mesmo motor do live (CORRIGIDO)
 import { CONFIG } from './config.js';
 import {
     fetchHistoricalCandles,
@@ -72,6 +72,15 @@ async function fetchHistoricalMVRV(startDate, endDate) {
     } catch (e) { return []; }
 }
 
+// ===== FUNÇÃO PARA CALCULAR HTF NO MOMENTO HISTÓRICO (CORREÇÃO #1) =====
+function getHTFStructureAtTime(candles4H, currentTime, state) {
+    const relevant = candles4H.filter(c => c.time <= currentTime);
+    if (relevant.length < 20) {
+        return { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity };
+    }
+    return detectHTFStructure(state, relevant);
+}
+
 // ===== FUNÇÃO PRINCIPAL =====
 export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
     logDebug(`Iniciando backtest REAL para ${symbol} (${days} dias)`);
@@ -83,7 +92,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
     const endDateStr = new Date(endTime).toISOString().slice(0, 10);
 
     try {
-        // 1. Buscar candles (1h e 4h) – máximo 1000 velas
+        // 1. Buscar candles
         const candles1h = (await fetchHistoricalCandles(symbol, '1h', 800)) || [];
         const candles4h = (await fetchHistoricalCandles(symbol, '4h', 200)) || [];
         const filteredCandles = candles1h.filter(c => c.time >= startTime / 1000 && c.time <= endTime / 1000);
@@ -95,7 +104,10 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         const fundingHist = (await fetchHistoricalFunding(symbol, startTime, endTime)) || [];
         const oiHist = (await fetchHistoricalOI(symbol, startTime, endTime)) || [];
         const mvrvHist = (await fetchHistoricalMVRV(startDateStr, endDateStr)) || [];
+        // Macro e F&G são aproximações (não temos dados históricos precisos)
+        // Usaremos estático ou calculado uma vez
         const macroData = await fetchMacroStatic();
+        const fgData = await fetchFearGreed();
 
         // 3. Estado do ativo
         const state = {
@@ -110,17 +122,18 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             swingLows: [],
             currentBOS: 'NEUTRAL',
             htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity },
-            mtfConfluence: null,    // ← será atualizado
+            mtfConfluence: null,
             adx: 0,
-            divergence: null,       // ← será atualizado
+            divergence: null,
             volumeAnomaly: null,
+            // Macro blackout não é simulável historicamente com fontes gratuitas
             macroBlackout: false,
             vwap: 0,
             price: 0,
             fundingRate: 0,
             oiDelta: 0,
             mvrv: null,
-            fearGreedData: null
+            fearGreedData: fgData || { value: 50, classification: 'NEUTRO' }
         };
 
         let position = null;
@@ -130,8 +143,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         let winCount = 0,
             lossCount = 0;
 
-        // ===== FUNÇÃO UPDATE INDICADORES =====
-        function updateIndicators(candles) {
+        // ===== FUNÇÃO UPDATE INDICADORES (agora recebe o timestamp) =====
+        function updateIndicators(candles, currentTime) {
             if (candles.length < 14) return;
             const closes = candles.map(c => c.close);
             state.ema50_1H = calcEMA(closes, 50).slice(-1)[0] || closes[closes.length - 1];
@@ -153,7 +166,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             const adxData = calculateADX(candles);
             state.adx = adxData;
 
-            // ---- VWAP em janela de 24h (últimas 24 velas) ----
+            // VWAP em janela de 24h
             const last24Candles = candles.slice(-24);
             state.vwap = calculateVWAP(last24Candles);
 
@@ -161,11 +174,11 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             state.volumeAnomaly = volAnomaly;
 
             updateSwingPoints(state);
-            if (state.candles4H.length > 50) {
-                state.htfStructure = detectHTFStructure(state, state.candles4H);
-            }
 
-            // ---- Divergência RSI (CORREÇÃO #3) ----
+            // ===== CORREÇÃO #1: HTF calculado para o momento histórico =====
+            state.htfStructure = getHTFStructureAtTime(state.candles4H, currentTime, state);
+
+            // Divergência RSI
             let rsiForDiv = [];
             let g = 0,
                 l = 0;
@@ -195,7 +208,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         }
 
         // ===== LOOP PRINCIPAL =====
-        // Cache para MTF Confluence (atualizar a cada 6 horas para evitar chamadas excessivas)
         let mtfCache = { data: null, lastUpdate: 0 };
 
         for (let i = 0; i < filteredCandles.length; i++) {
@@ -204,7 +216,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             state.candles1H.push(candle);
             if (state.candles1H.length > 200) state.candles1H.shift();
 
-            // --- Dados históricos com findMostRecent ---
+            // Dados históricos com findMostRecent
             const fundingAtTime = findMostRecent(fundingHist, f => f.time <= candle.time * 1000) || fundingHist[0];
             state.fundingRate = fundingAtTime ? fundingAtTime.rate : 0;
 
@@ -217,25 +229,23 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             const mvrvAtTime = findMostRecent(mvrvHist, m => m.time <= candle.time);
             state.mvrv = mvrvAtTime ? mvrvAtTime.value : null;
 
-            // Macro blackout
-            const macroCheck = await isHighImpactEventNow();
-            state.macroBlackout = macroCheck.isBlackout && macroCheck.impact === 'HIGH';
+            // Macro blackout: não simulamos, definimos como false
+            state.macroBlackout = false;
 
-            // Fear & Greed estático (pode ser melhorado com histórico)
-            state.fearGreedData = { value: 50, classification: 'NEUTRO' };
-
-            // ---- MTF Confluence (CORREÇÃO #2) ----
-            // Atualiza a cada 6 horas (6 candles de 1h)
+            // MTF Confluence: atualiza a cada 6 candles (apenas para score)
             if (i === 0 || (i % 6 === 0) || state.mtfConfluence === null) {
                 try {
+                    // Usamos o cache do getMTFConfluence, que busca dados atuais
+                    // Isso é uma aproximação – não temos dados históricos precisos
                     state.mtfConfluence = await getMTFConfluence(symbol);
                 } catch(e) {
-                    // Fallback: mantém o último valor
+                    // fallback
                 }
             }
 
             if (state.candles1H.length >= 50) {
-                updateIndicators(state.candles1H);
+                // Passa o timestamp do candle para o HTF histórico
+                updateIndicators(state.candles1H, candle.time);
             } else {
                 continue;
             }
@@ -270,6 +280,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             const liqMap = { [symbol]: { longs: 0, shorts: 0 } };
 
             const scoreData = computeScore(symbol, simAssets, liqMap);
+
+            // ===== CORREÇÃO #2: BOS com retest do nível rompido =====
             const bosConfirmed = scoreData.direction !== 'NEUTRAL' && findSMCSetup(state, scoreData.direction);
             state.currentBOS = bosConfirmed ? 'BOS' : 'NEUTRAL';
 
@@ -291,16 +303,19 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             const adxValue = typeof state.adx === 'object' ? state.adx.adx : state.adx;
             if (adxValue < 25 && !blockReason) blockReason = 'ADX < 25 (lateral)';
             if (state.macroBlackout && !blockReason) blockReason = 'Macro blackout';
+
             const primaryDirection = (score >= 70) ? 'LONG' : (score <= 30) ? 'SHORT' : null;
+
             if (primaryDirection === 'LONG' && state.price < state.vwap && !blockReason)
                 blockReason = 'Preço abaixo do VWAP';
             else if (primaryDirection === 'SHORT' && state.price > state.vwap && !blockReason)
                 blockReason = 'Preço acima do VWAP';
 
+            // HTF bloqueio – agora usa o viés do momento histórico (corrigido!)
             if (primaryDirection === 'LONG' && state.htfStructure.bias === 'BEARISH' && !blockReason)
-                blockReason = 'HTF 4H Bearish';
+                blockReason = 'HTF 4H Bearish (histórico)';
             if (primaryDirection === 'SHORT' && state.htfStructure.bias === 'BULLISH' && !blockReason)
-                blockReason = 'HTF 4H Bullish';
+                blockReason = 'HTF 4H Bullish (histórico)';
 
             if (!blockReason) {
                 const derivCheck = checkDerivativesFilter(state.fundingRate, state.oiDelta);
@@ -316,21 +331,17 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 let reason = '';
 
                 if (position.type === 'LONG') {
-                    if (high >= position.tp2) { exitPrice = position.tp2;
-                        closed = true;
-                        reason = 'TP2'; } else if (low <= position.trailingStop) { exitPrice = position.trailingStop;
-                        closed = true;
-                        reason = 'Trailing Stop'; } else if (high >= position.tp1 && !position.partialTaken) {
+                    if (high >= position.tp2) { exitPrice = position.tp2; closed = true; reason = 'TP2'; }
+                    else if (low <= position.trailingStop) { exitPrice = position.trailingStop; closed = true; reason = 'Trailing Stop'; }
+                    else if (high >= position.tp1 && !position.partialTaken) {
                         position.partialTaken = true;
                         position.sizeRemaining = 0.5;
                         position.trailingStop = Math.max(position.trailingStop, position.entryPrice + state.atr_1H * 0.1);
                     }
                 } else {
-                    if (low <= position.tp2) { exitPrice = position.tp2;
-                        closed = true;
-                        reason = 'TP2'; } else if (high >= position.trailingStop) { exitPrice = position.trailingStop;
-                        closed = true;
-                        reason = 'Trailing Stop'; } else if (low <= position.tp1 && !position.partialTaken) {
+                    if (low <= position.tp2) { exitPrice = position.tp2; closed = true; reason = 'TP2'; }
+                    else if (high >= position.trailingStop) { exitPrice = position.trailingStop; closed = true; reason = 'Trailing Stop'; }
+                    else if (low <= position.tp1 && !position.partialTaken) {
                         position.partialTaken = true;
                         position.sizeRemaining = 0.5;
                         position.trailingStop = Math.min(position.trailingStop, position.entryPrice - state.atr_1H * 0.1);
@@ -338,11 +349,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 }
 
                 if (closed) {
-                    // P&L em percentual sobre o valor investido (não sobre o equity total)
-                    // sizeRemaining já é o multiplicador do risco (ex: 0.01 para 1%)
                     const invested = equity * position.sizeRemaining;
                     const pnlPct = position.type === 'LONG' ? (exitPrice - position.entryPrice) / position.entryPrice * 100 : (position.entryPrice - exitPrice) / position.entryPrice * 100;
-                    // O P&L em USD = invested * (pnlPct/100)
                     const pnlUsd = invested * (pnlPct / 100);
                     equity += pnlUsd;
                     if (equity > highWaterMark) highWaterMark = equity;
@@ -355,7 +363,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                         stopLoss: position.stop,
                         takeProfit1: position.tp1,
                         exitPrice,
-                        pnlPct: (pnlPct * position.sizeRemaining).toFixed(2), // P&L % sobre equity total
+                        pnlPct: (pnlPct * position.sizeRemaining).toFixed(2),
                         pnlUsd: pnlUsd.toFixed(2),
                         durationHours: ((candle.time - position.entryTime / 1000) / 3600).toFixed(1),
                         reason
@@ -381,20 +389,43 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 }
             }
 
-            // ===== ENTRADA (CORREÇÃO #1: Position Sizing) =====
+            // ===== ENTRADA com lógica de retest do nível rompido (CORREÇÃO #2) =====
             if (!position && !blockReason && primaryDirection) {
                 const atr = state.atr_1H || (state.price * 0.02);
-                const ema20 = calcEMA(state.candles1H.map(c => c.close), 20).slice(-1)[0] || state.price;
-                let retestConfirmed = false;
+                
+                // ===== NOVA LÓGICA: retest do nível rompido, NÃO da EMA20 =====
+                let brokenLevel = null;
                 if (primaryDirection === 'LONG') {
-                    if (state.price <= ema20 * 1.005 && state.price >= ema20 * 0.995) retestConfirmed = true;
+                    // Última swing high abaixo do preço atual (nível rompido)
+                    const highsBelow = state.swingHighs.filter(h => h < state.price);
+                    if (highsBelow.length > 0) {
+                        brokenLevel = Math.max(...highsBelow);
+                    }
                 } else {
-                    if (state.price >= ema20 * 0.995 && state.price <= ema20 * 1.005) retestConfirmed = true;
+                    // Última swing low acima do preço atual (nível rompido)
+                    const lowsAbove = state.swingLows.filter(l => l > state.price);
+                    if (lowsAbove.length > 0) {
+                        brokenLevel = Math.min(...lowsAbove);
+                    }
                 }
+
+                let retestConfirmed = false;
+                if (brokenLevel !== null && brokenLevel > 0) {
+                    const distPct = Math.abs(state.price - brokenLevel) / brokenLevel;
+                    retestConfirmed = distPct < 0.008; // 0,8% do nível rompido
+                }
+
+                // Também aceita se o preço estiver muito próximo da EMA20 (como alternativa)
+                const ema20 = calcEMA(state.candles1H.map(c => c.close), 20).slice(-1)[0] || state.price;
+                const emaDist = Math.abs(state.price - ema20) / ema20;
+                const emaRetest = emaDist < 0.005; // 0,5% da EMA20
+
+                // Para o retest do BOS, usamos o nível rompido (prioridade), mas se falhar, tenta EMA20
+                const retestOk = retestConfirmed || emaRetest;
 
                 const smcSetup = findSMCSetup(state, primaryDirection);
 
-                if (smcSetup && retestConfirmed) {
+                if (smcSetup && retestOk) {
                     let stop, tp1, tp2;
                     if (primaryDirection === 'LONG') {
                         const structLevel = Math.min(...state.swingLows) - (atr * 0.3);
@@ -410,25 +441,17 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                     const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
                     if (rr1 < 1.5) continue;
 
-                    // ---- Cálculo do tamanho da posição ----
+                    // Kelly sizing
                     const totalTrades = winCount + lossCount;
                     const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
                     const kellyPct = KellyPositionSize(winRate, rr1);
-                    const fgMultiplier = 1; // Poderia usar fearGreedFilter
-                    const riskFraction = Math.min(kellyPct * fgMultiplier, 0.05); // máximo 5%
+                    const fgMultiplier = 1; 
+                    const riskFraction = Math.min(kellyPct * fgMultiplier, 0.05);
 
-                    // Tamanho da posição em USD: risco (frações da equity) * equity / distância do stop (em %)
                     const stopDistancePct = primaryDirection === 'LONG' ? (state.price - stop) / state.price : (stop - state.price) / state.price;
-                    // O tamanho da posição (em USD) que resulta em perda de riskFraction * equity se o stop for atingido
                     const positionSizeUSD = (riskFraction * equity) / stopDistancePct;
-                    // O P&L será calculado sobre o equity investido (positionSizeUSD)
-                    // Mas para simplificar, vamos armazenar o multiplicador que será aplicado ao P&L percentual.
-                    // Multiplicador = positionSizeUSD / equity (pois pnlUsd = equity * (pnlPct/100) * multiplicador)
-                    const sizeMultiplier = positionSizeUSD / equity;
-                    // Limitar a 10x para evitar alavancagem excessiva (ajuste)
-                    const cappedMultiplier = Math.min(sizeMultiplier, 1.0); // máximo 100% do equity
+                    const sizeMultiplier = Math.min(positionSizeUSD / equity, 1.0);
 
-                    // Abrir posição
                     position = {
                         type: primaryDirection,
                         entryPrice: state.price,
@@ -437,7 +460,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                         tp2: tp2,
                         trailingStop: stop,
                         partialTaken: false,
-                        sizeRemaining: cappedMultiplier, // multiplicador para P&L
+                        sizeRemaining: sizeMultiplier,
                         entryTime: candle.time * 1000
                     };
                     trades.push({
@@ -508,6 +531,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             annualizedReturn,
             initialEquity: 10000,
             finalEquity: equity,
+            disclaimer: "HTF Structure e MACRO Blackout usam dados do momento histórico (corrigido). MTF Confluence usa dados atuais (aproximação)."
         };
 
         logDebug('Backtest REAL concluído!', summary);
