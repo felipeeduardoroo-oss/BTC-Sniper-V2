@@ -149,29 +149,6 @@
         }
         .backtest-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(124, 58, 237, 0.6); }
         .backtest-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-        
-        /* Estilo para as legendas dos scores */
-        .score-footer {
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px solid var(--border);
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            display: flex;
-            align-items: flex-start;
-            gap: 6px;
-            line-height: 1.4;
-        }
-        .score-footer .info-icon {
-            flex-shrink: 0;
-            margin-top: 1px;
-        }
-        .score-footer strong {
-            color: var(--text-light);
-        }
-        .score-footer .highlight {
-            color: var(--accent-yellow);
-        }
     </style>
 </head>
 <body>
@@ -209,11 +186,6 @@
                 </div>
                 <div id="block-reason" style="margin-top:10px;font-weight:700;color:var(--accent-red);display:none;"></div>
             </div>
-            <!-- LEGENDA DO SCORE INSTITUCIONAL -->
-            <div class="score-footer">
-                <span class="info-icon">ℹ️</span>
-                <span><strong>Score Institucional:</strong> Macro Contexto / Big Picture — 1H + 4H + 1D. Dá a nota geral do mercado (0 a 100). Leva em conta VWAP, estrutura HTF (4H), Macro (DXY/Juros), Blackouts e Risco. <strong>Não gera entrada</strong>, apenas define se o ambiente está seguro para operar.</span>
-            </div>
         </section>
 
         <!-- Força do Sinal (Legado) -->
@@ -234,11 +206,6 @@
                     <span style="color:#8b949e;font-size:11px;">ADX</span><span id="adxDisplay" style="font-size:12px;font-weight:700;">--</span>
                 </div>
                 <div id="mainSignal" style="margin-top:12px;padding:10px;background:#0d1117;border-radius:8px;border:1px solid #30363d;text-align:center;"><div style="color:#8b949e;font-size:14px;">Aguardando dados...</div></div>
-            </div>
-            <!-- LEGENDA DA FORÇA DO SINAL -->
-            <div class="score-footer">
-                <span class="info-icon">ℹ️</span>
-                <span><strong>Força do Sinal:</strong> Motor Técnico Genérico (Legado) — 15m, 1H, 4H (Confluência). Mostra a força da tendência baseada em EMA 20/50, RSI, ADX e Taxa de Funding. Diz se o momento atual é "Forte/Alta" ou "Fraco/Baixa". <span class="highlight">Atualmente está órfão no código (não é atualizado), mas a lógica existe.</span></span>
             </div>
         </section>
 
@@ -268,12 +235,200 @@
                     <div style="color:#8b949e;font-size:14px;">Aguardando dados...</div>
                 </div>
             </div>
-            <!-- LEGENDA DO COMITÊ -->
-            <div class="score-footer">
-                <span class="info-icon">ℹ️</span>
-                <span><strong>Comitê:</strong> Motor de Entrada (Ação Imediata) — Exclusivamente 15m. É o gatilho de entrada. Analisa o livro de ordens (Order Book), divergências, liquidações e gera níveis exatos de Stop Loss, Take Profit e Trailing Stop. Se ele der sinal, é para <strong>entrar na operação agora</strong>.</span>
+        </section>
+
+        <!-- ===== HISTÓRICO DE SINAIS (BACKTEST) ===== -->
+        <section>
+            <h2 class="section-title">📊 HISTÓRICO DE SINAIS (BACKTEST)</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data/Hora</th>
+                            <th>Ativo</th>
+                            <th>Direção</th>
+                            <th>Entrada</th>
+                            <th>Stop Loss</th>
+                            <th>Take Profit</th>
+                            <th>Status</th>
+                            <th>Resultado (P&L %)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="signal-history-body">
+                        <tr><td colspan="8" style="text-align:center;color:var(--text-muted);">Aguardando sinais...</td></tr>
+                    </tbody>
+                </table>
             </div>
         </section>
+
+        <!-- ===== BACKTEST 30 DIAS (NOVO) ===== -->
+        <section>
+            <h2 class="section-title">📈 BACKTEST — ÚLTIMOS 30 DIAS (DADOS REAIS)</h2>
+            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
+                <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
+                    <button id="run-backtest-btn" class="backtest-btn">▶️ Executar Backtest</button>
+                    <span id="backtest-status" style="color:var(--text-muted);">Aguardando execução</span>
+                </div>
+                <div id="backtest-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:16px;"></div>
+            </div>
+            <div class="table-wrapper" id="backtest-table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Entrada (UTC)</th>
+                            <th>Ativo</th>
+                            <th>Direção</th>
+                            <th>Preço Entrada</th>
+                            <th>Stop Loss</th>
+                            <th>Take Profit 1</th>
+                            <th>Preço Saída</th>
+                            <th>Motivo</th>
+                            <th>P&L (%)</th>
+                            <th>Duração (h)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="backtest-tbody">
+                        <tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum backtest executado ainda.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="backtest-legend" style="font-size:0.75rem;color:var(--text-muted);margin-top:8px;background:var(--bg-card);padding:12px;border-radius:8px;border:1px solid var(--border);">
+                <strong>Legenda:</strong> Dados utilizados: Preços (Binance 1h/4h), Funding Rate (Binance), Open Interest (Binance), MVRV (CoinMetrics), Macro (Alpha Vantage). <strong>Order Book desconsiderado</strong> (indisponível historicamente). Carteira inicial: $10.000 USD.
+            </div>
+        </section>
+
+        <section>
+            <h2 class="section-title">📉 EVOLUÇÃO DO SCORE (Live)</h2>
+            <div class="chart-wrapper"><canvas id="chart_score_history"></canvas></div>
+        </section>
+
+        <section>
+            <h2 class="section-title">📌 RESUMO EXECUTIVO</h2>
+            <div class="summary-grid">
+                <div class="summary-card"><h3>Bitcoin</h3><div class="value negative" id="btc-price">$60.000</div><div class="subtext" id="btc-change">↓ 5,94%</div><span class="source-with-time" id="btc-source">Binance/Bybit • WS</span></div>
+                <div class="summary-card"><h3>Ethereum</h3><div class="value negative" id="eth-price">$1.573,53</div><div class="subtext" id="eth-change">↓ 0,15%</div><span class="source-with-time" id="eth-source">Binance/Bybit • WS</span></div>
+                <div class="summary-card"><h3>Solana</h3><div class="value negative" id="sol-price">$170,00</div><div class="subtext" id="sol-change">↓ 2,30%</div><span class="source-with-time" id="sol-source">Binance/Bybit • WS</span></div>
+                <div class="summary-card"><h3>Sentiment Macro</h3><div class="value negative" id="macro-summary">DXY 101,37 | US10Y 4,28%</div><div class="subtext" id="macro-status">Referência</div><span class="source-with-time" id="macro-source">Alpha Vantage</span></div>
+                <div class="summary-card"><h3>Tether Premium</h3><div class="value negative" id="tether-premium">Carregando...</div><div class="subtext">USDT/BRL vs USD/BRL</div><span class="source-with-time" id="tether-source">CoinGecko & Exchangerate</span></div>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="section-title">🕯️ GRÁFICOS DE CANDLESTICK (Live WS)</h2>
+            <div class="candles-grid">
+                <div class="candle-card"><h3>Bitcoin (BTC/USDT)</h3><div class="candle-stats" id="btc-stats"><span class="stat" id="btc-stat-1d"><span class="label">1D</span> --</span><span class="stat" id="btc-stat-1s"><span class="label">1S</span> --</span><span class="stat" id="btc-stat-1m"><span class="label">1M</span> --</span></div><div id="candle-btc" class="candle-container"></div><span class="source-with-time" id="candle-btc-source">Binance/Bybit • WS</span></div>
+                <div class="candle-card"><h3>Ethereum (ETH/USDT)</h3><div class="candle-stats" id="eth-stats"><span class="stat" id="eth-stat-1d"><span class="label">1D</span> --</span><span class="stat" id="eth-stat-1s"><span class="label">1S</span> --</span><span class="stat" id="eth-stat-1m"><span class="label">1M</span> --</span></div><div id="candle-eth" class="candle-container"></div><span class="source-with-time" id="candle-eth-source">Binance/Bybit • WS</span></div>
+                <div class="candle-card"><h3>Solana (SOL/USDT)</h3><div class="candle-stats" id="sol-stats"><span class="stat" id="sol-stat-1d"><span class="label">1D</span> --</span><span class="stat" id="sol-stat-1s"><span class="label">1S</span> --</span><span class="stat" id="sol-stat-1m"><span class="label">1M</span> --</span></div><div id="candle-sol" class="candle-container"></div><span class="source-with-time" id="candle-sol-source">Binance/Bybit • WS</span></div>
+            </div>
+        </section>
+
+        <!-- ===== TABELA ON-CHAIN & DERIVADOS ===== -->
+        <section>
+            <h2 class="section-title">⛓️ ANÁLISE ON-CHAIN &amp; DERIVADOS</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>Métrica</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
+                    <tbody>
+                        <tr><td><strong>MVRV (BTC)</strong></td><td id="mvrv">Carregando...</td><td id="mvrv-interp">--</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>Active Addresses</strong></td><td id="active-addresses">Carregando...</td><td>ℹ️ Moderado</td><td><span class="data-source">CoinMetrics</span></td></tr>
+                        <tr><td><strong>BTC Hashrate</strong></td><td id="btc-hashrate">Carregando...</td><td>✅ Elevado</td><td><span class="data-source">mempool.space / CoinMetrics</span></td></tr>
+                        <tr><td><strong>Funding Rate (atual)</strong></td><td id="funding-rate">Carregando...</td><td id="funding-rate-interp">ℹ️ Neutro</td><td><span class="data-source">Binance</span></td></tr>
+                        <tr><td><strong>Open Interest</strong></td><td id="open-interest">Carregando...</td><td id="open-interest-interp">ℹ️ Volume em aberto</td><td><span class="data-source">Binance</span></td></tr>
+                        <tr><td><strong>OI Delta (24h)</strong></td><td id="oi-delta">Carregando...</td><td id="oi-delta-interp">--</td><td><span class="data-source">Binance</span></td></tr>
+                        <tr><td><strong>Basis (perp vs spot)</strong></td><td id="basis">Carregando...</td><td>ℹ️ Prêmio/Deságio</td><td><span class="data-source">Binance / Bybit</span></td></tr>
+                        <tr><td><strong>BTC Put/Call Ratio</strong></td><td id="put-call-ratio">Carregando...</td><td id="put-call-interp">--</td><td><span class="data-source">Deribit</span></td></tr>
+                        <tr><td><strong>ETH Gas Price</strong></td><td id="eth-gas">Carregando...</td><td>✅ Baixo</td><td><span class="data-source">Etherscan / RPC</span></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart_etf_flows"></canvas></div>
+        </section>
+
+        <section>
+            <h2 class="section-title">✅ PAINEL DE CONFIRMAÇÃO DE FUNDO</h2>
+            <div class="confirmation-panel">
+                <div class="confirmation-grid">
+                    <div class="confirmation-pillar"><div class="pillar-status" id="p-mvrv">❌</div><div class="pillar-name">MVRV Extremo</div></div>
+                    <div class="confirmation-pillar"><div class="pillar-status" id="p-fear">✅</div><div class="pillar-name">Fear Extremo</div></div>
+                    <div class="confirmation-pillar"><div class="pillar-status" id="p-sth">✅</div><div class="pillar-name">STH Capitulação</div></div>
+                    <div class="confirmation-pillar"><div class="pillar-status" id="p-smart">❌</div><div class="pillar-name">Smart Money Acum.</div></div>
+                    <div class="confirmation-pillar"><div class="pillar-status" id="p-macro">❌</div><div class="pillar-name">Macro Suporta</div></div>
+                </div>
+                <div class="confirmation-description"><strong>Análise:</strong> 3/5 pilares confirmam fundo. Mercado em capitulação tática.</div>
+            </div>
+        </section>
+
+        <!-- ===== INDICADORES MACROECONÔMICOS (ATUALIZADO) ===== -->
+        <section>
+            <h2 class="section-title">🌍 INDICADORES MACROECONÔMICOS</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>Indicador</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
+                    <tbody>
+                        <tr><td><strong>DXY</strong></td><td id="dxy-value">Carregando...</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source">Alpha Vantage</span></td></tr>
+                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">Carregando...</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source">Alpha Vantage</span></td></tr>
+                        <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">Carregando...</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source">Alpha Vantage</span></td></tr>
+                        <tr><td><strong>VIX</strong></td><td id="vix-value">Carregando...</td><td id="vix-interp">ℹ️ Estresse de mercado</td><td><span class="data-source">Alpha Vantage</span></td></tr>
+                        <tr><td><strong>NASDAQ % (24h)</strong></td><td id="nasdaq-value">Carregando...</td><td>🔴 Tech</td><td><span class="data-source">Alpha Vantage</span></td></tr>
+                        <tr><td><strong>S&amp;P 500 % (24h)</strong></td><td id="sp500-value">Carregando...</td><td>ℹ️ Broad market</td><td><span class="data-source">Alpha Vantage</span></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart_macro_rates"></canvas></div>
+        </section>
+
+        <!-- ===== ATIVIDADE DE BALEIAS ===== -->
+        <section>
+            <h2 class="section-title">🐋 ATIVIDADE DE BALEIAS (Live Trade Tracker)</h2>
+            <div class="whale-activity" id="whale-container">
+                <div class="whale-card" id="whale-btc"><div class="whale-header"><span class="whale-entity">🪙 Bitcoin</span><span class="whale-action accumulating">ANALISANDO</span></div><div class="whale-value">$0.00M</div><div class="whale-transaction">Aguardando grandes trades (>$100k)...</div><span class="source-with-time" id="whale-btc-source">Binance/Bybit Live WS</span></div>
+                <div class="whale-card" id="whale-eth"><div class="whale-header"><span class="whale-entity">💎 Ethereum</span><span class="whale-action accumulating">ANALISANDO</span></div><div class="whale-value">$0.00M</div><div class="whale-transaction">Aguardando grandes trades (>$100k)...</div><span class="source-with-time" id="whale-eth-source">Binance/Bybit Live WS</span></div>
+                <div class="whale-card" id="whale-sol"><div class="whale-header"><span class="whale-entity">🚀 Solana</span><span class="whale-action accumulating">ANALISANDO</span></div><div class="whale-value">$0.00M</div><div class="whale-transaction">Aguardando grandes trades (>$100k)...</div><span class="source-with-time" id="whale-sol-source">Binance/Bybit Live WS</span></div>
+            </div>
+            <div class="chart-wrapper"><canvas id="chart_whale_flow"></canvas></div>
+        </section>
+
+        <!-- ===== STABLECOINS & DEFI ===== -->
+        <section>
+            <h2 class="section-title">💰 STABLECOINS &amp; DEFI</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>Métrica</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
+                    <tbody>
+                        <tr><td><strong>Total Stablecoin Supply</strong></td><td id="stablecoin-supply">Carregando...</td><td>✅ Liquidez</td><td><span class="data-source">DefiLlama</span></td></tr>
+                        <tr><td><strong>DeFi TVL</strong></td><td id="defi-tvl">Carregando...</td><td id="defi-tvl-interp">⚠️ Comprimido</td><td><span class="data-source">DefiLlama</span></td></tr>
+                        <tr><td><strong>DeFi TVL Change (24h)</strong></td><td id="defi-tvl-change">Carregando...</td><td>ℹ️ Estável</td><td><span class="data-source">DefiLlama</span></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ===== SCORES DE ANÁLISE ===== -->
+        <section>
+            <h2 class="section-title">📈 SCORES DE ANÁLISE</h2>
+            <div class="score-container">
+                <div class="score-box"><div class="score-label">Risk Score</div><div class="score-value" id="risk-score">--</div><div class="score-bar"><div class="score-fill" id="risk-fill" style="width:50%;background:linear-gradient(90deg,var(--accent-red),var(--accent-yellow));"></div></div></div>
+                <div class="score-box"><div class="score-label">Confidence Score</div><div class="score-value" id="confidence-score">--</div><div class="score-bar"><div class="score-fill" id="confidence-fill" style="width:50%;background:var(--accent-green);"></div></div></div>
+                <div class="score-box"><div class="score-label">Entry Score</div><div class="score-value" id="entry-score">--</div><div class="score-bar"><div class="score-fill" id="entry-fill" style="width:50%;background:var(--accent-yellow);"></div></div></div>
+                <div class="score-box"><div class="score-label">Exit Score</div><div class="score-value" id="exit-score">--</div><div class="score-bar"><div class="score-fill" id="exit-fill" style="width:50%;background:var(--accent-red);"></div></div></div>
+            </div>
+            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:24px;margin-bottom:30px;">
+                <h3 style="color:var(--text-light);margin-bottom:16px;">Conviction</h3>
+                <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+                    <span class="conviction-badge conviction-bearish">🔴 BEARISH CONVICTION</span>
+                    <span class="on-chain-cycle">📉 Ciclo On-Chain: MARKDOWN</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== CENÁRIOS & MATRIZ DE APORTE ===== -->
+        <section>
+            <h2 class="section-title">🎯 CENÁRIOS &amp; MATRIZ DE APORTE</h2>
+            <div class="chart-wrapper"><canvas id="chart_scenarios"></canvas></div>
+            <div class="chart-wrapper"><canvas id="chart_allocation"></canvas></div>
+        </section>
+
+        <footer>
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>📋 Metodologia V2 + Comitê</h4>
