@@ -1,60 +1,38 @@
-// banco_de_dados.js
-import { CONFIG } from './config.js';
+// config.js
+export const CONFIG = {
+  // Telegram (recomendado mover para proxy serverless em produção)
+  TELEGRAM_TOKEN: '8670184440:AAFBfhFFTMnUWsgIFyRh0huBYbL-Q_vhT5k',
+  TELEGRAM_CHAT_ID: '1137196768',
+  
+  ASSETS: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+  SIGNAL_COOLDOWN_MS: 300000,
+  PRICE_THRESHOLD: 0.01,
+  
+  // Cache
+  CACHE_TTL_MS: 600000,
+  STALE_CACHE_TTL_MS: 3600000,
+  
+  // Retry
+  MAX_RETRIES: 3,
+  RETRY_DELAY_MS: 1000,
+  
+  // Proxies
+  PROXY_URL: 'https://corsproxy.io/?url=',
+  PROXY_FALLBACK: 'https://api.allorigins.win/raw?url=',
+  
+  // APIs opcionais (deixe vazio para usar apenas fontes gratuitas)
+  FRED_API_KEY: '',
+  TWELVEDATA_API_KEY: '35edd232d8b8474fb1aa9388308956e2',
+  ALPHAVANTAGE_API_KEY: '', // Obter em https://www.alphavantage.co/support/#api-key (gratuito)
+  ETHERSCAN_API_KEY: '',    // Obter em https://etherscan.io/myapikey (gratuito)
+};
 
-// ===== Armazenamento genérico =====
-export function setData(key, data) {
-    try {
-        localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
-    } catch(e) { /* ignore */ }
-}
-
-export function getData(key, maxAge = CONFIG.CACHE_TTL_MS) {
-    try {
-        const raw = localStorage.getItem(key);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (Date.now() - parsed.timestamp < maxAge) return parsed.data;
-        return null;
-    } catch(e) { return null; }
-}
-
-export function removeData(key) {
-    localStorage.removeItem(key);
-}
-
-// ===== Dados específicos =====
-export function getCachedMarketData() {
-    return getData('marketData');
-}
-
-export function setCachedMarketData(data) {
-    setData('marketData', data);
-}
-
-// ===== Histórico de sinais =====
-export function getAlertLog() {
-    // FIX 3: maxAge=Infinity para não perder o histórico de sinais antigos
-    return getData('alertLog', Infinity) || [];
-}
-
-export function setAlertLog(log) {
-    setData('alertLog', log.slice(-50));
-}
-
-export function getTradeStats() {
-    return getData('tradeStats', Infinity) || { wins: 0, losses: 0, totalPNL: 0 };
-}
-
-export function setTradeStats(stats) {
-    setData('tradeStats', stats);
-}
-
-// ===== Timestamp atual =====
-export function getCurrentTimestamp() {
-    const now = new Date();
-    return now.toLocaleString('pt-BR', {
-        year: 'numeric', month: 'short', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-        timeZone: 'America/Sao_Paulo'
-    });
-}
+export const COLORS = {
+  red: '#ff4d6d',
+  green: '#00e896',
+  yellow: '#ffd60a',
+  blue: '#00b4d8',
+  purple: '#7c3aed',
+  textLight: '#e6e8eb',
+  textMuted: '#6b7280',
+};
