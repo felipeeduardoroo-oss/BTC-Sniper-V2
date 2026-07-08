@@ -11,7 +11,24 @@ const PROXY_LIST = [
     'https://api.codetabs.com/v1/proxy?quest=',
     'https://thingproxy.freeboard.io/fetch/'
 ];
-
+async function fetchFRED(id) {
+    const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=2025-01-01`;
+    try {
+        const csv = await fetchViaProxy(url, {}, 2);
+        if (typeof csv === 'string') {
+            const lines = csv.trim().split('\n');
+            if (lines.length < 2) return null;
+            const lastLine = lines[lines.length - 1];
+            const parts = lastLine.split(',');
+            if (parts.length < 2) return null;
+            const val = parseFloat(parts[1]);
+            return isNaN(val) ? null : val;
+        }
+        return null;
+    } catch(e) {
+        return null;
+    }
+}
 async function fetchViaProxy(url, options = {}, retries = 2) {
     // Tenta diretamente primeiro
     try {
