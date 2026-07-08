@@ -347,7 +347,12 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 const derivCheck = checkDerivativesFilter(state.fundingRate, state.oiDelta);
                 if (!derivCheck.allow) blockReason = derivCheck.reason;
             }
-
+// ===== LOG DE DIAGNÓSTICO (a cada 10 candles) =====
+if (i % 10 === 0) {
+    console.log(`[Candle ${i}] score=${score}, primaryDirection=${primaryDirection}, blockReason=${blockReason}`);
+    console.log(`  adx=${adxValue}, vwap=${state.vwap}, price=${state.price}, htf=${state.htfStructure.bias}`);
+    console.log(`  swingHighs=${state.swingHighs.length}, swingLows=${state.swingLows.length}`);
+}
             // ===== DIAGNÓSTICO =====
             totalCandlesProcessed++;
             // Precisamos de retestConfirmed e smcSetup para categorizar, mas eles são definidos depois
