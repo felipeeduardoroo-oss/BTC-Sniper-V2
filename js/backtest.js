@@ -1,11 +1,11 @@
-// js/backtest.js – Backtest com o MESMO motor do live
+// js/backtest.js – Backtest com dados reais dos últimos 30 dias (CORRIGIDO)
 import { CONFIG } from './config.js';
 import {
     fetchHistoricalCandles,
     fetchWithRetry,
     fetchMacroStatic,
-    fetchFearGreed,
-    fetchFundingRate
+    getMTFConfluence,
+    fetchFearGreed
 } from './dados_externos.js';
 import {
     calculateADX,
@@ -21,7 +21,8 @@ import {
     detectVolumeAnomaly,
     calculateVWAP,
     isHighImpactEventNow,
-    detectRSIDivergence
+    detectRSIDivergence,
+    checkPortfolioExposure
 } from './indicadores.js';
 
 // ===== HELPERS =====
@@ -36,7 +37,7 @@ function findMostRecent(arr, cond) {
     return null;
 }
 
-// ===== BUSCA DE DADOS HISTÓRICOS (corrigida) =====
+// ===== BUSCA DE DADOS HISTÓRICOS =====
 async function fetchHistoricalFunding(symbol, startTime, endTime) {
     const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&startTime=${startTime}&endTime=${endTime}&limit=500`;
     try {
@@ -82,7 +83,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
     const endDateStr = new Date(endTime).toISOString().slice(0, 10);
 
     try {
-        // 1. Buscar candles (1h e 4h)
+        // 1. Buscar candles (1h e 4h) – máximo 1000 velas
         const candles1h = (await fetchHistoricalCandles(symbol, '1h', 800)) || [];
         const candles4h = (await fetchHistoricalCandles(symbol, '4h', 200)) || [];
         const filteredCandles = candles1h.filter(c => c.time >= startTime / 1000 && c.time <= endTime / 1000);
@@ -90,13 +91,13 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             return { trades: [], summary: { error: 'Nenhum candle encontrado.' } };
         }
 
-        // 2. Dados complementares
+        // 2. Dados complementares (históricos)
         const fundingHist = (await fetchHistoricalFunding(symbol, startTime, endTime)) || [];
         const oiHist = (await fetchHistoricalOI(symbol, startTime, endTime)) || [];
         const mvrvHist = (await fetchHistoricalMVRV(startDateStr, endDateStr)) || [];
-        const macroData = await fetchMacroStatic(); // estático para o período, ok
+        const macroData = await fetchMacroStatic();
 
-        // 3. Estado do ativo (espelhando assetsData)
+        // 3. Estado do ativo
         const state = {
             candles1H: [],
             candles4H: candles4h || [],
@@ -109,9 +110,9 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             swingLows: [],
             currentBOS: 'NEUTRAL',
             htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity },
-            mtfConfluence: null,
+            mtfConfluence: null,    // ← será atualizado
             adx: 0,
-            divergence: null,
+            divergence: null,       // ← será atualizado
             volumeAnomaly: null,
             macroBlackout: false,
             vwap: 0,
@@ -119,8 +120,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             fundingRate: 0,
             oiDelta: 0,
             mvrv: null,
-            fearGreedData: null,
-            liqMap: { longs: 0, shorts: 0 }
+            fearGreedData: null
         };
 
         let position = null;
@@ -129,9 +129,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         let highWaterMark = equity;
         let winCount = 0,
             lossCount = 0;
-        const stats = { wins: 0, losses: 0 };
 
-        // 4. Função que atualiza os indicadores (igual ao live)
+        // ===== FUNÇÃO UPDATE INDICADORES =====
         function updateIndicators(candles) {
             if (candles.length < 14) return;
             const closes = candles.map(c => c.close);
@@ -152,9 +151,12 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             state.rsi_1H = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
 
             const adxData = calculateADX(candles);
-            state.adx = adxData.adx || 0;
+            state.adx = adxData;
 
-            state.vwap = calculateVWAP(candles);
+            // ---- VWAP em janela de 24h (últimas 24 velas) ----
+            const last24Candles = candles.slice(-24);
+            state.vwap = calculateVWAP(last24Candles);
+
             const volAnomaly = detectVolumeAnomaly(candles, 20, 2.0);
             state.volumeAnomaly = volAnomaly;
 
@@ -163,24 +165,46 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 state.htfStructure = detectHTFStructure(state, state.candles4H);
             }
 
-            // Divergência RSI
-            let rsiValues = [];
-            for (let i = 14; i < closes.length; i++) {
-                // cálculo simplificado para divergência, pode ser o mesmo do live
+            // ---- Divergência RSI (CORREÇÃO #3) ----
+            let rsiForDiv = [];
+            let g = 0,
+                l = 0;
+            for (let i = 1; i < closes.length; i++) {
+                const d = closes[i] - closes[i - 1];
+                if (i <= 14) {
+                    if (d >= 0) g += d;
+                    else l -= d;
+                    if (i === 14) {
+                        let ag = g / 14,
+                            al = l / 14;
+                        rsiForDiv.push(al === 0 ? 100 : 100 - (100 / (1 + ag / al)));
+                    }
+                } else {
+                    const gain = d > 0 ? d : 0;
+                    const loss = d < 0 ? -d : 0;
+                    const prevR = rsiForDiv[rsiForDiv.length - 1];
+                    const ag = (prevR * 13 + gain) / 14;
+                    const al = (prevR * 13 + loss) / 14;
+                    rsiForDiv.push(al === 0 ? 100 : 100 - (100 / (1 + ag / al)));
+                }
             }
-            // Para simplificar, usamos a função existente:
-            // const divergence = detectRSIDivergence(candles, rsiValues);
-            // state.divergence = divergence;
+            if (rsiForDiv.length > 20) {
+                const div = detectRSIDivergence(candles, rsiForDiv);
+                state.divergence = div;
+            }
         }
 
-        // 5. Loop principal
+        // ===== LOOP PRINCIPAL =====
+        // Cache para MTF Confluence (atualizar a cada 6 horas para evitar chamadas excessivas)
+        let mtfCache = { data: null, lastUpdate: 0 };
+
         for (let i = 0; i < filteredCandles.length; i++) {
             const candle = filteredCandles[i];
             state.price = candle.close;
             state.candles1H.push(candle);
             if (state.candles1H.length > 200) state.candles1H.shift();
 
-            // Atualizar dados históricos com findMostRecent (corrigido)
+            // --- Dados históricos com findMostRecent ---
             const fundingAtTime = findMostRecent(fundingHist, f => f.time <= candle.time * 1000) || fundingHist[0];
             state.fundingRate = fundingAtTime ? fundingAtTime.rate : 0;
 
@@ -193,15 +217,22 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             const mvrvAtTime = findMostRecent(mvrvHist, m => m.time <= candle.time);
             state.mvrv = mvrvAtTime ? mvrvAtTime.value : null;
 
-            // Macro blackout (usando o mesmo do live)
+            // Macro blackout
             const macroCheck = await isHighImpactEventNow();
             state.macroBlackout = macroCheck.isBlackout && macroCheck.impact === 'HIGH';
 
-            // Fear & Greed (simulado com estático, ou poderíamos buscar histórico via API)
-            // Para o backtest, usamos o valor do dia (pode ser melhorado)
-            // Aqui pegamos um valor estático ou buscamos da API se quiser
-            // Vamos usar um valor médio: 50
+            // Fear & Greed estático (pode ser melhorado com histórico)
             state.fearGreedData = { value: 50, classification: 'NEUTRO' };
+
+            // ---- MTF Confluence (CORREÇÃO #2) ----
+            // Atualiza a cada 6 horas (6 candles de 1h)
+            if (i === 0 || (i % 6 === 0) || state.mtfConfluence === null) {
+                try {
+                    state.mtfConfluence = await getMTFConfluence(symbol);
+                } catch(e) {
+                    // Fallback: mantém o último valor
+                }
+            }
 
             if (state.candles1H.length >= 50) {
                 updateIndicators(state.candles1H);
@@ -210,7 +241,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             }
 
             // ===== USAR O MESMO MOTOR DO LIVE =====
-            // Precisamos de um assetsData simulado para computeScore
             const simAssets = {
                 [symbol]: {
                     price: state.price,
@@ -240,7 +270,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             const liqMap = { [symbol]: { longs: 0, shorts: 0 } };
 
             const scoreData = computeScore(symbol, simAssets, liqMap);
-            // Atualiza BOS real
             const bosConfirmed = scoreData.direction !== 'NEUTRAL' && findSMCSetup(state, scoreData.direction);
             state.currentBOS = bosConfirmed ? 'BOS' : 'NEUTRAL';
 
@@ -259,8 +288,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
             const score = confidence.score;
             let blockReason = scoreData.blockReason;
 
-            // Filtros (idênticos ao live)
-            if (state.adx < 25 && !blockReason) blockReason = 'ADX < 25 (lateral)';
+            const adxValue = typeof state.adx === 'object' ? state.adx.adx : state.adx;
+            if (adxValue < 25 && !blockReason) blockReason = 'ADX < 25 (lateral)';
             if (state.macroBlackout && !blockReason) blockReason = 'Macro blackout';
             const primaryDirection = (score >= 70) ? 'LONG' : (score <= 30) ? 'SHORT' : null;
             if (primaryDirection === 'LONG' && state.price < state.vwap && !blockReason)
@@ -309,8 +338,12 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 }
 
                 if (closed) {
+                    // P&L em percentual sobre o valor investido (não sobre o equity total)
+                    // sizeRemaining já é o multiplicador do risco (ex: 0.01 para 1%)
+                    const invested = equity * position.sizeRemaining;
                     const pnlPct = position.type === 'LONG' ? (exitPrice - position.entryPrice) / position.entryPrice * 100 : (position.entryPrice - exitPrice) / position.entryPrice * 100;
-                    const pnlUsd = equity * (pnlPct / 100) * position.sizeRemaining;
+                    // O P&L em USD = invested * (pnlPct/100)
+                    const pnlUsd = invested * (pnlPct / 100);
                     equity += pnlUsd;
                     if (equity > highWaterMark) highWaterMark = equity;
                     trades.push({
@@ -322,32 +355,35 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                         stopLoss: position.stop,
                         takeProfit1: position.tp1,
                         exitPrice,
-                        pnlPct: (pnlPct * position.sizeRemaining).toFixed(2),
+                        pnlPct: (pnlPct * position.sizeRemaining).toFixed(2), // P&L % sobre equity total
                         pnlUsd: pnlUsd.toFixed(2),
                         durationHours: ((candle.time - position.entryTime / 1000) / 3600).toFixed(1),
                         reason
                     });
-                    if (pnlPct > 0) winCount++;
+                    if (pnlUsd > 0) winCount++;
                     else lossCount++;
                     position = null;
                 } else {
                     // Atualizar trailing
                     if (position.type === 'LONG') {
-                        const newLow = Math.min(...state.swingLows);
-                        const newStop = newLow - state.atr_1H * 0.2;
-                        if (newStop > position.trailingStop) position.trailingStop = newStop;
+                        if (state.swingLows.length > 0) {
+                            const newLow = Math.min(...state.swingLows);
+                            const newStop = newLow - state.atr_1H * 0.2;
+                            if (newStop > position.trailingStop) position.trailingStop = newStop;
+                        }
                     } else {
-                        const newHigh = Math.max(...state.swingHighs);
-                        const newStop = newHigh + state.atr_1H * 0.2;
-                        if (newStop < position.trailingStop) position.trailingStop = newStop;
+                        if (state.swingHighs.length > 0) {
+                            const newHigh = Math.max(...state.swingHighs);
+                            const newStop = newHigh + state.atr_1H * 0.2;
+                            if (newStop < position.trailingStop) position.trailingStop = newStop;
+                        }
                     }
                 }
             }
 
-            // ===== ENTRADA (usando as mesmas condições do live) =====
+            // ===== ENTRADA (CORREÇÃO #1: Position Sizing) =====
             if (!position && !blockReason && primaryDirection) {
                 const atr = state.atr_1H || (state.price * 0.02);
-                // Verificar reteste de EMA20
                 const ema20 = calcEMA(state.candles1H.map(c => c.close), 20).slice(-1)[0] || state.price;
                 let retestConfirmed = false;
                 if (primaryDirection === 'LONG') {
@@ -374,15 +410,25 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                     const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
                     if (rr1 < 1.5) continue;
 
-                    // Kelly (usa winrate do próprio backtest)
+                    // ---- Cálculo do tamanho da posição ----
                     const totalTrades = winCount + lossCount;
                     const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
                     const kellyPct = KellyPositionSize(winRate, rr1);
-                    // Aplicar multiplicador do Fear & Greed (aqui usamos estático, mas pode ser dinâmico)
-                    const fgMultiplier = 1; // no live usa fearGreedFilter
-                    const riskPct = kellyPct * fgMultiplier;
+                    const fgMultiplier = 1; // Poderia usar fearGreedFilter
+                    const riskFraction = Math.min(kellyPct * fgMultiplier, 0.05); // máximo 5%
 
-                    // Abrir posição (usando o mesmo sizing fracionado)
+                    // Tamanho da posição em USD: risco (frações da equity) * equity / distância do stop (em %)
+                    const stopDistancePct = primaryDirection === 'LONG' ? (state.price - stop) / state.price : (stop - state.price) / state.price;
+                    // O tamanho da posição (em USD) que resulta em perda de riskFraction * equity se o stop for atingido
+                    const positionSizeUSD = (riskFraction * equity) / stopDistancePct;
+                    // O P&L será calculado sobre o equity investido (positionSizeUSD)
+                    // Mas para simplificar, vamos armazenar o multiplicador que será aplicado ao P&L percentual.
+                    // Multiplicador = positionSizeUSD / equity (pois pnlUsd = equity * (pnlPct/100) * multiplicador)
+                    const sizeMultiplier = positionSizeUSD / equity;
+                    // Limitar a 10x para evitar alavancagem excessiva (ajuste)
+                    const cappedMultiplier = Math.min(sizeMultiplier, 1.0); // máximo 100% do equity
+
+                    // Abrir posição
                     position = {
                         type: primaryDirection,
                         entryPrice: state.price,
@@ -391,20 +437,9 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                         tp2: tp2,
                         trailingStop: stop,
                         partialTaken: false,
-                        sizeRemaining: 1,
-                        entryTime: candle.time * 1000,
-                        riskPct: riskPct
+                        sizeRemaining: cappedMultiplier, // multiplicador para P&L
+                        entryTime: candle.time * 1000
                     };
-                    // Para simular o sizing fracionado, ajustamos o impacto no P&L
-                    // Vamos aplicar o riskPct no fechamento
-                    // Por simplicidade, ajustamos a variação percentual pelo riskPct
-                    // (no fechamento já multiplicamos pelo riskPct via position.sizeRemaining)
-                    // Mas como temos riskPct, podemos usar 1 e depois aplicar no P&L final
-                    // Melhor: armazenar o riskPct e aplicar no P&L
-                    // Vamos modificar a lógica de fechamento para usar o riskPct
-                    // Para não complicar, mantemos sizeRemaining=1 e depois ajustamos o P&L no fechamento multiplicando por riskPct
-                    // Mas como já temos pnlPct * sizeRemaining, podemos fazer sizeRemaining = riskPct
-                    position.sizeRemaining = riskPct; // agora o impacto é proporcional ao risco
                     trades.push({
                         entryTime: new Date(candle.time * 1000).toISOString(),
                         exitTime: null,
@@ -427,8 +462,9 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         if (position) {
             const lastCandle = filteredCandles[filteredCandles.length - 1];
             const exitPrice = lastCandle.close;
+            const invested = equity * position.sizeRemaining;
             const pnlPct = position.type === 'LONG' ? (exitPrice - position.entryPrice) / position.entryPrice * 100 : (position.entryPrice - exitPrice) / position.entryPrice * 100;
-            const pnlUsd = equity * (pnlPct / 100) * position.sizeRemaining;
+            const pnlUsd = invested * (pnlPct / 100);
             equity += pnlUsd;
             const lastTrade = trades[trades.length - 1];
             if (lastTrade && lastTrade.exitTime === null) {
@@ -439,7 +475,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
                 lastTrade.durationHours = ((lastCandle.time - position.entryTime / 1000) / 3600).toFixed(1);
                 lastTrade.reason = 'Fechamento forçado';
             }
-            if (pnlPct * position.sizeRemaining > 0) winCount++;
+            if (pnlUsd > 0) winCount++;
             else lossCount++;
             position = null;
         }
@@ -456,7 +492,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30) {
         const avgLoss = losses > 0 ? closedTrades.filter(t => parseFloat(t.pnlPct) < 0).reduce((s, t) => s + parseFloat(t.pnlPct), 0) / losses : 0;
         const profitFactor = avgLoss !== 0 ? (avgWin / Math.abs(avgLoss)) : 0;
         const maxDrawdown = highWaterMark > 0 ? ((highWaterMark - equity) / highWaterMark * 100) : 0;
-        const annualizedReturn = totalPnlPct !== 0 ? (Math.pow(1 + totalPnlPct / 100, 365 / days) - 1) * 100 : 0;
+        const annualizedReturn = totalPnlPct !== 0 && !isNaN(totalPnlPct) ? (Math.pow(1 + totalPnlPct / 100, 365 / days) - 1) * 100 : 0;
 
         const summary = {
             totalTrades,
