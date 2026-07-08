@@ -945,65 +945,129 @@
         }
 
         // ===== UI DO PAINEL "FORÇA DO SINAL" (LEGADO) =====
-        function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData) {
-            const bar = document.getElementById('scoreBar');
-            const val = document.getElementById('scoreValue');
-            const label = document.getElementById('scoreLabel');
+// ===== UI DO PAINEL "FORÇA DO SINAL" (LEGADO) – CORRIGIDO =====
+function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData) {
+    // Garantir que scoreData existe
+    if (!scoreData) {
+        console.warn('[Força do Sinal] scoreData indefinido');
+        return;
+    }
 
-            if (bar) bar.style.width = scoreData.score + '%';
-            if (val) val.textContent = scoreData.score;
+    const bar = document.getElementById('scoreBar');
+    const val = document.getElementById('scoreValue');
+    const label = document.getElementById('scoreLabel');
 
-            const colors = {
-                'MUITO FORTE': { bg: 'rgba(0,230,118,0.2)', color: '#00e676', border: '#00e676' },
-                'FORTE': { bg: 'rgba(0,200,83,0.15)', color: '#00c853', border: '#00c853' },
-                'MODERADO': { bg: 'rgba(255,193,7,0.15)', color: '#ffc107', border: '#ffc107' },
-                'NEUTRO': { bg: 'rgba(139,148,158,0.15)', color: '#8b949e', border: '#8b949e' },
-                'MODERADO CONTRA': { bg: 'rgba(255,152,0,0.15)', color: '#ff9800', border: '#ff9800' },
-                'FORTE CONTRA': { bg: 'rgba(255,82,82,0.15)', color: '#ff5252', border: '#ff5252' },
-                'MUITO FORTE CONTRA': { bg: 'rgba(255,23,68,0.2)', color: '#ff1744', border: '#ff1744' }
-            };
+    // Atualizar barra e valor
+    const score = scoreData.score ?? 50;
+    if (bar) bar.style.width = score + '%';
+    if (val) val.textContent = score;
 
-            const c = colors[scoreData.label] || colors['NEUTRO'];
-            if (label) {
-                label.style.background = c.bg;
-                label.style.color = c.color;
-                label.style.border = `1px solid ${c.border}`;
-                label.textContent = scoreData.label;
-            }
+    // Determinar label com base no score (fallback)
+    const labelText = scoreData.label 
+        || (score >= 70 ? 'MUITO FORTE' 
+            : score >= 55 ? 'FORTE' 
+            : score >= 45 ? 'MODERADO' 
+            : score >= 30 ? 'MODERADO CONTRA' 
+            : 'FORTE CONTRA');
 
-            const mtfContainer = document.getElementById('mtfBadges');
-            if (mtfContainer && mtfData && mtfData.directions) {
-                mtfContainer.innerHTML = mtfData.directions.map(d => {
-                    const cls = d.dir === 'BULL' ? 'mtf-bull' : d.dir === 'BEAR' ? 'mtf-bear' : 'mtf-neutral';
-                    return `<span class="mtf-badge ${cls}">${d.tf} ${d.dir}</span>`;
-                }).join('');
-            }
+    const colors = {
+        'MUITO FORTE': { bg: 'rgba(0,230,118,0.2)', color: '#00e676', border: '#00e676' },
+        'FORTE': { bg: 'rgba(0,200,83,0.15)', color: '#00c853', border: '#00c853' },
+        'MODERADO': { bg: 'rgba(255,193,7,0.15)', color: '#ffc107', border: '#ffc107' },
+        'NEUTRO': { bg: 'rgba(139,148,158,0.15)', color: '#8b949e', border: '#8b949e' },
+        'MODERADO CONTRA': { bg: 'rgba(255,152,0,0.15)', color: '#ff9800', border: '#ff9800' },
+        'FORTE CONTRA': { bg: 'rgba(255,82,82,0.15)', color: '#ff5252', border: '#ff5252' },
+        'MUITO FORTE CONTRA': { bg: 'rgba(255,23,68,0.2)', color: '#ff1744', border: '#ff1744' }
+    };
 
-            const reasonsContainer = document.getElementById('scoreReasons');
-            if (reasonsContainer) {
-                reasonsContainer.innerHTML = scoreData.reasons.map(r => {
-                    const cls = r.includes('Contra') || r.includes('Baixo') || r.includes('Sem') || r.includes('Sobrecompra') || r.includes('Perigoso') ? 'negative' : 'positive';
-                    return `<span class="reason-tag ${cls}">${r}</span>`;
-                }).join('');
-            }
+    const c = colors[labelText] || colors['NEUTRO'];
+    if (label) {
+        label.style.background = c.bg;
+        label.style.color = c.color;
+        label.style.border = `1px solid ${c.border}`;
+        label.textContent = labelText;
+    }
 
-            const fundEl = document.getElementById('fundingDisplay');
-            if (fundEl && fundingData && fundingData.rate !== undefined) {
-                const fColor = fundingData.rate > 0.01 ? '#ff5252' : fundingData.rate < -0.01 ? '#00e676' : '#ffc107';
-                fundEl.style.color = fColor;
-                fundEl.textContent = `${(fundingData.rate * 100).toFixed(4)}% — ${fundingData.interpretacao || 'EQUILIBRADO'}`;
-            }
-
-            const adxEl = document.getElementById('adxDisplay');
-            if (adxEl && adxData) {
-                const aColor = adxData.adx < 20 ? '#ff5252' : adxData.adx > 50 ? '#ff9800' : '#00e676';
-                adxEl.style.color = aColor;
-                adxEl.textContent = `${adxData.adx.toFixed(1)} ${adxData.adx < 20 ? '(Sem tendência)' : adxData.trend || '(Tendência)'}`;
-            }
-
-            const obContainer = document.getElementById('orderbookMini');
-            if (obContainer) obContainer.innerHTML = renderMiniOrderBook(obData);
+    // ===== MTF Badges =====
+    const mtfContainer = document.getElementById('mtfBadges');
+    if (mtfContainer) {
+        if (mtfData && Array.isArray(mtfData.directions) && mtfData.directions.length) {
+            mtfContainer.innerHTML = mtfData.directions.map(d => {
+                const cls = d.dir === 'BULL' ? 'mtf-bull' : d.dir === 'BEAR' ? 'mtf-bear' : 'mtf-neutral';
+                return `<span class="mtf-badge ${cls}">${d.tf} ${d.dir}</span>`;
+            }).join('');
+        } else {
+            mtfContainer.innerHTML = ''; // ou '<span style="color:#8b949e;">N/A</span>'
         }
+    }
+
+    // ===== Reasons =====
+    const reasonsContainer = document.getElementById('scoreReasons');
+    if (reasonsContainer) {
+        if (scoreData && Array.isArray(scoreData.reasons) && scoreData.reasons.length) {
+            reasonsContainer.innerHTML = scoreData.reasons.map(r => {
+                const cls = r.includes('Contra') || r.includes('Baixo') || r.includes('Sem') || r.includes('Sobrecompra') || r.includes('Perigoso') ? 'negative' : 'positive';
+                return `<span class="reason-tag ${cls}">${r}</span>`;
+            }).join('');
+        } else {
+            // Se não houver reasons, podemos exibir a direção ou uma mensagem neutra
+            const dir = scoreData.direction || 'NEUTRO';
+            reasonsContainer.innerHTML = `<span class="reason-tag neutral">${dir}</span>`;
+        }
+    }
+
+    // ===== Funding Rate =====
+    const fundEl = document.getElementById('fundingDisplay');
+    if (fundEl) {
+        if (fundingData && fundingData.rate !== undefined && fundingData.rate !== null) {
+            const fColor = fundingData.rate > 0.01 ? '#ff5252' : fundingData.rate < -0.01 ? '#00e676' : '#ffc107';
+            fundEl.style.color = fColor;
+            fundEl.textContent = `${(fundingData.rate * 100).toFixed(4)}% — ${fundingData.interpretacao || 'EQUILIBRADO'}`;
+        } else {
+            fundEl.textContent = '--';
+        }
+    }
+
+    // ===== ADX =====
+    const adxEl = document.getElementById('adxDisplay');
+    if (adxEl) {
+        if (adxData && adxData.adx !== undefined) {
+            const aColor = adxData.adx < 20 ? '#ff5252' : adxData.adx > 50 ? '#ff9800' : '#00e676';
+            adxEl.style.color = aColor;
+            adxEl.textContent = `${adxData.adx.toFixed(1)} ${adxData.adx < 20 ? '(Sem tendência)' : adxData.trend || '(Tendência)'}`;
+        } else {
+            adxEl.textContent = '--';
+        }
+    }
+
+    // ===== Order Book =====
+    const obContainer = document.getElementById('orderbookMini');
+    if (obContainer) {
+        if (obData && Array.isArray(obData.bids) && Array.isArray(obData.asks)) {
+            obContainer.innerHTML = renderMiniOrderBook(obData);
+        } else {
+            obContainer.innerHTML = '<span style="color:#8b949e;">Order Book indisponível</span>';
+        }
+    }
+
+    // ===== Main Signal (texto central) =====
+    const mainSignalEl = document.getElementById('mainSignal');
+    if (mainSignalEl) {
+        const dir = scoreData.direction || 'NEUTRO';
+        const scoreValue = scoreData.score ?? 50;
+        if (dir === 'LONG' || dir === 'SHORT') {
+            const color = dir === 'LONG' ? '#00e676' : '#ff1744';
+            mainSignalEl.innerHTML = `
+                <div style="color:${color};font-size:20px;font-weight:900;">${dir}</div>
+                <div style="color:#8b949e;font-size:11px;">Score: ${scoreValue}/100 — ${labelText}</div>
+            `;
+        } else {
+            mainSignalEl.innerHTML = `
+                <div style="color:#8b949e;font-size:14px;">Sem direção definida (Score: ${scoreValue}/100)</div>
+            `;
+        }
+    }
+}
 
         // ===== UPDATE WHALE UI =====
         function updateWhaleUI() {
