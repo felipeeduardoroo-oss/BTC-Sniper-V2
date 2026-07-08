@@ -242,18 +242,27 @@ export function calculateConfidenceScore(symbolData) {
     
     if (symbolData.mtfAligned) { score += weights.mtfAlignment; reasons.push('MTF_ALIGNED'); }
     
-    // CORREÇÃO: extrair valor numérico do ADX
     const adxValue = typeof symbolData.adx === 'object' ? symbolData.adx.adx : symbolData.adx;
     if (adxValue > 25) { score += weights.adxTrend; reasons.push('ADX_STRONG'); }
     
     if (symbolData.volumeAnomaly?.isAnomaly) { score += weights.volumeAnomaly; reasons.push('VOLUME_SPIKE'); }
     
-    // CORREÇÃO: extrair valor numérico do fundingRate
+    // CORREÇÃO: Lógica de Funding Rate direcional
     const frValue = typeof symbolData.fundingRate === 'object' ? symbolData.fundingRate.rate : symbolData.fundingRate;
-    if (frValue < -0.0001) { score += weights.fundingRate; reasons.push('FUNDING_NEGATIVE'); }
-    else if (frValue > 0.0001) { score -= weights.fundingRate * 0.5; reasons.push('FUNDING_POSITIVE'); }
+    if (symbolData.direction === 'LONG') {
+        if (frValue < -0.0001) { score += weights.fundingRate; reasons.push('FUNDING_NEGATIVE'); }
+        else if (frValue > 0.0001) { score -= weights.fundingRate * 0.5; reasons.push('FUNDING_POSITIVE'); }
+    } else if (symbolData.direction === 'SHORT') {
+        if (frValue > 0.0001) { score += weights.fundingRate; reasons.push('FUNDING_POSITIVE'); }
+        else if (frValue < -0.0001) { score -= weights.fundingRate * 0.5; reasons.push('FUNDING_NEGATIVE'); }
+    }
     
-    if (symbolData.openInterestTrend === 'INCREASING') { score += weights.openInterest; reasons.push('OI_RISING'); }
+    // CORREÇÃO: Lógica de Open Interest direcional
+    if (symbolData.direction === 'LONG' && symbolData.openInterestTrend === 'INCREASING') { 
+        score += weights.openInterest; reasons.push('OI_RISING'); 
+    } else if (symbolData.direction === 'SHORT' && symbolData.openInterestTrend === 'DECREASING') { 
+        score += weights.openInterest; reasons.push('OI_FALLING'); 
+    }
     
     if (symbolData.divergence) {
         if ((symbolData.direction === 'LONG' && symbolData.divergence.type === 'BULLISH_REGULAR') ||
@@ -266,7 +275,6 @@ export function calculateConfidenceScore(symbolData) {
         }
     }
     
-    // NOVO: integração dinâmica do macro blackout
     if (!symbolData.macroBlackout) {
         score += weights.macroFilter;
         reasons.push('MACRO_CLEAR');
