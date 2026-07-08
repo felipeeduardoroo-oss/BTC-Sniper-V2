@@ -1,4 +1,4 @@
-// js/backtest.js – Backtest com parâmetros ajustáveis
+// js/backtest.js – Backtest com lógica de sinais corrigida
 import { CONFIG } from './config.js';
 import {
     fetchHistoricalCandles,
@@ -36,7 +36,7 @@ function findMostRecent(arr, cond) {
     return null;
 }
 
-// ===== MTF HISTÓRICO (sem chamada de rede ao vivo) =====
+// ===== MTF HISTÓRICO =====
 function getMTFAlignmentAtTime(candles1H, candles4H, currentTime) {
     const relevant1H = candles1H.filter(c => c.time <= currentTime).slice(-50);
     const relevant4H = candles4H.filter(c => c.time <= currentTime).slice(-50);
@@ -73,7 +73,7 @@ function getMTFAlignmentAtTime(candles1H, candles4H, currentTime) {
 
 // ===== BUSCA DE DADOS HISTÓRICOS =====
 async function fetchHistoricalFunding(symbol, startTime, endTime) {
-    const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&startTime=${startTime}&endTime=${endTime}&limit=500`;
+    const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&startTime=${startTime}&endTime=${endTime}&limit=1000`;
     try {
         const data = await fetchWithRetry(url, {}, 2);
         if (Array.isArray(data)) {
@@ -84,8 +84,8 @@ async function fetchHistoricalFunding(symbol, startTime, endTime) {
 }
 
 async function fetchHistoricalOI(symbol, startTime, endTime) {
-    const adjustedStart = Math.max(startTime, endTime - 500 * 60 * 60 * 1000);
-    const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=1h&startTime=${adjustedStart}&endTime=${endTime}&limit=500`;
+    const adjustedStart = Math.max(startTime, endTime - 1000 * 60 * 60 * 1000);
+    const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=1h&startTime=${adjustedStart}&endTime=${endTime}&limit=1000`;
     try {
         const data = await fetchWithRetry(url, {}, 2);
         if (Array.isArray(data)) {
@@ -95,18 +95,7 @@ async function fetchHistoricalOI(symbol, startTime, endTime) {
     } catch (e) { return []; }
 }
 
-async function fetchHistoricalMVRV(startDate, endDate) {
-    const url = `https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=CapMVRVCur&frequency=1d&start_time=${startDate}&end_time=${endDate}&page_size=100`;
-    try {
-        const data = await fetchWithRetry(url, {}, 2);
-        if (data?.data && Array.isArray(data.data)) {
-            return data.data.map(d => ({ time: new Date(d.time).getTime() / 1000, value: parseFloat(d.CapMVRVCur) }));
-        }
-        return [];
-    } catch (e) { return []; }
-}
-
-// ===== FUNÇÃO PRINCIPAL com parâmetros =====
+// ===== FUNÇÃO PRINCIPAL =====
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
     const {
         scoreMin = 70,
@@ -118,7 +107,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
     } = options;
 
     logDebug(`Iniciando backtest REAL para ${symbol} (${days} dias)`);
-    logDebug('Parâmetros:', options);
     const now = Date.now();
     const startTime = now - days * 24 * 60 * 60 * 1000;
     const endTime = now;
@@ -128,7 +116,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
 
     try {
         // 1. Buscar candles
-        const candles1h = (await fetchHistoricalCandles(symbol, '1h', 800)) || [];
+        const candles1h = (await fetchHistoricalCandles(symbol, '1h', 1000)) || [];
         const candles4h = (await fetchHistoricalCandles(symbol, '4h', 200)) || [];
         const filteredCandles = candles1h.filter(c => c.time >= startTime / 1000 && c.time <= endTime / 1000);
         if (filteredCandles.length === 0) {
@@ -138,7 +126,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         // 2. Dados complementares
         const fundingHist = (await fetchHistoricalFunding(symbol, startTime, endTime)) || [];
         const oiHist = (await fetchHistoricalOI(symbol, startTime, endTime)) || [];
-        const mvrvHist = (await fetchHistoricalMVRV(startDateStr, endDateStr)) || [];
         const macroData = await fetchMacroStatic();
         const fgData = await fetchFearGreed();
 
@@ -175,9 +162,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         let winCount = 0,
             lossCount = 0;
 
-        // Diagnóstico
         const blockStats = {};
-        let totalCandlesProcessed = 0;
 
         // ===== FUNÇÃO UPDATE INDICADORES =====
         function updateIndicators(candles, currentTime) {
@@ -199,14 +184,9 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             avgLoss /= 14;
             state.rsi_1H = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
 
-            const adxData = calculateADX(candles);
-            state.adx = adxData;
-
-            const last24Candles = candles.slice(-24);
-            state.vwap = calculateVWAP(last24Candles);
-
-            const volAnomaly = detectVolumeAnomaly(candles, 20, 2.0);
-            state.volumeAnomaly = volAnomaly;
+            state.adx = calculateADX(candles);
+            state.vwap = calculateVWAP(candles.slice(-24));
+            state.volumeAnomaly = detectVolumeAnomaly(candles, 20, 2.0);
 
             updateSwingPoints(state);
 
@@ -217,16 +197,14 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
 
             // Divergência RSI
             let rsiForDiv = [];
-            let g = 0,
-                l = 0;
+            let g = 0, l = 0;
             for (let i = 1; i < closes.length; i++) {
                 const d = closes[i] - closes[i - 1];
                 if (i <= 14) {
                     if (d >= 0) g += d;
                     else l -= d;
                     if (i === 14) {
-                        let ag = g / 14,
-                            al = l / 14;
+                        let ag = g / 14, al = l / 14;
                         rsiForDiv.push(al === 0 ? 100 : 100 - (100 / (1 + ag / al)));
                     }
                 } else {
@@ -239,8 +217,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 }
             }
             if (rsiForDiv.length > 20) {
-                const div = detectRSIDivergence(candles, rsiForDiv);
-                state.divergence = div;
+                state.divergence = detectRSIDivergence(candles, rsiForDiv);
             }
         }
 
@@ -251,7 +228,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             state.candles1H.push(candle);
             if (state.candles1H.length > 200) state.candles1H.shift();
 
-            // Dados históricos
             const fundingAtTime = findMostRecent(fundingHist, f => f.time <= candle.time * 1000) || fundingHist[0];
             state.fundingRate = fundingAtTime ? fundingAtTime.rate : 0;
 
@@ -261,12 +237,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 state.oiDelta = oi24h ? ((oiAtTime.oi - oi24h.oi) / oi24h.oi * 100) : 0;
             }
 
-            const mvrvAtTime = findMostRecent(mvrvHist, m => m.time <= candle.time);
-            state.mvrv = mvrvAtTime ? mvrvAtTime.value : null;
-
             state.macroBlackout = false;
-
-            // MTF histórico
             state.mtfConfluence = getMTFAlignmentAtTime(state.candles1H, state.candles4H, candle.time);
 
             if (state.candles1H.length >= 50) {
@@ -275,44 +246,32 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 continue;
             }
 
-            // ===== CÁLCULO DO SCORE =====
+            // ===== CÁLCULO DO SCORE E DIREÇÃO =====
             const simAssets = {
                 [symbol]: {
+                    ...state,
                     price: state.price,
-                    candles1H: state.candles1H,
-                    candles4H: state.candles4H,
-                    ema50_1H: state.ema50_1H,
-                    ema200_4H: state.ema200_4H,
-                    rsi_1H: state.rsi_1H,
-                    atr_1H: state.atr_1H,
-                    atrHistory: state.atrHistory,
-                    swingHighs: state.swingHighs,
-                    swingLows: state.swingLows,
-                    currentBOS: state.currentBOS,
-                    mtfConfluence: state.mtfConfluence,
-                    adx: state.adx,
-                    divergence: state.divergence,
-                    volumeAnomaly: state.volumeAnomaly,
-                    macroBlackout: state.macroBlackout,
-                    vwap: state.vwap,
-                    htfStructure: state.htfStructure,
                     fundingRate: state.fundingRate,
-                    oiDelta: state.oiDelta,
-                    mvrv: state.mvrv,
-                    fearGreedData: state.fearGreedData
+                    oiDelta: state.oiDelta
                 }
             };
             const liqMap = { [symbol]: { longs: 0, shorts: 0 } };
 
             const scoreData = computeScore(symbol, simAssets, liqMap);
-            const bosConfirmed = scoreData.direction !== 'NEUTRAL' && findSMCSetup(state, scoreData.direction);
+            const direction = scoreData.direction;
+
+            // Se não há direção, passa para o próximo candle
+            if (direction === 'NEUTRAL') continue;
+
+            const bosConfirmed = findSMCSetup(state, direction);
             state.currentBOS = bosConfirmed ? 'BOS' : 'NEUTRAL';
 
-            // Se mtfRequired for false, forçamos alinhado a true
             const mtfAligned = mtfRequired ? (simAssets[symbol].mtfConfluence?.alinhado || false) : true;
+            const mtfDir = simAssets[symbol].mtfConfluence?.directions?.find(d => d.dir !== 'NEUTRO')?.dir;
+            const mtfValid = !mtfRequired || (mtfAligned && mtfDir === direction);
 
             const confidence = calculateConfidenceScore({
-                mtfAligned: mtfAligned,
+                mtfAligned: mtfValid,
                 adx: state.adx,
                 volumeAnomaly: state.volumeAnomaly,
                 fundingRate: state.fundingRate,
@@ -320,45 +279,31 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 divergence: state.divergence,
                 macroBlackout: state.macroBlackout,
                 smcStructure: state.currentBOS || 'NEUTRAL',
-                direction: scoreData.direction
+                direction: direction
             });
 
             const score = confidence.score;
-            let blockReason = scoreData.blockReason;
+            let blockReason = null;
 
             const adxValue = typeof state.adx === 'object' ? state.adx.adx : state.adx;
-            // Usa adxMin do parâmetro
-            if (adxValue < adxMin && !blockReason) blockReason = `ADX < ${adxMin} (lateral)`;
-            if (state.macroBlackout && !blockReason) blockReason = 'Macro blackout';
+            if (adxValue < adxMin) blockReason = `ADX < ${adxMin} (lateral)`;
+            if (state.macroBlackout) blockReason = 'Macro blackout';
 
-            const primaryDirection = (score >= scoreMin) ? 'LONG' : (score <= 30 ? 'SHORT' : null);
+            if (direction === 'LONG' && state.price < state.vwap) blockReason = 'Preço abaixo do VWAP';
+            else if (direction === 'SHORT' && state.price > state.vwap) blockReason = 'Preço acima do VWAP';
 
-            if (primaryDirection === 'LONG' && state.price < state.vwap && !blockReason)
-                blockReason = 'Preço abaixo do VWAP';
-            else if (primaryDirection === 'SHORT' && state.price > state.vwap && !blockReason)
-                blockReason = 'Preço acima do VWAP';
-
-            if (primaryDirection === 'LONG' && state.htfStructure.bias === 'BEARISH' && !blockReason)
-                blockReason = 'HTF 4H Bearish (histórico)';
-            if (primaryDirection === 'SHORT' && state.htfStructure.bias === 'BULLISH' && !blockReason)
-                blockReason = 'HTF 4H Bullish (histórico)';
+            if (direction === 'LONG' && state.htfStructure.bias === 'BEARISH') blockReason = 'HTF 4H Bearish';
+            if (direction === 'SHORT' && state.htfStructure.bias === 'BULLISH') blockReason = 'HTF 4H Bullish';
 
             if (!blockReason) {
                 const derivCheck = checkDerivativesFilter(state.fundingRate, state.oiDelta);
                 if (!derivCheck.allow) blockReason = derivCheck.reason;
             }
-// ===== LOG DE DIAGNÓSTICO (a cada 10 candles) =====
-if (i % 10 === 0) {
-    console.log(`[Candle ${i}] score=${score}, primaryDirection=${primaryDirection}, blockReason=${blockReason}`);
-    console.log(`  adx=${adxValue}, vwap=${state.vwap}, price=${state.price}, htf=${state.htfStructure.bias}`);
-    console.log(`  swingHighs=${state.swingHighs.length}, swingLows=${state.swingLows.length}`);
-}
-            // ===== DIAGNÓSTICO =====
-            totalCandlesProcessed++;
-            // Precisamos de retestConfirmed e smcSetup para categorizar, mas eles são definidos depois
-            // Vamos adiar a contagem para depois do cálculo do retest
-            // Mas podemos contar o blockReason já aqui, e depois adicionar os casos sem bloqueio
-            // Para simplificar, contamos no final do loop
+
+            // Log de diagnóstico
+            if (i % 10 === 0) {
+                console.log(`[Candle ${i}] dir=${direction}, score=${score.toFixed(0)}, blockReason=${blockReason}`);
+            }
 
             // ===== GERENCIAR POSIÇÃO =====
             if (position) {
@@ -410,7 +355,6 @@ if (i % 10 === 0) {
                     else lossCount++;
                     position = null;
                 } else {
-                    // Atualizar trailing
                     if (position.type === 'LONG') {
                         if (state.swingLows.length > 0) {
                             const newLow = Math.min(...state.swingLows);
@@ -427,50 +371,38 @@ if (i % 10 === 0) {
                 }
             }
 
-            // ===== ENTRADA =====
-            if (!position && !blockReason && primaryDirection) {
+            // ===== ENTRADA (Só tenta se não houver posição e o score for suficiente) =====
+            if (!position && score >= scoreMin && !blockReason) {
+                const primaryDirection = direction;
                 const atr = state.atr_1H || (state.price * 0.02);
                 
-                // Retest do nível estrutural
                 let retestConfirmed = false;
                 let brokenLevel = null;
 
                 if (primaryDirection === 'LONG') {
                     const highsBelow = state.swingHighs.filter(h => h < state.price);
-                    if (highsBelow.length > 0) {
-                        brokenLevel = Math.max(...highsBelow);
-                    }
-                } else if (primaryDirection === 'SHORT') {
+                    if (highsBelow.length > 0) brokenLevel = Math.max(...highsBelow);
+                } else {
                     const lowsAbove = state.swingLows.filter(l => l > state.price);
-                    if (lowsAbove.length > 0) {
-                        brokenLevel = Math.min(...lowsAbove);
-                    }
+                    if (lowsAbove.length > 0) brokenLevel = Math.min(...lowsAbove);
                 }
 
                 if (brokenLevel !== null && brokenLevel > 0) {
                     const distPct = Math.abs(state.price - brokenLevel) / brokenLevel;
-                    // Usa retestDistPct do parâmetro
                     retestConfirmed = distPct < retestDistPct;
                 }
 
-                // Fallback: EMA20 (controlado pelo checkbox)
                 if (!retestConfirmed && emaRetest) {
                     const ema20 = calcEMA(state.candles1H.map(c => c.close), 20).slice(-1)[0] || state.price;
                     const emaDist = Math.abs(state.price - ema20) / ema20;
-                    retestConfirmed = emaDist < 0.005; // 0.5% fixo
+                    retestConfirmed = emaDist < 0.005;
                 }
 
                 const smcSetup = findSMCSetup(state, primaryDirection);
-
-                // Contabiliza diagnóstico para este candle (já que blockReason já foi considerado)
-                const reasonKey = blockReason || (primaryDirection ? 
-                    (retestConfirmed ? (smcSetup ? 'passou_filtros' : 'sem_BOS') : 'sem_retest') 
-                    : 'score_neutro');
+                const reasonKey = `score=${score.toFixed(0)}_${blockReason || 'pass'}`;
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
-       //         if (smcSetup && retestConfirmed) {
-              // Forçar entrada para teste (remover depois)
-if (true) {  
+                if (smcSetup && retestConfirmed) {
                     let stop, tp1, tp2;
                     if (primaryDirection === 'LONG') {
                         const structLevel = Math.min(...state.swingLows) - (atr * 0.3);
@@ -484,15 +416,11 @@ if (true) {
                         tp2 = state.price - (atr * 4);
                     }
                     const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
-                    // Usa rrMin do parâmetro
                     if (rr1 < rrMin) continue;
 
-                    // Kelly sizing
-                    const totalTrades = winCount + lossCount;
-                    const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
+                    const winRate = (winCount + lossCount) > 0 ? winCount / (winCount + lossCount) : 0.5;
                     const kellyPct = KellyPositionSize(winRate, rr1);
-                    const fgMultiplier = 1;
-                    const riskFraction = Math.min(kellyPct * fgMultiplier, 0.05);
+                    const riskFraction = Math.min(kellyPct, 0.05);
 
                     const stopDistancePct = primaryDirection === 'LONG' ? (state.price - stop) / state.price : (stop - state.price) / state.price;
                     const positionSizeUSD = (riskFraction * equity) / stopDistancePct;
@@ -523,8 +451,6 @@ if (true) {
                         durationHours: null,
                         reason: 'Aberta'
                     });
-                } else {
-                    // Se não entrou, já contabilizamos o motivo acima (passou_filtros, sem_BOS, sem_retest, etc.)
                 }
             }
         }
@@ -551,7 +477,6 @@ if (true) {
             position = null;
         }
 
-        // Estatísticas
         const closedTrades = trades.filter(t => t.exitTime !== null && t.pnlPct !== null);
         const totalTrades = closedTrades.length;
         const wins = closedTrades.filter(t => parseFloat(t.pnlPct) > 0).length;
@@ -580,7 +505,6 @@ if (true) {
             initialEquity: 10000,
             finalEquity: equity,
             blockStats: blockStats,
-            totalCandlesProcessed: totalCandlesProcessed,
             disclaimer: "MTF Confluence calculado com candles históricos (1h e 4h). BlockStats mostra distribuição dos motivos de bloqueio."
         };
 
