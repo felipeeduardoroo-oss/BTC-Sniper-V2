@@ -40,7 +40,7 @@ function findMostRecent(arr, cond) {
 function getMTFAlignmentAtTime(candles1H, candles4H, currentTime) {
     const relevant1H = candles1H.filter(c => c.time <= currentTime).slice(-50);
     const relevant4H = candles4H.filter(c => c.time <= currentTime).slice(-50);
-
+    
     if (relevant1H.length < 20 || relevant4H.length < 10) {
         return { alinhado: false, score: 0, directions: [] };
     }
@@ -422,10 +422,10 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 }
             }
 
-            // ===== ENTRADA (CORRIGIDO – BOS com lookback de 5 candles) =====
+            // ===== ENTRADA (BOS ORIGINAL – sem lookback) =====
             if (!position && !blockReason && primaryDirection) {
                 const atr = state.atr_1H || (state.price * 0.02);
-
+                
                 // 1. Retest do nível estrutural
                 let retestConfirmed = false;
                 let brokenLevel = null;
@@ -454,32 +454,24 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     retestConfirmed = emaDist < 0.005;
                 }
 
-                // 2. BOS com lookback de 5 candles (substitui findSMCSetup)
+                // 2. BOS ORIGINAL (verifica apenas o candle atual)
                 let smcSetup = false;
-                const lookback = 25;
-                const startIdx = Math.max(0, state.candles1H.length - lookback);
-                const recentCandles = state.candles1H.slice(startIdx);
-
                 if (primaryDirection === 'LONG') {
-                    const highs = recentCandles.map(c => c.high);
-                    const maxHigh = Math.max(...highs);
                     const lastSwingHigh = Math.max(...state.swingHighs);
-                    if (maxHigh > lastSwingHigh && state.price < maxHigh && state.price > lastSwingHigh) {
+                    if (state.price > lastSwingHigh) {
                         smcSetup = true;
                     }
                 } else if (primaryDirection === 'SHORT') {
-                    const lows = recentCandles.map(c => c.low);
-                    const minLow = Math.min(...lows);
                     const lastSwingLow = Math.min(...state.swingLows);
-                    if (minLow < lastSwingLow && state.price > minLow && state.price < lastSwingLow) {
+                    if (state.price < lastSwingLow) {
                         smcSetup = true;
                     }
                 }
 
                 // 3. Contabiliza diagnóstico
                 totalCandlesProcessed++;
-                const reasonKey = blockReason || (primaryDirection ?
-                    (retestConfirmed ? (smcSetup ? 'passou_filtros' : 'sem_BOS') : 'sem_retest')
+                const reasonKey = blockReason || (primaryDirection ? 
+                    (retestConfirmed ? (smcSetup ? 'passou_filtros' : 'sem_BOS') : 'sem_retest') 
                     : 'score_neutro');
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
@@ -498,9 +490,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                         tp2 = state.price - (atr * 4);
                     }
                     const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
-                    if (rr1 < rrMin) {
-                        continue;
-                    }
+                    if (rr1 < rrMin) continue;
 
                     // Kelly sizing
                     const totalTrades = winCount + lossCount;
@@ -539,7 +529,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     });
                 }
             }
-        } // <-- FIM DO FOR
+        } // <-- FIM DO LOOP PRINCIPAL
 
         // Fechar posição remanescente
         if (position) {
@@ -593,7 +583,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             finalEquity: equity,
             blockStats: blockStats,
             totalCandlesProcessed: totalCandlesProcessed,
-            disclaimer: "MTF Confluence calculado com candles históricos (1h e 4h). BlockStats mostra distribuição dos motivos de bloqueio."
+            disclaimer: "MTF Confluence calculado com candles históricos (1h e 4h). BOS original (sem lookback). BlockStats mostra distribuição dos motivos de bloqueio."
         };
 
         logDebug('Backtest REAL concluído!', summary);
