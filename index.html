@@ -474,6 +474,23 @@
         import { CONFIG } from './js/config.js';
         import { runBacktest } from './js/backtest.js';
 
+// ============================================================
+// 🔥 INTERCEPTAÇÃO GLOBAL PARA YAHOO FINANCE (INSERIR AQUI!)
+// ============================================================
+const originalFetch = window.fetch;
+window.fetch = function(url, options) {
+    if (typeof url === 'string' && url.includes('query1.finance.yahoo.com')) {
+        console.log('[Proxy] Redirecionando Yahoo Finance:', url);
+        const proxyUrl = 'https://corsproxy.io/?url=' + encodeURIComponent(url);
+        return originalFetch(proxyUrl, options);
+    }
+    return originalFetch(url, options);
+};
+
+// ===== IMPORTS LIMPOS (corrigido #5) =====
+const {
+    calculateADX, ...
+} = indicadores;
         // ===== IMPORTS LIMPOS (corrigido #5) =====
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
