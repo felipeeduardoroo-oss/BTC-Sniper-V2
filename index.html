@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        /* ===== CSS COMPLETO (mesmo da versão anterior) ===== */
+        /* ===== CSS COMPLETO ===== */
         :root {
             --bg-dark: #08090d; --bg-card: #0f1117; --bg-card-hover: #14171f; --primary: #0f1117; --secondary: #1a1d29;
             --border: rgba(255, 255, 255, 0.06); --border-active: rgba(0, 180, 216, 0.5);
@@ -944,130 +944,119 @@
             }
         }
 
-        // ===== UI DO PAINEL "FORÇA DO SINAL" (LEGADO) =====
-// ===== UI DO PAINEL "FORÇA DO SINAL" (LEGADO) – CORRIGIDO =====
-function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData) {
-    // Garantir que scoreData existe
-    if (!scoreData) {
-        console.warn('[Força do Sinal] scoreData indefinido');
-        return;
-    }
+        // ===== UI DO PAINEL "FORÇA DO SINAL" (LEGADO) – CORRIGIDO =====
+        function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData) {
+            if (!scoreData) {
+                console.warn('[Força do Sinal] scoreData indefinido');
+                return;
+            }
 
-    const bar = document.getElementById('scoreBar');
-    const val = document.getElementById('scoreValue');
-    const label = document.getElementById('scoreLabel');
+            const bar = document.getElementById('scoreBar');
+            const val = document.getElementById('scoreValue');
+            const label = document.getElementById('scoreLabel');
 
-    // Atualizar barra e valor
-    const score = scoreData.score ?? 50;
-    if (bar) bar.style.width = score + '%';
-    if (val) val.textContent = score;
+            const score = scoreData.score ?? 50;
+            if (bar) bar.style.width = score + '%';
+            if (val) val.textContent = score;
 
-    // Determinar label com base no score (fallback)
-    const labelText = scoreData.label 
-        || (score >= 70 ? 'MUITO FORTE' 
-            : score >= 55 ? 'FORTE' 
-            : score >= 45 ? 'MODERADO' 
-            : score >= 30 ? 'MODERADO CONTRA' 
-            : 'FORTE CONTRA');
+            const labelText = scoreData.label 
+                || (score >= 70 ? 'MUITO FORTE' 
+                    : score >= 55 ? 'FORTE' 
+                    : score >= 45 ? 'MODERADO' 
+                    : score >= 30 ? 'MODERADO CONTRA' 
+                    : 'FORTE CONTRA');
 
-    const colors = {
-        'MUITO FORTE': { bg: 'rgba(0,230,118,0.2)', color: '#00e676', border: '#00e676' },
-        'FORTE': { bg: 'rgba(0,200,83,0.15)', color: '#00c853', border: '#00c853' },
-        'MODERADO': { bg: 'rgba(255,193,7,0.15)', color: '#ffc107', border: '#ffc107' },
-        'NEUTRO': { bg: 'rgba(139,148,158,0.15)', color: '#8b949e', border: '#8b949e' },
-        'MODERADO CONTRA': { bg: 'rgba(255,152,0,0.15)', color: '#ff9800', border: '#ff9800' },
-        'FORTE CONTRA': { bg: 'rgba(255,82,82,0.15)', color: '#ff5252', border: '#ff5252' },
-        'MUITO FORTE CONTRA': { bg: 'rgba(255,23,68,0.2)', color: '#ff1744', border: '#ff1744' }
-    };
+            const colors = {
+                'MUITO FORTE': { bg: 'rgba(0,230,118,0.2)', color: '#00e676', border: '#00e676' },
+                'FORTE': { bg: 'rgba(0,200,83,0.15)', color: '#00c853', border: '#00c853' },
+                'MODERADO': { bg: 'rgba(255,193,7,0.15)', color: '#ffc107', border: '#ffc107' },
+                'NEUTRO': { bg: 'rgba(139,148,158,0.15)', color: '#8b949e', border: '#8b949e' },
+                'MODERADO CONTRA': { bg: 'rgba(255,152,0,0.15)', color: '#ff9800', border: '#ff9800' },
+                'FORTE CONTRA': { bg: 'rgba(255,82,82,0.15)', color: '#ff5252', border: '#ff5252' },
+                'MUITO FORTE CONTRA': { bg: 'rgba(255,23,68,0.2)', color: '#ff1744', border: '#ff1744' }
+            };
 
-    const c = colors[labelText] || colors['NEUTRO'];
-    if (label) {
-        label.style.background = c.bg;
-        label.style.color = c.color;
-        label.style.border = `1px solid ${c.border}`;
-        label.textContent = labelText;
-    }
+            const c = colors[labelText] || colors['NEUTRO'];
+            if (label) {
+                label.style.background = c.bg;
+                label.style.color = c.color;
+                label.style.border = `1px solid ${c.border}`;
+                label.textContent = labelText;
+            }
 
-    // ===== MTF Badges =====
-    const mtfContainer = document.getElementById('mtfBadges');
-    if (mtfContainer) {
-        if (mtfData && Array.isArray(mtfData.directions) && mtfData.directions.length) {
-            mtfContainer.innerHTML = mtfData.directions.map(d => {
-                const cls = d.dir === 'BULL' ? 'mtf-bull' : d.dir === 'BEAR' ? 'mtf-bear' : 'mtf-neutral';
-                return `<span class="mtf-badge ${cls}">${d.tf} ${d.dir}</span>`;
-            }).join('');
-        } else {
-            mtfContainer.innerHTML = ''; // ou '<span style="color:#8b949e;">N/A</span>'
+            const mtfContainer = document.getElementById('mtfBadges');
+            if (mtfContainer) {
+                if (mtfData && Array.isArray(mtfData.directions) && mtfData.directions.length) {
+                    mtfContainer.innerHTML = mtfData.directions.map(d => {
+                        const cls = d.dir === 'BULL' ? 'mtf-bull' : d.dir === 'BEAR' ? 'mtf-bear' : 'mtf-neutral';
+                        return `<span class="mtf-badge ${cls}">${d.tf} ${d.dir}</span>`;
+                    }).join('');
+                } else {
+                    mtfContainer.innerHTML = '';
+                }
+            }
+
+            const reasonsContainer = document.getElementById('scoreReasons');
+            if (reasonsContainer) {
+                if (scoreData && Array.isArray(scoreData.reasons) && scoreData.reasons.length) {
+                    reasonsContainer.innerHTML = scoreData.reasons.map(r => {
+                        const cls = r.includes('Contra') || r.includes('Baixo') || r.includes('Sem') || r.includes('Sobrecompra') || r.includes('Perigoso') ? 'negative' : 'positive';
+                        return `<span class="reason-tag ${cls}">${r}</span>`;
+                    }).join('');
+                } else {
+                    const dir = scoreData.direction || 'NEUTRO';
+                    reasonsContainer.innerHTML = `<span class="reason-tag neutral">${dir}</span>`;
+                }
+            }
+
+            const fundEl = document.getElementById('fundingDisplay');
+            if (fundEl) {
+                if (fundingData && fundingData.rate !== undefined && fundingData.rate !== null) {
+                    const fColor = fundingData.rate > 0.01 ? '#ff5252' : fundingData.rate < -0.01 ? '#00e676' : '#ffc107';
+                    fundEl.style.color = fColor;
+                    fundEl.textContent = `${(fundingData.rate * 100).toFixed(4)}% — ${fundingData.interpretacao || 'EQUILIBRADO'}`;
+                } else {
+                    fundEl.textContent = '--';
+                }
+            }
+
+            const adxEl = document.getElementById('adxDisplay');
+            if (adxEl) {
+                if (adxData && adxData.adx !== undefined) {
+                    const aColor = adxData.adx < 20 ? '#ff5252' : adxData.adx > 50 ? '#ff9800' : '#00e676';
+                    adxEl.style.color = aColor;
+                    adxEl.textContent = `${adxData.adx.toFixed(1)} ${adxData.adx < 20 ? '(Sem tendência)' : adxData.trend || '(Tendência)'}`;
+                } else {
+                    adxEl.textContent = '--';
+                }
+            }
+
+            const obContainer = document.getElementById('orderbookMini');
+            if (obContainer) {
+                if (obData && Array.isArray(obData.bids) && Array.isArray(obData.asks)) {
+                    obContainer.innerHTML = renderMiniOrderBook(obData);
+                } else {
+                    obContainer.innerHTML = '<span style="color:#8b949e;">Order Book indisponível</span>';
+                }
+            }
+
+            const mainSignalEl = document.getElementById('mainSignal');
+            if (mainSignalEl) {
+                const dir = scoreData.direction || 'NEUTRO';
+                const scoreValue = scoreData.score ?? 50;
+                if (dir === 'LONG' || dir === 'SHORT') {
+                    const color = dir === 'LONG' ? '#00e676' : '#ff1744';
+                    mainSignalEl.innerHTML = `
+                        <div style="color:${color};font-size:20px;font-weight:900;">${dir}</div>
+                        <div style="color:#8b949e;font-size:11px;">Score: ${scoreValue}/100 — ${labelText}</div>
+                    `;
+                } else {
+                    mainSignalEl.innerHTML = `
+                        <div style="color:#8b949e;font-size:14px;">Sem direção definida (Score: ${scoreValue}/100)</div>
+                    `;
+                }
+            }
         }
-    }
-
-    // ===== Reasons =====
-    const reasonsContainer = document.getElementById('scoreReasons');
-    if (reasonsContainer) {
-        if (scoreData && Array.isArray(scoreData.reasons) && scoreData.reasons.length) {
-            reasonsContainer.innerHTML = scoreData.reasons.map(r => {
-                const cls = r.includes('Contra') || r.includes('Baixo') || r.includes('Sem') || r.includes('Sobrecompra') || r.includes('Perigoso') ? 'negative' : 'positive';
-                return `<span class="reason-tag ${cls}">${r}</span>`;
-            }).join('');
-        } else {
-            // Se não houver reasons, podemos exibir a direção ou uma mensagem neutra
-            const dir = scoreData.direction || 'NEUTRO';
-            reasonsContainer.innerHTML = `<span class="reason-tag neutral">${dir}</span>`;
-        }
-    }
-
-    // ===== Funding Rate =====
-    const fundEl = document.getElementById('fundingDisplay');
-    if (fundEl) {
-        if (fundingData && fundingData.rate !== undefined && fundingData.rate !== null) {
-            const fColor = fundingData.rate > 0.01 ? '#ff5252' : fundingData.rate < -0.01 ? '#00e676' : '#ffc107';
-            fundEl.style.color = fColor;
-            fundEl.textContent = `${(fundingData.rate * 100).toFixed(4)}% — ${fundingData.interpretacao || 'EQUILIBRADO'}`;
-        } else {
-            fundEl.textContent = '--';
-        }
-    }
-
-    // ===== ADX =====
-    const adxEl = document.getElementById('adxDisplay');
-    if (adxEl) {
-        if (adxData && adxData.adx !== undefined) {
-            const aColor = adxData.adx < 20 ? '#ff5252' : adxData.adx > 50 ? '#ff9800' : '#00e676';
-            adxEl.style.color = aColor;
-            adxEl.textContent = `${adxData.adx.toFixed(1)} ${adxData.adx < 20 ? '(Sem tendência)' : adxData.trend || '(Tendência)'}`;
-        } else {
-            adxEl.textContent = '--';
-        }
-    }
-
-    // ===== Order Book =====
-    const obContainer = document.getElementById('orderbookMini');
-    if (obContainer) {
-        if (obData && Array.isArray(obData.bids) && Array.isArray(obData.asks)) {
-            obContainer.innerHTML = renderMiniOrderBook(obData);
-        } else {
-            obContainer.innerHTML = '<span style="color:#8b949e;">Order Book indisponível</span>';
-        }
-    }
-
-    // ===== Main Signal (texto central) =====
-    const mainSignalEl = document.getElementById('mainSignal');
-    if (mainSignalEl) {
-        const dir = scoreData.direction || 'NEUTRO';
-        const scoreValue = scoreData.score ?? 50;
-        if (dir === 'LONG' || dir === 'SHORT') {
-            const color = dir === 'LONG' ? '#00e676' : '#ff1744';
-            mainSignalEl.innerHTML = `
-                <div style="color:${color};font-size:20px;font-weight:900;">${dir}</div>
-                <div style="color:#8b949e;font-size:11px;">Score: ${scoreValue}/100 — ${labelText}</div>
-            `;
-        } else {
-            mainSignalEl.innerHTML = `
-                <div style="color:#8b949e;font-size:14px;">Sem direção definida (Score: ${scoreValue}/100)</div>
-            `;
-        }
-    }
-}
 
         // ===== UPDATE WHALE UI =====
         function updateWhaleUI() {
@@ -1432,7 +1421,7 @@ function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obD
             }));
         }
 
-        // ===== AVALIAÇÃO DE MERCADO (CORRIGIDO) =====
+        // ===== AVALIAÇÃO DE MERCADO (CORRIGIDO – RETEST SMC + CONTINUE) =====
         async function evaluateMarkets() {
             for (const symbol of CONFIG.ASSETS) {
                 const data = assetsData[symbol];
@@ -1522,7 +1511,7 @@ function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obD
                     if (!derivCheck.allow) blockReason = derivCheck.reason;
                 }
                 
-                // ===== CORREÇÃO #2: MVRV + FEAR & GREED COMO BÔNUS =====
+                // ===== MVRV + FEAR & GREED COMO BÔNUS =====
                 let onChainBonus = false;
                 let onChainMultiplier = 1.0;
                 if (symbol === 'BTCUSDT' && data.mvrv !== null && data.mvrv !== undefined) {
@@ -1557,9 +1546,10 @@ function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obD
                         const atr = data.atr_1H || (data.price * 0.02);
                         if (primaryDirection) {
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
+                            // ===== CORREÇÃO: return → continue =====
                             if (expCheck.blocked) continue;
                             
-                            // ===== CORREÇÃO #1: RETEST DO NÍVEL ROMPIDO (SMC) =====
+                            // ===== RETEST DO NÍVEL ESTRUTURAL ROMPIDO (SMC) =====
                             let retestConfirmed = false;
                             let brokenLevel = null;
 
@@ -1617,9 +1607,10 @@ function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obD
                                     tp3 = liqTarget2 || (data.price - (atr * 6));
                                 }
                                 const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
+                                // ===== CORREÇÃO: return → continue =====
                                 if (rr1 < 1.5) continue;
                                 
-                                // ===== CORREÇÃO #3: WINRATE SEM LAPLACE =====
+                                // WinRate sem Laplace
                                 const stats = banco.getTradeStats();
                                 const totalTrades = stats.wins + stats.losses;
                                 const winRate = totalTrades > 0 ? stats.wins / totalTrades : 0.5;
@@ -1627,7 +1618,6 @@ function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obD
                                 const fgFilt = fearGreedFilter(data.fearGreedData, primaryDirection);
                                 if (!fgFilt.pass && !blockReason) blockReason = fgFilt.reason;
                                 
-                                // Aplica o multiplicador on-chain
                                 const riskPct = KellyPositionSize(winRate, rr1) * (fgFilt.multiplier || 1) * onChainMultiplier;
 
                                 if (!blockReason) {
