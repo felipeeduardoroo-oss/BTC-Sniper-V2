@@ -3,38 +3,16 @@ import { CONFIG } from './config.js';
 import { calcEMA, calculateATR, detectHTFStructure } from './indicadores.js';
 
 // ============================================================
-// 0. HELPER: fetchViaProxy com retry e jitter
+// 0. HELPER: fetchViaProxy com retry e jitter (CORRIGIDO)
 // ============================================================
 const PROXY_LIST = [
-    'https://corsproxy.io/?url=',
-    'https://api.allorigins.win/raw?url=',
     'https://api.codetabs.com/v1/proxy?quest=',
-    'https://thingproxy.freeboard.io/fetch/'
+    'https://corsproxy.io/?url=',
+    'https://api.allorigins.win/raw?url='
 ];
 
-// ===== BUSCA DADOS DO FRED (Federal Reserve) =====
-async function fetchFRED(id) {
-    const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=2025-01-01`;
-    try {
-        const csv = await fetchViaProxy(url, {}, 2);
-        if (typeof csv === 'string') {
-            const lines = csv.trim().split('\n');
-            if (lines.length < 2) return null;
-            const lastLine = lines[lines.length - 1];
-            const parts = lastLine.split(',');
-            if (parts.length < 2) return null;
-            const val = parseFloat(parts[1]);
-            return isNaN(val) ? null : val;
-        }
-        return null;
-    } catch(e) {
-        return null;
-    }
-}
-
-// ===== FETCH VIA PROXY =====
 async function fetchViaProxy(url, options = {}, retries = 2) {
-    // Tenta diretamente primeiro
+    // Tenta diretamente primeiro (se CORS permitir)
     try {
         const resp = await fetchWithTimeout(url, options, 10000);
         if (resp.ok) {
@@ -60,6 +38,26 @@ async function fetchViaProxy(url, options = {}, retries = 2) {
         }
     }
     throw new Error(`Falha ao buscar ${url} após tentar todos os proxies`);
+}
+
+// ===== BUSCA DADOS DO FRED (Federal Reserve) =====
+async function fetchFRED(id) {
+    const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=2025-01-01`;
+    try {
+        const csv = await fetchViaProxy(url, {}, 2);
+        if (typeof csv === 'string') {
+            const lines = csv.trim().split('\n');
+            if (lines.length < 2) return null;
+            const lastLine = lines[lines.length - 1];
+            const parts = lastLine.split(',');
+            if (parts.length < 2) return null;
+            const val = parseFloat(parts[1]);
+            return isNaN(val) ? null : val;
+        }
+        return null;
+    } catch(e) {
+        return null;
+    }
 }
 
 // ============================================================
@@ -116,7 +114,6 @@ function getCachedData(key, maxAge = CONFIG.CACHE_TTL_MS) {
         if (age < (CONFIG.STALE_CACHE_TTL_MS || 3600000)) {
             return { data: memEntry.data, stale: true };
         }
-        // Mesmo se for mais antigo, ainda retorna (com stale true)
         return { data: memEntry.data, stale: true };
     }
     // Fallback para localStorage
@@ -137,10 +134,9 @@ function getCachedData(key, maxAge = CONFIG.CACHE_TTL_MS) {
 function setCachedData(key, data) {
     const entry = { data, timestamp: Date.now() };
     CACHE.set(key, entry);
-    // Persiste também em localStorage (se não for muito grande)
     try {
         const str = JSON.stringify(entry);
-        if (str.length < 500000) { // 500KB limite
+        if (str.length < 500000) {
             localStorage.setItem(`cache_${key}`, str);
         }
     } catch(e) { /* localStorage cheio ou indisponível */ }
@@ -187,17 +183,15 @@ export const fetchEthGasPrice = async () => {
     } catch(e) { /* silencioso */ }
 
     if (cached) return cached;
-    return 5; // fallback estático
+    return 5;
 };
 
 // ============================================================
 // 2. MACRO — stale-while-revalidate (mantém dados antigos)
 // ============================================================
 
-// Flag para evitar múltiplas requisições simultâneas
 let macroFetching = false;
 
-// Função que realmente busca os dados (usada para refresh em background e primeira carga)
 async function fetchMacroDataFresh() {
     let macro = {
         dxy: null,
@@ -207,7 +201,6 @@ async function fetchMacroDataFresh() {
         nasdaqChange: null
     };
 
-    // 1. Tenta Alpha Vantage
     if (CONFIG.ALPHAVANTAGE_API_KEY) {
         try {
             const symbols = ['DXY', 'DGS10', 'VIX', 'SPX', 'NDX'];
@@ -243,7 +236,6 @@ async function fetchMacroDataFresh() {
         }
     }
 
-    // 2. Se spChange ou nasdaqChange estiverem null, tenta Yahoo Finance via proxy
     if (macro.spChange === null || macro.nasdaqChange === null) {
         try {
             const fetchYahooChange = async (symbol) => {
@@ -278,7 +270,6 @@ async function fetchMacroDataFresh() {
         }
     }
 
-    // 3. Se ainda houver campos null, tenta FRED para DXY, US10Y, VIX
     try {
         if (macro.dxy === null) {
             const dxy = await fetchFRED('DTWEXBGS');
@@ -296,16 +287,13 @@ async function fetchMacroDataFresh() {
         console.warn('[Macro] FRED fallback falhou:', e.message);
     }
 
-    // 4. Verifica se pelo menos DXY ou VIX não são null (para considerar sucesso)
     if (macro.dxy !== null || macro.vix !== null) {
         return macro;
     }
 
-    // Se tudo falhar, retorna null
     return null;
 }
 
-// Função para refresh em background
 async function refreshMacroData(cacheKey) {
     try {
         const freshData = await fetchMacroDataFresh();
@@ -320,33 +308,25 @@ async function refreshMacroData(cacheKey) {
     }
 }
 
-// Função principal que usa cache com stale-while-revalidate
 export const fetchMacroStatic = async () => {
     const cacheKey = 'macroData';
-    // 1. Tenta obter do cache (sempre retorna, mesmo se stale)
     const cached = getCachedData(cacheKey, CONFIG.CACHE_TTL_MS);
     
-    // Se houver cache (mesmo stale), retorna imediatamente
     if (cached) {
-        // Se for stale, dispara revalidação em background (se não estiver já em andamento)
         if (cached.stale === true && !macroFetching) {
             macroFetching = true;
-            // Dispara a revalidação em background (sem await)
             refreshMacroData(cacheKey).finally(() => {
                 macroFetching = false;
             });
         }
-        // Retorna os dados (cached.data é o objeto macro)
         return cached.data;
     }
 
-    // Se não houver cache, faz a busca síncrona (espera) e retorna
     const freshData = await fetchMacroDataFresh();
     if (freshData) {
         setCachedData(cacheKey, freshData);
         return freshData;
     }
-    // Se não conseguir nada, retorna null (a UI mostrará --)
     return null;
 };
 
