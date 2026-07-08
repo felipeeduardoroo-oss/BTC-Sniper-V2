@@ -190,7 +190,6 @@ export const fetchMacroStatic = async () => {
     const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
-    // Inicializa o objeto macro com todos os campos null
     let macro = {
         dxy: null,
         us10y: null,
@@ -199,15 +198,14 @@ export const fetchMacroStatic = async () => {
         nasdaqChange: null
     };
 
-    // 1. Tenta Alpha Vantage para todos os símbolos
+    // 1. Tenta Alpha Vantage (se tiver chave)
     if (CONFIG.ALPHAVANTAGE_API_KEY) {
         try {
             const symbols = ['DXY', 'DGS10', 'VIX', 'SPX', 'NDX'];
             const fetchSymbol = async (symbol) => {
                 await sleep(300);
                 const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${CONFIG.ALPHAVANTAGE_API_KEY}`;
-                const data = await fetchWithRetry(url, {}, 2);
-                return data;
+                return await fetchWithRetry(url, {}, 2);
             };
             const results = await Promise.all(symbols.map(s => fetchSymbol(s)));
 
@@ -224,29 +222,46 @@ export const fetchMacroStatic = async () => {
                 return null;
             };
 
-            macro = {
-                dxy: parseQuote(results[0]),
-                us10y: parseQuote(results[1]),
-                vix: parseQuote(results[2]),
-                spChange: parseChange(results[3]),
-                nasdaqChange: parseChange(results[4])
-            };
+            macro.dxy = parseQuote(results[0]);
+            macro.us10y = parseQuote(results[1]);
+            macro.vix = parseQuote(results[2]);
+            macro.spChange = parseChange(results[3]);
+            macro.nasdaqChange = parseChange(results[4]);
 
-            // Verifica se pelo menos DXY ou VIX vieram, e se spChange/nasdaqChange não são null
-            if (macro.dxy !== null || macro.vix !== null) {
-                // Se os índices estiverem null, vamos tentar buscar via Yahoo (abaixo)
-                // Mas já temos dados parciais
-                // Vamos continuar e tentar completar com Yahoo se faltar
+            // Se pelo menos DXY ou US10Y vieram, consideramos sucesso e retornamos (não precisa do FRED)
+            if (macro.dxy !== null || macro.us10y !== null) {
+                setCachedData(cacheKey, macro);
+                return macro;
             }
         } catch (e) {
             console.warn('[Macro] Alpha Vantage falhou:', e.message);
         }
     }
 
-    // 2. Se spChange ou nasdaqChange estiverem null, tenta Yahoo Finance via proxy
+    // 2. Se Alpha Vantage não retornou DXY/US10Y, tenta FRED
+    try {
+        // Buscar DXY
+        if (macro.dxy === null) {
+            const dxy = await fetchFRED('DTWEXBGS');
+            if (dxy !== null) macro.dxy = dxy;
+        }
+        // Buscar US10Y
+        if (macro.us10y === null) {
+            const us10y = await fetchFRED('DGS10');
+            if (us10y !== null) macro.us10y = us10y;
+        }
+        // Buscar VIX
+        if (macro.vix === null) {
+            const vix = await fetchFRED('VIXCLS');
+            if (vix !== null) macro.vix = vix;
+        }
+    } catch(e) {
+        console.warn('[Macro] FRED fallback falhou:', e.message);
+    }
+
+    // 3. Para spChange e nasdaqChange, tenta Yahoo
     if (macro.spChange === null || macro.nasdaqChange === null) {
         try {
-            // Busca dados do Yahoo para ^GSPC e ^IXIC (ou ^NDX)
             const fetchYahooChange = async (symbol) => {
                 const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1d&interval=1d`;
                 const data = await fetchViaProxy(url, {}, 2);
@@ -262,46 +277,52 @@ export const fetchMacroStatic = async () => {
             };
 
             const [spChangeYahoo, nasdaqChangeYahoo] = await Promise.all([
-                fetchYahooChange('%5EGSPC'),  // S&P 500
-                fetchYahooChange('%5EIXIC')   // NASDAQ Composite (ou %5ENDX para NASDAQ 100)
+                fetchYahooChange('%5EGSPC'),
+                fetchYahooChange('%5EIXIC')
             ]);
 
-            if (spChangeYahoo !== null && macro.spChange === null) {
-                macro.spChange = spChangeYahoo;
-                console.log('[Macro] S&P 500 obtido via Yahoo:', spChangeYahoo);
-            }
-            if (nasdaqChangeYahoo !== null && macro.nasdaqChange === null) {
-                macro.nasdaqChange = nasdaqChangeYahoo;
-                console.log('[Macro] NASDAQ obtido via Yahoo:', nasdaqChangeYahoo);
-            }
+            if (spChangeYahoo !== null && macro.spChange === null) macro.spChange = spChangeYahoo;
+            if (nasdaqChangeYahoo !== null && macro.nasdaqChange === null) macro.nasdaqChange = nasdaqChangeYahoo;
         } catch (e) {
             console.warn('[Macro] Yahoo para índices falhou:', e.message);
         }
     }
 
-    // 3. Se ainda houver campos null, tenta FRED para DXY, US10Y, VIX (já existente)
-    // (Aqui você pode manter a parte do FRED para DXY, US10Y, VIX se quiser, 
-    //  mas como esses já estão funcionando, podemos ignorar ou complementar)
-    // Vou manter apenas para os que faltarem:
-    try {
-        if (macro.dxy === null) {
-            const dxy = await fetchFRED('DTWEXBGS');
-            if (dxy !== null) macro.dxy = dxy;
+    // 4. Se ainda faltar spChange ou nasdaqChange, tenta FRED (último recurso)
+    if (macro.spChange === null || macro.nasdaqChange === null) {
+        try {
+            const fetchFREDChange = async (id) => {
+                const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=2025-01-01`;
+                const csv = await fetchViaProxy(url, {}, 2);
+                if (typeof csv === 'string') {
+                    const lines = csv.trim().split('\n');
+                    if (lines.length < 3) return null;
+                    const lastLine = lines[lines.length - 1];
+                    const prevLine = lines[lines.length - 2];
+                    const lastVal = parseFloat(lastLine.split(',')[1]);
+                    const prevVal = parseFloat(prevLine.split(',')[1]);
+                    if (!isNaN(lastVal) && !isNaN(prevVal) && prevVal > 0) {
+                        return ((lastVal - prevVal) / prevVal) * 100;
+                    }
+                }
+                return null;
+            };
+
+            if (macro.spChange === null) {
+                const spChangeFRED = await fetchFREDChange('SP500');
+                if (spChangeFRED !== null) macro.spChange = spChangeFRED;
+            }
+            if (macro.nasdaqChange === null) {
+                const nasdaqChangeFRED = await fetchFREDChange('NASDAQ100');
+                if (nasdaqChangeFRED !== null) macro.nasdaqChange = nasdaqChangeFRED;
+            }
+        } catch(e) {
+            console.warn('[Macro] FRED para índices falhou:', e.message);
         }
-        if (macro.us10y === null) {
-            const us10y = await fetchFRED('DGS10');
-            if (us10y !== null) macro.us10y = us10y;
-        }
-        if (macro.vix === null) {
-            const vix = await fetchFRED('VIXCLS');
-            if (vix !== null) macro.vix = vix;
-        }
-    } catch(e) {
-        console.warn('[Macro] FRED fallback falhou:', e.message);
     }
 
-    // 4. Verifica se pelo menos DXY ou VIX não são null (para considerar sucesso)
-    if (macro.dxy !== null || macro.vix !== null) {
+    // 5. Verifica se pelo menos DXY ou US10Y foram obtidos
+    if (macro.dxy !== null || macro.us10y !== null) {
         setCachedData(cacheKey, macro);
         return macro;
     }
