@@ -603,7 +603,7 @@ if (relevant4H.length >= 20) {
         console.log('[blockStats FINAL]', blockStats);
         return { trades, summary };
 
-    } catch (error) {
+    } catch (error) 
         logDebug('ERRO FATAL no backtest:', error.message);
         return { trades: [], summary: { error: error.message } };
     }
