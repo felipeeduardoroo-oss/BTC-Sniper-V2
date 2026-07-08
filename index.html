@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        /* ===== CSS COMPLETO ===== */
+        /* ===== CSS COMPLETO (mesmo da versão anterior) ===== */
         :root {
             --bg-dark: #08090d; --bg-card: #0f1117; --bg-card-hover: #14171f; --primary: #0f1117; --secondary: #1a1d29;
             --border: rgba(255, 255, 255, 0.06); --border-active: rgba(0, 180, 216, 0.5);
@@ -474,7 +474,7 @@
         import { CONFIG } from './js/config.js';
         import { runBacktest } from './js/backtest.js';
 
-        // ===== IMPORTS LIMPOS =====
+        // ===== IMPORTS LIMPOS (corrigido #5) =====
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
             generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
@@ -524,7 +524,7 @@
                 mvrv: null,
                 sopr: null,
                 realizedPrice: null,
-                fearGreedData: null
+                fearGreedData: null   // <-- adicionado para armazenar F&G
             };
         });
 
@@ -984,7 +984,7 @@
             graficos.updateWhaleChart(whaleTrades);
         }
 
-        // ===== WEBSOCKET COM FAILOVER =====
+        // ===== WEBSOCKET COM FAILOVER (P1) =====
         let wsRetryCount = 0;
         const WS_MAX_RETRIES = 5;
         let wsInstance = null;
@@ -993,6 +993,7 @@
         function initWebSockets() {
             const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
             
+            // Tenta Binance primeiro
             const tradeStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
             const klineStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@kline_15m').join('/');
             const streams = tradeStreams + '/' + klineStreams;
@@ -1020,6 +1021,7 @@
                         const qty = parseFloat(data.q);
                         const isBuy = !data.m;
                         setCurrentPrice(symbol, price);
+                        // Whale tracker
                         const tradeValue = price * qty;
                         if (tradeValue > 100000) {
                             if (isBuy) whaleTrades[symbol].buys += tradeValue;
@@ -1035,6 +1037,7 @@
                         if (assetsData[symbol]) {
                             assetsData[symbol].price = price;
                             updateLivePriceUI(symbol, price);
+                            // ===== CORREÇÃO #1: GESTÃO DE POSIÇÃO NO TICK =====
                             if (activePositions[symbol]) checkPositionManagement(symbol, price);
                         }
                     } else if (stream.includes('@kline')) {
@@ -1072,6 +1075,7 @@
                 }
             };
 
+            // Fallback para Bybit
             function tryFallbackWS() {
                 if (wsInstance && wsInstance.readyState !== WebSocket.CLOSED) return;
                 const bybitWs = new WebSocket('wss://stream.bybit.com/v5/public/spot');
@@ -1126,6 +1130,7 @@
                 };
             }
 
+            // Liquidações (isolado)
             const wsLiq = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
             wsLiqInstance = wsLiq;
             wsLiq.onmessage = (event) => {
@@ -1365,7 +1370,7 @@
                 
                 const scoreData = computeScore(symbol, assetsData, liqMap);
 
-                // BOS real
+                // ===== CORREÇÃO #2: ALIMENTAR BOS REAL =====
                 const bosConfirmed = scoreData.direction !== 'NEUTRAL' && findSMCSetup(data, scoreData.direction);
                 data.currentBOS = bosConfirmed ? 'BOS' : 'NEUTRAL';
 
@@ -1409,6 +1414,7 @@
                     if (!derivCheck.allow) blockReason = derivCheck.reason;
                 }
                 
+                // ===== CORREÇÃO #4: EXIBIR CONFIDENCE.SCORE =====
                 if (symbol === 'BTCUSDT') {
                     updateMainScoreUI({ ...scoreData, score: confidence.score }, blockReason);
                     const confEl = document.getElementById('confidence-score');
@@ -1427,8 +1433,7 @@
                         const atr = data.atr_1H || (data.price * 0.02);
                         if (primaryDirection) {
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
-                            // ===== CORREÇÃO #1: return → continue =====
-                            if (expCheck.blocked) continue;
+                            if (expCheck.blocked) return;
                             
                             const ema20 = calcEMA(data.candles1H.map(c=>c.close), 20).slice(-1)[0] || data.price;
                             let retestConfirmed = false;
@@ -1468,12 +1473,11 @@
                                     tp3 = liqTarget2 || (data.price - (atr * 6));
                                 }
                                 const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
-                                // ===== CORREÇÃO #1: return → continue =====
-                                if (rr1 < 1.5) continue;
+                                if (rr1 < 1.5) return;
                                 
                                 const winRate = banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1);
 
-                                // Fear & Greed no motor
+                                // ===== CORREÇÃO #3: FEAR & GREED NO MOTOR =====
                                 const fgFilt = fearGreedFilter(data.fearGreedData, primaryDirection);
                                 if (!fgFilt.pass && !blockReason) blockReason = fgFilt.reason;
                                 const riskPct = KellyPositionSize(winRate, rr1) * (fgFilt.multiplier || 1);
@@ -1598,6 +1602,7 @@
                 if (fg) {
                     document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
                     document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
+                    // ===== CORREÇÃO #3: SALVAR F&G NO ASSET =====
                     assetsData['BTCUSDT'].fearGreedData = fg;
                 }
 
@@ -1656,7 +1661,7 @@
 
             setTimeout(runCommittee, 1000);
 
-            // Força do Sinal a cada 10s
+            // ===== FORÇA DO SINAL ATUALIZANDO A CADA 10 SEGUNDOS =====
             setInterval(async () => {
                 const symbol = 'BTCUSDT';
                 try {
@@ -1672,7 +1677,7 @@
                 }
             }, 10000);
 
-            // Fear & Greed dinâmico
+            // ===== FEAR & GREED DINÂMICO (P4) =====
             setInterval(async () => {
                 const fg = await fetchFearGreed();
                 if (fg) {
@@ -1685,7 +1690,7 @@
                     }
                     assetsData['BTCUSDT'].fearGreedData = fg;
                 }
-            }, 600000);
+            }, 600000); // 10 minutos
 
             setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
@@ -1728,7 +1733,7 @@
                 }, 3000);
             });
 
-            // Backtest
+            // ===== BACKTEST: EVENT LISTENER =====
             document.getElementById('run-backtest-btn').addEventListener('click', async function() {
                 this.disabled = true;
                 this.textContent = '⏳ Processando...';
