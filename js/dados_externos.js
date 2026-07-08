@@ -529,16 +529,16 @@ export function setCurrentPrice(symbol, price) { _currentPrices[symbol] = price;
 export function getCurrentPrice(symbol) { return _currentPrices[symbol] || 0; }
 
 export async function fetchHistoricalCandles(symbol, interval, limit = 100) {
-    const cacheKey = `candles_${symbol}_${interval}_${limit}`;
-    // Cache TTL dinâmico: 15m=30s, 1h=2min, 4h=5min, 1d=30min
+    // CORREÇÃO #5: Limitar a 1000 velas (máximo da Binance)
+    const safeLimit = Math.min(limit, 1000);
+    const cacheKey = `candles_${symbol}_${interval}_${safeLimit}`;
     const ttlMap = { '15m': 30000, '1h': 120000, '4h': 300000, '1d': 1800000 };
     const ttl = ttlMap[interval] || 60000;
     const cached = getCachedData(cacheKey, ttl);
     if (cached && !cached.stale) return cached;
 
-    // Binance (primário)
     try {
-        const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+        const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${safeLimit}`;
         const data = await fetchWithRetry(url, {}, 3);
         if (data && data.length > 0) {
             const candles = data.map(k => ({
