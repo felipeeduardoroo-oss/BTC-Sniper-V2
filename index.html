@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        /* ===== CSS COMPLETO (mesmo da versão anterior) ===== */
+        /* ===== CSS COMPLETO ===== */
         :root {
             --bg-dark: #08090d; --bg-card: #0f1117; --bg-card-hover: #14171f; --primary: #0f1117; --secondary: #1a1d29;
             --border: rgba(255, 255, 255, 0.06); --border-active: rgba(0, 180, 216, 0.5);
@@ -473,8 +473,16 @@
         import * as historico from './js/historicos_sinais.js';
         import { CONFIG } from './js/config.js';
         import { runBacktest } from './js/backtest.js';
-
-        // ===== IMPORTS LIMPOS (corrigido #5) =====
+// ===== INTERCEPTAÇÃO GLOBAL PARA YAHOO FINANCE =====
+const originalFetch = window.fetch;
+window.fetch = function(url, options) {
+    if (typeof url === 'string' && url.includes('query1.finance.yahoo.com')) {
+        const proxyUrl = 'https://corsproxy.io/?url=' + encodeURIComponent(url);
+        return originalFetch(proxyUrl, options);
+    }
+    return originalFetch(url, options);
+};
+        // ===== IMPORTS LIMPOS =====
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
             generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
@@ -524,7 +532,7 @@
                 mvrv: null,
                 sopr: null,
                 realizedPrice: null,
-                fearGreedData: null   // <-- adicionado para armazenar F&G
+                fearGreedData: null
             };
         });
 
@@ -984,7 +992,7 @@
             graficos.updateWhaleChart(whaleTrades);
         }
 
-        // ===== WEBSOCKET COM FAILOVER (P1) =====
+        // ===== WEBSOCKET COM FAILOVER =====
         let wsRetryCount = 0;
         const WS_MAX_RETRIES = 5;
         let wsInstance = null;
@@ -993,7 +1001,6 @@
         function initWebSockets() {
             const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
             
-            // Tenta Binance primeiro
             const tradeStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
             const klineStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@kline_15m').join('/');
             const streams = tradeStreams + '/' + klineStreams;
@@ -1021,7 +1028,6 @@
                         const qty = parseFloat(data.q);
                         const isBuy = !data.m;
                         setCurrentPrice(symbol, price);
-                        // Whale tracker
                         const tradeValue = price * qty;
                         if (tradeValue > 100000) {
                             if (isBuy) whaleTrades[symbol].buys += tradeValue;
@@ -1037,7 +1043,6 @@
                         if (assetsData[symbol]) {
                             assetsData[symbol].price = price;
                             updateLivePriceUI(symbol, price);
-                            // ===== CORREÇÃO #1: GESTÃO DE POSIÇÃO NO TICK =====
                             if (activePositions[symbol]) checkPositionManagement(symbol, price);
                         }
                     } else if (stream.includes('@kline')) {
@@ -1075,7 +1080,6 @@
                 }
             };
 
-            // Fallback para Bybit
             function tryFallbackWS() {
                 if (wsInstance && wsInstance.readyState !== WebSocket.CLOSED) return;
                 const bybitWs = new WebSocket('wss://stream.bybit.com/v5/public/spot');
@@ -1130,7 +1134,6 @@
                 };
             }
 
-            // Liquidações (isolado)
             const wsLiq = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
             wsLiqInstance = wsLiq;
             wsLiq.onmessage = (event) => {
@@ -1370,7 +1373,7 @@
                 
                 const scoreData = computeScore(symbol, assetsData, liqMap);
 
-                // ===== CORREÇÃO #2: ALIMENTAR BOS REAL =====
+                // BOS real
                 const bosConfirmed = scoreData.direction !== 'NEUTRAL' && findSMCSetup(data, scoreData.direction);
                 data.currentBOS = bosConfirmed ? 'BOS' : 'NEUTRAL';
 
@@ -1414,7 +1417,6 @@
                     if (!derivCheck.allow) blockReason = derivCheck.reason;
                 }
                 
-                // ===== CORREÇÃO #4: EXIBIR CONFIDENCE.SCORE =====
                 if (symbol === 'BTCUSDT') {
                     updateMainScoreUI({ ...scoreData, score: confidence.score }, blockReason);
                     const confEl = document.getElementById('confidence-score');
@@ -1433,7 +1435,8 @@
                         const atr = data.atr_1H || (data.price * 0.02);
                         if (primaryDirection) {
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
-                            if (expCheck.blocked) return;
+                            // ===== CORREÇÃO #1: return → continue =====
+                            if (expCheck.blocked) continue;
                             
                             const ema20 = calcEMA(data.candles1H.map(c=>c.close), 20).slice(-1)[0] || data.price;
                             let retestConfirmed = false;
@@ -1473,11 +1476,12 @@
                                     tp3 = liqTarget2 || (data.price - (atr * 6));
                                 }
                                 const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
-                                if (rr1 < 1.5) return;
+                                // ===== CORREÇÃO #1: return → continue =====
+                                if (rr1 < 1.5) continue;
                                 
                                 const winRate = banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1);
 
-                                // ===== CORREÇÃO #3: FEAR & GREED NO MOTOR =====
+                                // Fear & Greed no motor
                                 const fgFilt = fearGreedFilter(data.fearGreedData, primaryDirection);
                                 if (!fgFilt.pass && !blockReason) blockReason = fgFilt.reason;
                                 const riskPct = KellyPositionSize(winRate, rr1) * (fgFilt.multiplier || 1);
@@ -1602,7 +1606,6 @@
                 if (fg) {
                     document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
                     document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
-                    // ===== CORREÇÃO #3: SALVAR F&G NO ASSET =====
                     assetsData['BTCUSDT'].fearGreedData = fg;
                 }
 
@@ -1661,7 +1664,7 @@
 
             setTimeout(runCommittee, 1000);
 
-            // ===== FORÇA DO SINAL ATUALIZANDO A CADA 10 SEGUNDOS =====
+            // Força do Sinal a cada 10s
             setInterval(async () => {
                 const symbol = 'BTCUSDT';
                 try {
@@ -1677,7 +1680,7 @@
                 }
             }, 10000);
 
-            // ===== FEAR & GREED DINÂMICO (P4) =====
+            // Fear & Greed dinâmico
             setInterval(async () => {
                 const fg = await fetchFearGreed();
                 if (fg) {
@@ -1690,7 +1693,7 @@
                     }
                     assetsData['BTCUSDT'].fearGreedData = fg;
                 }
-            }, 600000); // 10 minutos
+            }, 600000);
 
             setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
@@ -1733,7 +1736,7 @@
                 }, 3000);
             });
 
-            // ===== BACKTEST: EVENT LISTENER =====
+            // Backtest
             document.getElementById('run-backtest-btn').addEventListener('click', async function() {
                 this.disabled = true;
                 this.textContent = '⏳ Processando...';
