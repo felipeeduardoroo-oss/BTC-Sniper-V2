@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        /* ===== CSS COMPLETO ===== */
+        /* ===== CSS COMPLETO (mesmo da versão anterior) ===== */
         :root {
             --bg-dark: #08090d; --bg-card: #0f1117; --bg-card-hover: #14171f; --primary: #0f1117; --secondary: #1a1d29;
             --border: rgba(255, 255, 255, 0.06); --border-active: rgba(0, 180, 216, 0.5);
@@ -149,6 +149,29 @@
         }
         .backtest-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(124, 58, 237, 0.6); }
         .backtest-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        
+        /* Estilo para as legendas dos scores */
+        .score-footer {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border);
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            line-height: 1.4;
+        }
+        .score-footer .info-icon {
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+        .score-footer strong {
+            color: var(--text-light);
+        }
+        .score-footer .highlight {
+            color: var(--accent-yellow);
+        }
     </style>
 </head>
 <body>
@@ -186,6 +209,11 @@
                 </div>
                 <div id="block-reason" style="margin-top:10px;font-weight:700;color:var(--accent-red);display:none;"></div>
             </div>
+            <!-- LEGENDA -->
+            <div class="score-footer">
+                <span class="info-icon">ℹ️</span>
+                <span><strong>Score Institucional:</strong> Macro Contexto / Big Picture — 1H + 4H + 1D. Dá a nota geral do mercado (0 a 100). Leva em conta VWAP, estrutura HTF (4H), Macro (DXY/Juros), Blackouts e Risco. <strong>Não gera entrada</strong>, apenas define se o ambiente está seguro para operar.</span>
+            </div>
         </section>
 
         <!-- Força do Sinal (Legado) -->
@@ -206,6 +234,11 @@
                     <span style="color:#8b949e;font-size:11px;">ADX</span><span id="adxDisplay" style="font-size:12px;font-weight:700;">--</span>
                 </div>
                 <div id="mainSignal" style="margin-top:12px;padding:10px;background:#0d1117;border-radius:8px;border:1px solid #30363d;text-align:center;"><div style="color:#8b949e;font-size:14px;">Aguardando dados...</div></div>
+            </div>
+            <!-- LEGENDA -->
+            <div class="score-footer">
+                <span class="info-icon">ℹ️</span>
+                <span><strong>Força do Sinal:</strong> Motor Técnico Genérico (Legado) — 15m, 1H, 4H (Confluência). Mostra a força da tendência baseada em EMA 20/50, RSI, ADX e Taxa de Funding. Diz se o momento atual é "Forte/Alta" ou "Fraco/Baixa". <span class="highlight">Atualmente está órfão no código (não é atualizado), mas a lógica existe.</span></span>
             </div>
         </section>
 
@@ -235,6 +268,11 @@
                     <div style="color:#8b949e;font-size:14px;">Aguardando dados...</div>
                 </div>
             </div>
+            <!-- LEGENDA -->
+            <div class="score-footer">
+                <span class="info-icon">ℹ️</span>
+                <span><strong>Comitê:</strong> Motor de Entrada (Ação Imediata) — Exclusivamente 15m. É o gatilho de entrada. Analisa o livro de ordens (Order Book), divergências, liquidações e gera níveis exatos de Stop Loss, Take Profit e Trailing Stop. Se ele der sinal, é para <strong>entrar na operação agora</strong>.</span>
+            </div>
         </section>
 
         <!-- ===== HISTÓRICO DE SINAIS (BACKTEST) ===== -->
@@ -261,7 +299,7 @@
             </div>
         </section>
 
-        <!-- ===== BACKTEST 30 DIAS (NOVO) ===== -->
+        <!-- ===== BACKTEST 30 DIAS ===== -->
         <section>
             <h2 class="section-title">📈 BACKTEST — ÚLTIMOS 30 DIAS (DADOS REAIS)</h2>
             <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
@@ -358,7 +396,7 @@
             </div>
         </section>
 
-        <!-- ===== INDICADORES MACROECONÔMICOS (ATUALIZADO) ===== -->
+        <!-- ===== INDICADORES MACROECONÔMICOS ===== -->
         <section>
             <h2 class="section-title">🌍 INDICADORES MACROECONÔMICOS</h2>
             <div class="table-wrapper">
@@ -473,16 +511,18 @@
         import * as historico from './js/historicos_sinais.js';
         import { CONFIG } from './js/config.js';
         import { runBacktest } from './js/backtest.js';
-// ===== INTERCEPTAÇÃO GLOBAL PARA YAHOO FINANCE =====
-const originalFetch = window.fetch;
-window.fetch = function(url, options) {
-    if (typeof url === 'string' && url.includes('query1.finance.yahoo.com')) {
-        console.log('[Proxy] Redirecionando Yahoo Finance:', url);
-        const proxyUrl = 'https://corsproxy.io/?url=' + encodeURIComponent(url);
-        return originalFetch(proxyUrl, options);
-    }
-    return originalFetch(url, options);
-};
+
+        // ===== INTERCEPTAÇÃO GLOBAL PARA YAHOO FINANCE =====
+        const originalFetch = window.fetch;
+        window.fetch = function(url, options) {
+            if (typeof url === 'string' && url.includes('query1.finance.yahoo.com')) {
+                console.log('[Proxy] Redirecionando Yahoo Finance:', url);
+                const proxyUrl = 'https://corsproxy.io/?url=' + encodeURIComponent(url);
+                return originalFetch(proxyUrl, options);
+            }
+            return originalFetch(url, options);
+        };
+
         // ===== IMPORTS LIMPOS =====
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
@@ -1328,7 +1368,7 @@ window.fetch = function(url, options) {
             }));
         }
 
-        // ===== AVALIAÇÃO DE MERCADO =====
+        // ===== AVALIAÇÃO DE MERCADO (CORRIGIDO) =====
         async function evaluateMarkets() {
             for (const symbol of CONFIG.ASSETS) {
                 const data = assetsData[symbol];
@@ -1418,6 +1458,23 @@ window.fetch = function(url, options) {
                     if (!derivCheck.allow) blockReason = derivCheck.reason;
                 }
                 
+                // ===== CORREÇÃO #2: MVRV + FEAR & GREED COMO BÔNUS =====
+                let onChainBonus = false;
+                let onChainMultiplier = 1.0;
+                if (symbol === 'BTCUSDT' && data.mvrv !== null && data.mvrv !== undefined) {
+                    const fgVal = data.fearGreedData?.value;
+                    if (primaryDirection === 'LONG' && data.mvrv < 0.8 && fgVal !== null && fgVal < 25) {
+                        onChainBonus = true;
+                        onChainMultiplier = 1.2;
+                        console.log('[On-Chain Bônus] LONG em capitulação (MVRV baixo + medo extremo)');
+                    }
+                    if (primaryDirection === 'SHORT' && data.mvrv > 1.5 && fgVal !== null && fgVal > 75) {
+                        onChainBonus = true;
+                        onChainMultiplier = 1.2;
+                        console.log('[On-Chain Bônus] SHORT em euforia (MVRV alto + ganância extrema)');
+                    }
+                }
+                
                 if (symbol === 'BTCUSDT') {
                     updateMainScoreUI({ ...scoreData, score: confidence.score }, blockReason);
                     const confEl = document.getElementById('confidence-score');
@@ -1436,15 +1493,34 @@ window.fetch = function(url, options) {
                         const atr = data.atr_1H || (data.price * 0.02);
                         if (primaryDirection) {
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
-                            // ===== CORREÇÃO #1: return → continue =====
                             if (expCheck.blocked) continue;
                             
-                            const ema20 = calcEMA(data.candles1H.map(c=>c.close), 20).slice(-1)[0] || data.price;
+                            // ===== CORREÇÃO #1: RETEST DO NÍVEL ROMPIDO (SMC) =====
                             let retestConfirmed = false;
+                            let brokenLevel = null;
+
                             if (primaryDirection === 'LONG') {
-                                if (data.price <= ema20 * 1.005 && data.price >= ema20 * 0.995) retestConfirmed = true;
+                                const highsBelow = data.swingHighs.filter(h => h < data.price);
+                                if (highsBelow.length > 0) {
+                                    brokenLevel = Math.max(...highsBelow);
+                                }
                             } else if (primaryDirection === 'SHORT') {
-                                if (data.price >= ema20 * 0.995 && data.price <= ema20 * 1.005) retestConfirmed = true;
+                                const lowsAbove = data.swingLows.filter(l => l > data.price);
+                                if (lowsAbove.length > 0) {
+                                    brokenLevel = Math.min(...lowsAbove);
+                                }
+                            }
+
+                            if (brokenLevel !== null && brokenLevel > 0) {
+                                const distPct = Math.abs(data.price - brokenLevel) / brokenLevel;
+                                retestConfirmed = distPct < 0.008;
+                            }
+
+                            // Fallback: se não houver nível, tenta a EMA20
+                            if (!retestConfirmed) {
+                                const ema20 = calcEMA(data.candles1H.map(c=>c.close), 20).slice(-1)[0] || data.price;
+                                const emaDist = Math.abs(data.price - ema20) / ema20;
+                                retestConfirmed = emaDist < 0.005;
                             }
                             
                             const smcSetup = findSMCSetup(data, primaryDirection);
@@ -1477,15 +1553,18 @@ window.fetch = function(url, options) {
                                     tp3 = liqTarget2 || (data.price - (atr * 6));
                                 }
                                 const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
-                                // ===== CORREÇÃO #1: return → continue =====
                                 if (rr1 < 1.5) continue;
                                 
-                                const winRate = banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1);
+                                // ===== CORREÇÃO #3: WINRATE SEM LAPLACE =====
+                                const stats = banco.getTradeStats();
+                                const totalTrades = stats.wins + stats.losses;
+                                const winRate = totalTrades > 0 ? stats.wins / totalTrades : 0.5;
 
-                                // Fear & Greed no motor
                                 const fgFilt = fearGreedFilter(data.fearGreedData, primaryDirection);
                                 if (!fgFilt.pass && !blockReason) blockReason = fgFilt.reason;
-                                const riskPct = KellyPositionSize(winRate, rr1) * (fgFilt.multiplier || 1);
+                                
+                                // Aplica o multiplicador on-chain
+                                const riskPct = KellyPositionSize(winRate, rr1) * (fgFilt.multiplier || 1) * onChainMultiplier;
 
                                 if (!blockReason) {
                                     telegram.sendTradeAlert(symbol, primaryDirection.toLowerCase(), score, data.price, stop, [{price: tp1, rr: rr1}, {price: tp2, rr: rr1*2}, {price: tp3, rr: rr1*3}], `MTF ${primaryDirection} + BOS + Re-teste + VWAP`, riskPct, null);
@@ -1517,136 +1596,122 @@ window.fetch = function(url, options) {
         }
 
         // ===== ATUALIZAÇÃO DE DADOS EXTERNOS =====
-      // ===== ATUALIZAÇÃO DE DADOS EXTERNOS =====
-let externalUpdating = false;
-async function updateExternalData() {
-    if (externalUpdating) return;
-    externalUpdating = true;
-    try {
-        // ===== MACRO (SEM FALLBACK) =====
-        const macro = await fetchMacroStatic();
-        if (macro && typeof macro === 'object') {
-            document.getElementById('dxy-value').textContent = macro.dxy !== null && macro.dxy !== undefined ? macro.dxy.toFixed(2) : '--';
-            document.getElementById('us10y-value').textContent = macro.us10y !== null && macro.us10y !== undefined ? macro.us10y.toFixed(2) + '%' : '--';
-            document.getElementById('vix-value').textContent = macro.vix !== null && macro.vix !== undefined ? macro.vix.toFixed(2) : '--';
-            
-            const nasdaqChange = macro.nasdaqChange;
-            document.getElementById('nasdaq-value').textContent = nasdaqChange !== null && nasdaqChange !== undefined 
-                ? (nasdaqChange >= 0 ? '+' : '') + nasdaqChange.toFixed(2) + '%' 
-                : '--';
-            
-            const spChange = macro.spChange;
-            document.getElementById('sp500-value').textContent = spChange !== null && spChange !== undefined 
-                ? (spChange >= 0 ? '+' : '') + spChange.toFixed(2) + '%' 
-                : '--';
-            
-            const dxyDisplay = macro.dxy !== null && macro.dxy !== undefined ? macro.dxy.toFixed(2) : '--';
-            const us10yDisplay = macro.us10y !== null && macro.us10y !== undefined ? macro.us10y.toFixed(2) : '--';
-            document.getElementById('macro-summary').textContent = `DXY ${dxyDisplay} | US10Y ${us10yDisplay}%`;
-        } else {
-            // Se macro for null, exibe "INDISPONÍVEL" em todos os campos
-            const macroFields = ['dxy-value', 'us10y-value', 'vix-value', 'nasdaq-value', 'sp500-value', 'macro-summary'];
-            macroFields.forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.textContent = '--';
-            });
-        }
+        let externalUpdating = false;
+        async function updateExternalData() {
+            if (externalUpdating) return;
+            externalUpdating = true;
+            try {
+                // ===== MACRO =====
+                const macro = await fetchMacroStatic();
+                if (macro && typeof macro === 'object') {
+                    document.getElementById('dxy-value').textContent = macro.dxy !== null && macro.dxy !== undefined ? macro.dxy.toFixed(2) : '--';
+                    document.getElementById('us10y-value').textContent = macro.us10y !== null && macro.us10y !== undefined ? macro.us10y.toFixed(2) + '%' : '--';
+                    document.getElementById('vix-value').textContent = macro.vix !== null && macro.vix !== undefined ? macro.vix.toFixed(2) : '--';
+                    
+                    const nasdaqChange = macro.nasdaqChange;
+                    document.getElementById('nasdaq-value').textContent = nasdaqChange !== null && nasdaqChange !== undefined 
+                        ? (nasdaqChange >= 0 ? '+' : '') + nasdaqChange.toFixed(2) + '%' 
+                        : '--';
+                    
+                    const spChange = macro.spChange;
+                    document.getElementById('sp500-value').textContent = spChange !== null && spChange !== undefined 
+                        ? (spChange >= 0 ? '+' : '') + spChange.toFixed(2) + '%' 
+                        : '--';
+                    
+                    const dxyDisplay = macro.dxy !== null && macro.dxy !== undefined ? macro.dxy.toFixed(2) : '--';
+                    const us10yDisplay = macro.us10y !== null && macro.us10y !== undefined ? macro.us10y.toFixed(2) : '--';
+                    document.getElementById('macro-summary').textContent = `DXY ${dxyDisplay} | US10Y ${us10yDisplay}%`;
+                } else {
+                    const macroFields = ['dxy-value', 'us10y-value', 'vix-value', 'nasdaq-value', 'sp500-value', 'macro-summary'];
+                    macroFields.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.textContent = '--';
+                    });
+                }
 
-        // ===== MVRV =====
-        const mvrv = await fetchMVRV();
-        setTextOrNA('mvrv', mvrv);
-        if (mvrv !== null && !isNaN(mvrv)) {
-            document.getElementById('mvrv-interp').textContent = mvrv > 1.0 ? '⚠️ Acima de 1.0' : 'ℹ️ Abaixo de 1.0';
-            if (assetsData['BTCUSDT']) assetsData['BTCUSDT'].mvrv = mvrv;
-        } else {
-            document.getElementById('mvrv-interp').textContent = '--';
-        }
+                const mvrv = await fetchMVRV();
+                setTextOrNA('mvrv', mvrv);
+                if (mvrv !== null && !isNaN(mvrv)) {
+                    document.getElementById('mvrv-interp').textContent = mvrv > 1.0 ? '⚠️ Acima de 1.0' : 'ℹ️ Abaixo de 1.0';
+                    if (assetsData['BTCUSDT']) assetsData['BTCUSDT'].mvrv = mvrv;
+                } else {
+                    document.getElementById('mvrv-interp').textContent = '--';
+                }
 
-        // ===== ACTIVE ADDRESSES =====
-        const cqActive = await fetchCQActiveAddresses();
-        setTextOrNA('active-addresses', cqActive);
-        if (cqActive === null) {
-            const blockchair = await fetchBlockchairStats();
-            if (blockchair) {
-                document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
+                const cqActive = await fetchCQActiveAddresses();
+                setTextOrNA('active-addresses', cqActive);
+                if (cqActive === null) {
+                    const blockchair = await fetchBlockchairStats();
+                    if (blockchair) {
+                        document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
+                    }
+                }
+
+                const hashrate = await fetchHashrate();
+                if (hashrate !== null) {
+                    document.getElementById('btc-hashrate').textContent = (hashrate / 1e6).toFixed(2) + ' EH/s';
+                }
+
+                const funding = await fetchFundingRate('BTCUSDT');
+                if (funding) {
+                    document.getElementById('funding-rate').textContent = (funding.rate * 100).toFixed(4) + '%';
+                    document.getElementById('funding-rate-interp').textContent = funding.interpretacao;
+                    if (assetsData['BTCUSDT']) assetsData['BTCUSDT'].fundingRate = funding.rate;
+                }
+
+                const oiData = await fetchOIDelta('BTCUSDT');
+                if (oiData) {
+                    document.getElementById('open-interest').textContent = '$' + (oiData.oi / 1e6).toFixed(2) + 'M';
+                    document.getElementById('oi-delta').textContent = oiData.delta.toFixed(2) + '%';
+                    const oiInterp = document.getElementById('oi-delta-interp');
+                    if (oiInterp) {
+                        oiInterp.textContent = oiData.delta > 5 ? '🟢 Crescendo' : oiData.delta < -5 ? '🔴 Diminuindo' : 'ℹ️ Estável';
+                    }
+                }
+
+                const basis = await fetchBasis('BTCUSDT');
+                setTextOrNA('basis', basis !== null ? (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%' : null);
+
+                const pcr = await fetchPutCallRatio();
+                setTextOrNA('put-call-ratio', pcr !== null ? pcr.toFixed(2) : null);
+                if (pcr !== null) {
+                    document.getElementById('put-call-interp').textContent = pcr > 1.5 ? '⚠️ Medo' : pcr < 0.7 ? '✅ Otimismo' : 'ℹ️ Neutro';
+                }
+
+                const ethGas = await fetchEthGasPrice();
+                setTextOrNA('eth-gas', ethGas, '', ' Gwei');
+
+                const premium = await fetchTetherPremium();
+                const tetherEl = document.getElementById('tether-premium');
+                if (tetherEl) {
+                    tetherEl.textContent = premium !== null ? ((premium >= 0 ? '+' : '') + premium.toFixed(2) + '%') : 'N/A';
+                    tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
+                }
+
+                const fedRate = await fetchFedRate();
+                setTextOrNA('fed-rate', fedRate, '', '%');
+
+                const defi = await fetchDeFiData();
+                if (defi) {
+                    document.getElementById('stablecoin-supply').textContent = '$' + defi.totalStable.toFixed(0) + 'B';
+                    document.getElementById('defi-tvl').textContent = '$' + defi.tvl.toFixed(1) + 'B';
+                    document.getElementById('defi-tvl-change').textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
+                }
+
+                const fg = await fetchFearGreed();
+                if (fg) {
+                    document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
+                    document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
+                    assetsData['BTCUSDT'].fearGreedData = fg;
+                }
+
+            } catch (e) {
+                console.warn('Erro ao atualizar dados externos:', e);
+            } finally {
+                externalUpdating = false;
+                setTimeout(updateExternalData, 120000);
             }
         }
-
-        // ===== HASHRATE =====
-        const hashrate = await fetchHashrate();
-        if (hashrate !== null) {
-            document.getElementById('btc-hashrate').textContent = (hashrate / 1e6).toFixed(2) + ' EH/s';
-        }
-
-        // ===== FUNDING RATE =====
-        const funding = await fetchFundingRate('BTCUSDT');
-        if (funding) {
-            document.getElementById('funding-rate').textContent = (funding.rate * 100).toFixed(4) + '%';
-            document.getElementById('funding-rate-interp').textContent = funding.interpretacao;
-            if (assetsData['BTCUSDT']) assetsData['BTCUSDT'].fundingRate = funding.rate;
-        }
-
-        // ===== OPEN INTEREST =====
-        const oiData = await fetchOIDelta('BTCUSDT');
-        if (oiData) {
-            document.getElementById('open-interest').textContent = '$' + (oiData.oi / 1e6).toFixed(2) + 'M';
-            document.getElementById('oi-delta').textContent = oiData.delta.toFixed(2) + '%';
-            const oiInterp = document.getElementById('oi-delta-interp');
-            if (oiInterp) {
-                oiInterp.textContent = oiData.delta > 5 ? '🟢 Crescendo' : oiData.delta < -5 ? '🔴 Diminuindo' : 'ℹ️ Estável';
-            }
-        }
-
-        // ===== BASIS =====
-        const basis = await fetchBasis('BTCUSDT');
-        setTextOrNA('basis', basis !== null ? (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%' : null);
-
-        // ===== PUT/CALL RATIO =====
-        const pcr = await fetchPutCallRatio();
-        setTextOrNA('put-call-ratio', pcr !== null ? pcr.toFixed(2) : null);
-        if (pcr !== null) {
-            document.getElementById('put-call-interp').textContent = pcr > 1.5 ? '⚠️ Medo' : pcr < 0.7 ? '✅ Otimismo' : 'ℹ️ Neutro';
-        }
-
-        // ===== ETH GAS =====
-        const ethGas = await fetchEthGasPrice();
-        setTextOrNA('eth-gas', ethGas, '', ' Gwei');
-
-        // ===== TETHER PREMIUM =====
-        const premium = await fetchTetherPremium();
-        const tetherEl = document.getElementById('tether-premium');
-        if (tetherEl) {
-            tetherEl.textContent = premium !== null ? ((premium >= 0 ? '+' : '') + premium.toFixed(2) + '%') : 'N/A';
-            tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
-        }
-
-        // ===== FED RATE (SEM FALLBACK) =====
-        const fedRate = await fetchFedRate();
-        setTextOrNA('fed-rate', fedRate, '', '%');
-
-        // ===== DEFI =====
-        const defi = await fetchDeFiData();
-        if (defi) {
-            document.getElementById('stablecoin-supply').textContent = '$' + defi.totalStable.toFixed(0) + 'B';
-            document.getElementById('defi-tvl').textContent = '$' + defi.tvl.toFixed(1) + 'B';
-            document.getElementById('defi-tvl-change').textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
-        }
-
-        // ===== FEAR & GREED =====
-        const fg = await fetchFearGreed();
-        if (fg) {
-            document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
-            document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
-            assetsData['BTCUSDT'].fearGreedData = fg;
-        }
-
-    } catch (e) {
-        console.warn('Erro ao atualizar dados externos:', e);
-    } finally {
-        externalUpdating = false;
-        setTimeout(updateExternalData, 120000);
-    }
-}
 
         // ===== BOOTSTRAP =====
         async function init() {
