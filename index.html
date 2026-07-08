@@ -1450,7 +1450,7 @@ const {
                         const atr = data.atr_1H || (data.price * 0.02);
                         if (primaryDirection) {
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
-                            if (expCheck.blocked) return;
+                           if (expCheck.blocked) continue;
                             
                             const ema20 = calcEMA(data.candles1H.map(c=>c.close), 20).slice(-1)[0] || data.price;
                             let retestConfirmed = false;
@@ -1490,7 +1490,7 @@ const {
                                     tp3 = liqTarget2 || (data.price - (atr * 6));
                                 }
                                 const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
-                                if (rr1 < 1.5) return;
+                               if (rr1 < 1.5) continue;
                                 
                                 const winRate = banco.getTradeStats().wins / (banco.getTradeStats().wins + banco.getTradeStats().losses + 1);
 
