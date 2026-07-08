@@ -456,7 +456,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
 
                 // 2. BOS com lookback de 5 candles (substitui findSMCSetup)
                 let smcSetup = false;
-                const lookback = 15;
+                const lookback = 5;
                 const startIdx = Math.max(0, state.candles1H.length - lookback);
                 const recentCandles = state.candles1H.slice(startIdx);
 
