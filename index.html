@@ -489,7 +489,14 @@ window.fetch = function(url, options) {
 
 // ===== IMPORTS LIMPOS (corrigido #5) =====
 const {
-    calculateADX, ...
+    calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
+    generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
+    calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
+    detectHTFStructure, updateSwingPoints, findSMCSetup, checkLateralMarket,
+    checkOnChainFilter, checkDerivativesFilter,
+    checkPortfolioExposure, computeScore, isSafeToTrade,
+    KellyPositionSize, detectVolumeAnomaly, isHighImpactEventNow,
+    calculateConfidenceScore, calculateVWAP
 } = indicadores;
         // ===== IMPORTS LIMPOS (corrigido #5) =====
         const {
