@@ -225,7 +225,6 @@ export function generateTrailingStopParams(candles, entryPrice, direction, atrMu
 // ============================================================
 // 6. SCORE DE CONFIANÇA — CORREÇÃO #5 (macro blackout integrado)
 // ============================================================
-
 export function calculateConfidenceScore(symbolData) {
     let score = 0;
     const reasons = [];
@@ -240,14 +239,20 @@ export function calculateConfidenceScore(symbolData) {
         smcStructure: 0.15
     };
     
-    if (symbolData.mtfAligned) { score += weights.mtfAlignment; reasons.push('MTF_ALIGNED'); }
+    // MTF Alignment (com penalidade, sem hard cap)
+    if (symbolData.mtfAligned) { 
+        score += weights.mtfAlignment; 
+        reasons.push('MTF_ALIGNED'); 
+    } else {
+        score -= weights.mtfAlignment * 0.5;
+        reasons.push('MTF_NOT_ALIGNED');
+    }
     
     const adxValue = typeof symbolData.adx === 'object' ? symbolData.adx.adx : symbolData.adx;
     if (adxValue > 25) { score += weights.adxTrend; reasons.push('ADX_STRONG'); }
     
     if (symbolData.volumeAnomaly?.isAnomaly) { score += weights.volumeAnomaly; reasons.push('VOLUME_SPIKE'); }
     
-    // CORREÇÃO: Lógica de Funding Rate direcional
     const frValue = typeof symbolData.fundingRate === 'object' ? symbolData.fundingRate.rate : symbolData.fundingRate;
     if (symbolData.direction === 'LONG') {
         if (frValue < -0.0001) { score += weights.fundingRate; reasons.push('FUNDING_NEGATIVE'); }
@@ -257,7 +262,6 @@ export function calculateConfidenceScore(symbolData) {
         else if (frValue < -0.0001) { score -= weights.fundingRate * 0.5; reasons.push('FUNDING_NEGATIVE'); }
     }
     
-    // CORREÇÃO: Lógica de Open Interest direcional
     if (symbolData.direction === 'LONG' && symbolData.openInterestTrend === 'INCREASING') { 
         score += weights.openInterest; reasons.push('OI_RISING'); 
     } else if (symbolData.direction === 'SHORT' && symbolData.openInterestTrend === 'DECREASING') { 
@@ -284,10 +288,7 @@ export function calculateConfidenceScore(symbolData) {
     
     if (symbolData.smcStructure === 'BOS') { score += weights.smcStructure; reasons.push('SMC_BOS'); }
     
-    if (!symbolData.mtfAligned && score > 0.4) {
-        score = 0.4;
-        reasons.push('MTF_REQUIRED_FOR_HIGH_SCORE');
-    }
+    // O hard cap que impedia o score de passar de 40 foi removido
     
     const level = score >= 0.8 ? 'VERY_HIGH' :
                   score >= 0.6 ? 'HIGH' :
@@ -301,6 +302,8 @@ export function calculateConfidenceScore(symbolData) {
         direction: score >= 0.4 ? (symbolData.direction || 'NEUTRO') : 'NEUTRO'
     };
 }
+
+    
 
 // ============================================================
 // 7. FILTRO MACRO (dinâmico) — CORREÇÃO #11 (datas dinâmicas)
