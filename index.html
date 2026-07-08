@@ -1932,12 +1932,24 @@
 
             // Backtest
             // Backtest
+// ===== BACKTEST (SUBSTITUIR O BLOCO INTEIRO) =====
 document.getElementById('run-backtest-btn').addEventListener('click', async function() {
     this.disabled = true;
     this.textContent = '⏳ Processando...';
     document.getElementById('backtest-status').textContent = 'Buscando dados históricos...';
     try {
-        const result = await runBacktest('BTCUSDT', 30);
+        // ===== LER OS PARÂMETROS DO FORMULÁRIO =====
+        const options = {
+            scoreMin: parseFloat(document.getElementById('param-score').value) || 70,
+            adxMin: parseFloat(document.getElementById('param-adx').value) || 25,
+            retestDistPct: (parseFloat(document.getElementById('param-retest-dist').value) || 0.8) / 100,
+            rrMin: parseFloat(document.getElementById('param-rr').value) || 1.5,
+            emaRetest: document.getElementById('param-ema-retest').checked,
+            mtfRequired: document.getElementById('param-mtf-required').checked
+        };
+        console.log('[Backtest UI] Parâmetros enviados:', options);
+
+        const result = await runBacktest('BTCUSDT', 30, options);
         const { trades, summary } = result;
         
         const summaryDiv = document.getElementById('backtest-summary');
@@ -1954,6 +1966,26 @@ document.getElementById('run-backtest-btn').addEventListener('click', async func
                 <div class="summary-card"><h3>Profit Factor</h3><div class="value">${summary.profitFactor.toFixed(2)}</div></div>
                 <div class="summary-card"><h3>Equity Final</h3><div class="value ${summary.finalEquity >= 10000 ? 'positive' : 'negative'}">$${summary.finalEquity.toFixed(2)}</div></div>
             `;
+
+            // ===== MOSTRAR O DIAGNÓSTICO (blockStats) =====
+            const diagDiv = document.getElementById('backtest-diagnostic');
+            const statsDiv = document.getElementById('backtest-blockstats');
+            if (summary.blockStats && Object.keys(summary.blockStats).length > 0) {
+                diagDiv.style.display = 'block';
+                const totalCandles = Object.values(summary.blockStats).reduce((a, b) => a + b, 0) || 1;
+                statsDiv.innerHTML = Object.entries(summary.blockStats)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([reason, count]) => {
+                        const pct = ((count / totalCandles) * 100).toFixed(1);
+                        const isGood = reason === 'passou_filtros';
+                        const style = isGood
+                            ? 'background:rgba(0,230,118,0.15);color:#00e676;border:1px solid rgba(0,230,118,0.3);'
+                            : 'background:rgba(255,82,82,0.12);color:#ff5252;border:1px solid rgba(255,82,82,0.2);';
+                        return `<span style="padding:4px 10px;border-radius:6px;font-size:0.75rem;${style}">${reason}: ${count} (${pct}%)</span>`;
+                    }).join('');
+            } else {
+                diagDiv.style.display = 'none';
+            }
         }
 
         const tbody = document.getElementById('backtest-tbody');
