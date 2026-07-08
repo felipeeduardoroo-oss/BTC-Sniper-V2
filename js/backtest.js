@@ -40,7 +40,7 @@ function findMostRecent(arr, cond) {
 function getMTFAlignmentAtTime(candles1H, candles4H, currentTime) {
     const relevant1H = candles1H.filter(c => c.time <= currentTime).slice(-50);
     const relevant4H = candles4H.filter(c => c.time <= currentTime).slice(-50);
-    
+
     if (relevant1H.length < 20 || relevant4H.length < 10) {
         return { alinhado: false, score: 0, directions: [] };
     }
@@ -425,7 +425,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             // ===== ENTRADA (CORRIGIDO – BOS com lookback de 5 candles) =====
             if (!position && !blockReason && primaryDirection) {
                 const atr = state.atr_1H || (state.price * 0.02);
-                
+
                 // 1. Retest do nível estrutural
                 let retestConfirmed = false;
                 let brokenLevel = null;
@@ -478,8 +478,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
 
                 // 3. Contabiliza diagnóstico
                 totalCandlesProcessed++;
-                const reasonKey = blockReason || (primaryDirection ? 
-                    (retestConfirmed ? (smcSetup ? 'passou_filtros' : 'sem_BOS') : 'sem_retest') 
+                const reasonKey = blockReason || (primaryDirection ?
+                    (retestConfirmed ? (smcSetup ? 'passou_filtros' : 'sem_BOS') : 'sem_retest')
                     : 'score_neutro');
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
@@ -499,7 +499,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     }
                     const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
                     if (rr1 < rrMin) {
-                        // R:R insuficiente – não abre posição, mas já contabilizamos como 'passou_filtros'
                         continue;
                     }
 
@@ -507,7 +506,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     const totalTrades = winCount + lossCount;
                     const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
                     const kellyPct = KellyPositionSize(winRate, rr1);
-                    const riskFraction = Math.min(kellyPct, 0.05); // máximo 5% do equity
+                    const riskFraction = Math.min(kellyPct, 0.05);
 
                     const stopDistancePct = primaryDirection === 'LONG' ? (state.price - stop) / state.price : (stop - state.price) / state.price;
                     const positionSizeUSD = (riskFraction * equity) / stopDistancePct;
