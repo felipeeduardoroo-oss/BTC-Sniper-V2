@@ -173,82 +173,93 @@ export const fetchMacroStatic = async () => {
     const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
-    // Se tiver Alpha Vantage key, usa (mais confiável)
+    // Se tiver chave da Alpha Vantage, usa (prioridade 1)
     if (CONFIG.ALPHAVANTAGE_API_KEY) {
         try {
             const symbols = ['DXY', 'DGS10', 'VIX', 'SPX', 'NDX'];
             const fetchSymbol = async (symbol) => {
                 await sleep(300);
                 const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${CONFIG.ALPHAVANTAGE_API_KEY}`;
-                return await fetchViaProxy(url, {}, 2);
+                // Usa fetch direto (Alpha Vantage permite CORS) ou via proxy se necessário
+                const resp = await fetchWithRetry(url, {}, 2);
+                return resp;
             };
             const results = await Promise.all(symbols.map(s => fetchSymbol(s)));
 
-            const parseQuote = (data, defaultVal) => {
+            const parseQuote = (data) => {
                 const val = data?.['Global Quote']?.['05. price'];
-                return val !== undefined && val !== null ? parseFloat(val) : defaultVal;
+                return val !== undefined && val !== null ? parseFloat(val) : null;
             };
-            const parseChange = (data, defaultVal) => {
+            const parseChange = (data) => {
                 const val = data?.['Global Quote']?.['10. change percent'];
-                if (val) return parseFloat(val.replace('%', ''));
-                return defaultVal;
+                if (val) {
+                    const num = parseFloat(val.replace('%', ''));
+                    return isNaN(num) ? null : num;
+                }
+                return null;
             };
 
             const macro = {
-                dxy: parseQuote(results[0], 101.5),
-                us10y: parseQuote(results[1], 4.28),
-                vix: parseQuote(results[2], 20.5),
-                spChange: parseChange(results[3], -0.5),
-                nasdaqChange: parseChange(results[4], -0.8)
+                dxy: parseQuote(results[0]),
+                us10y: parseQuote(results[1]),
+                vix: parseQuote(results[2]),
+                spChange: parseChange(results[3]),
+                nasdaqChange: parseChange(results[4])
             };
 
-            if (!(macro.dxy === 101.5 && macro.us10y === 4.28 && macro.vix === 20.5)) {
+            // Verifica se pelo menos um dado relevante foi obtido (ex: DXY)
+            if (macro.dxy !== null) {
                 setCachedData(cacheKey, macro);
                 return macro;
             }
+            console.warn('[Macro] Alpha Vantage retornou dados nulos, tentando FRED...');
         } catch (e) {
-            console.warn('[Macro] Alpha Vantage falhou, tentando Yahoo:', e.message);
+            console.warn('[Macro] Alpha Vantage falhou:', e.message);
         }
     }
 
-    // Fallback: Yahoo Finance via proxy (não precisa de API key)
+    // Fallback FRED via proxy (SEM CHAVE, mas com dados reais)
     try {
-        const fetchYahoo = async (ticker) => {
-            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=1d&interval=1d`;
-            const data = await fetchViaProxy(url, {}, 2);
-            if (data?.chart?.result?.[0]?.meta) {
-                const meta = data.chart.result[0].meta;
-                return { 
-                    current: meta.regularMarketPrice, 
-                    change: ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100 
-                };
+        const ids = {
+            dxy: 'DTWEXBGS',
+            us10y: 'DGS10',
+            vix: 'VIXCLS'
+            // spChange e nasdaqChange são mais difíceis via FRED CSV, deixamos null
+        };
+        const fetchFRED = async (id) => {
+            const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=2025-01-01`;
+            const csv = await fetchViaProxy(url, {}, 2);
+            if (typeof csv === 'string') {
+                const lines = csv.trim().split('\n');
+                if (lines.length < 2) return null;
+                const lastLine = lines[lines.length - 1];
+                const parts = lastLine.split(',');
+                if (parts.length < 2) return null;
+                const val = parseFloat(parts[1]);
+                return isNaN(val) ? null : val;
             }
             return null;
         };
-        
-        const [dxy, us10y, vix, sp, nasdaq] = await Promise.all([
-            fetchYahoo('DX-Y.NYB'), fetchYahoo('^TNX'), fetchYahoo('^VIX'), 
-            fetchYahoo('^GSPC'), fetchYahoo('^NDQ')
-        ]);
-        
-        const macro = {
-            dxy: dxy?.current || 101.5,
-            us10y: us10y?.current || 4.28,
-            vix: vix?.current || 20.5,
-            spChange: sp?.change || 0,
-            nasdaqChange: nasdaq?.change || 0
-        };
-        
-        setCachedData(cacheKey, macro);
-        return macro;
+
+        const dxy = await fetchFRED(ids.dxy);
+        const us10y = await fetchFRED(ids.us10y);
+        const vix = await fetchFRED(ids.vix);
+
+        const macro = { dxy, us10y, vix, spChange: null, nasdaqChange: null };
+
+        if (dxy !== null || us10y !== null || vix !== null) {
+            setCachedData(cacheKey, macro);
+            return macro;
+        }
+        console.warn('[Macro] FRED não retornou dados válidos.');
     } catch(e) {
-        console.warn('[Macro] Yahoo falhou:', e.message);
+        console.warn('[Macro] FRED falhou:', e.message);
     }
 
-    if (cached) return cached;
-    return { dxy: 101.5, us10y: 4.28, vix: 20.5, spChange: -0.5, nasdaqChange: -0.8 };
+    // Se tudo falhar → retorna NULL (sem fallback)
+    setCachedData(cacheKey, null);
+    return null;
 };
-
 // ============================================================
 // 3. FED RATE — CORREÇÃO #7 (funciona sem Alpha Vantage key)
 // ============================================================
