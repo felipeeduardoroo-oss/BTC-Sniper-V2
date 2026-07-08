@@ -456,7 +456,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
 
                 // 2. BOS com lookback de 5 candles (substitui findSMCSetup)
                 let smcSetup = false;
-                const lookback = 5;
+                const lookback = 15;
                 const startIdx = Math.max(0, state.candles1H.length - lookback);
                 const recentCandles = state.candles1H.slice(startIdx);
 
@@ -470,12 +470,14 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 } else if (primaryDirection === 'SHORT') {
                     const lows = recentCandles.map(c => c.low);
                     const minLow = Math.min(...lows);
-                    const lastSwingLow = Math.min(...state.swingLows);
-                    if (minLow < lastSwingLow && state.price > minLow && state.price < lastSwingLow) {
-                        smcSetup = true;
-                    }
-                }
-
+               // Usar swings de 4H (estrutura mais estável)
+const relevant4H = state.candles4H.filter(c => c.time <= candle.time);
+if (relevant4H.length >= 20) {
+    const htf = detectHTFStructure(state, relevant4H);
+    const lastSwingHigh = htf.lastSwingHigh || Math.max(...state.swingHighs);
+    const lastSwingLow = htf.lastSwingLow || Math.min(...state.swingLows);
+    // Usar esses valores para o BOS
+}
                 // 3. Contabiliza diagnóstico
                 totalCandlesProcessed++;
                 const reasonKey = blockReason || (primaryDirection ? 
@@ -484,7 +486,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
                 // 4. Abrir posição se todas as condições forem atendidas
-                if (smcSetup && retestConfirmed) {
+                if (smcSetup && (retestConfirmed || !emaRetest)) {
                     let stop, tp1, tp2;
                     if (primaryDirection === 'LONG') {
                         const structLevel = Math.min(...state.swingLows) - (atr * 0.3);
