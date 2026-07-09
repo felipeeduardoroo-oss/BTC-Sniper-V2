@@ -134,7 +134,6 @@
         .confidence-LOW { background: rgba(255,152,0,0.15); color: #ff9800; border: 1px solid #ff9800; }
         .confidence-VERY_LOW { background: rgba(255,82,82,0.15); color: #ff5252; border: 1px solid #ff5252; }
 
-        /* Estilo para o botão de backtest */
         .backtest-btn {
             background: var(--accent-purple);
             color: #fff;
@@ -150,7 +149,6 @@
         .backtest-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(124, 58, 237, 0.6); }
         .backtest-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
         
-        /* Estilo para as legendas dos scores */
         .score-footer {
             margin-top: 8px;
             padding-top: 8px;
@@ -300,164 +298,134 @@
         </section>
 
         <!-- ===== BACKTEST 30 DIAS ===== -->
-   <!-- ===== BACKTEST 30 DIAS (NOVO) ===== -->
-<section>
-    <h2 class="section-title">📈 BACKTEST — ÚLTIMOS 30 DIAS (DADOS REAIS)</h2>
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
-        <!-- PAINEL DE PARÂMETROS -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
-            <!-- Score mínimo -->
-            <div>
-                <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
-                    Score mínimo
-                    <span style="color:var(--accent-yellow);cursor:help;" title="Score mínimo para considerar um sinal de entrada (padrão 70).">ⓘ</span>
-                </label>
-                <input type="number" id="param-score" value="70" min="0" max="100" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
-                <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 70</div>
+        <section>
+            <h2 class="section-title">📈 BACKTEST — ÚLTIMOS 30 DIAS (DADOS REAIS)</h2>
+            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
+                <!-- PAINEL DE PARÂMETROS -->
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
+                    <div>
+                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
+                            Score mínimo
+                            <span style="color:var(--accent-yellow);cursor:help;" title="Score mínimo para considerar um sinal de entrada (padrão 70).">ⓘ</span>
+                        </label>
+                        <input type="number" id="param-score" value="60" min="0" max="100" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
+                        <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 60</div>
+                    </div>
+                    <div>
+                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
+                            ADX mínimo
+                            <span style="color:var(--accent-yellow);cursor:help;" title="Valor mínimo de ADX para filtrar mercados laterais (padrão 25).">ⓘ</span>
+                        </label>
+                        <input type="number" id="param-adx" value="10" min="0" max="100" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
+                        <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 10</div>
+                    </div>
+                    <div>
+                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
+                            Dist. retest (%)
+                            <span style="color:var(--accent-yellow);cursor:help;" title="Distância máxima do preço em relação ao nível rompido para considerar reteste (padrão 0.8%).">ⓘ</span>
+                        </label>
+                        <input type="number" id="param-retest-dist" value="0.8" min="0" max="5" step="0.1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
+                        <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 0.8%</div>
+                    </div>
+                    <div>
+                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
+                            R:R mínimo
+                            <span style="color:var(--accent-yellow);cursor:help;" title="Relação risco:retorno mínima exigida (padrão 1.5).">ⓘ</span>
+                        </label>
+                        <input type="number" id="param-rr" value="0.1" min="0.1" max="10" step="0.1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
+                        <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 0.1</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="param-ema-retest" style="accent-color:var(--accent-blue);">
+                        <label for="param-ema-retest" style="font-size:0.8rem;color:var(--text-muted);">
+                            Retest EMA20
+                            <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, também considera reteste da EMA20 como alternativa.">ⓘ</span>
+                        </label>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="param-mtf-required" style="accent-color:var(--accent-blue);">
+                        <label for="param-mtf-required" style="font-size:0.8rem;color:var(--text-muted);">
+                            Exigir MTF alinhado
+                            <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, exige alinhamento MTF (1h/4h) para entrada.">ⓘ</span>
+                        </label>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="param-ignore-bos" checked style="accent-color:var(--accent-purple);">
+                        <label for="param-ignore-bos" style="font-size:0.8rem;color:var(--text-muted);">
+                            Ignorar BOS
+                            <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, entra apenas com score + retest (sem exigir BOS).">ⓘ</span>
+                        </label>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="param-ignore-retest" checked style="accent-color:var(--accent-red);">
+                        <label for="param-ignore-retest" style="font-size:0.8rem;color:var(--text-muted);">
+                            Ignorar retest
+                            <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, entra apenas com BOS (ou sem BOS, se 'Ignorar BOS' também estiver ativo).">ⓘ</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
+                    <button id="run-backtest-btn" class="backtest-btn">▶️ Executar Backtest</button>
+                    <span id="backtest-status" style="color:var(--text-muted);">Aguardando execução</span>
+                </div>
+                <div id="backtest-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:16px;"></div>
+                <div id="backtest-diagnostic" style="margin-top:12px;font-size:0.8rem;color:var(--text-muted);background:var(--bg-dark);padding:12px;border-radius:8px;border:1px solid var(--border);display:none;">
+                    <strong>Diagnóstico de bloqueios:</strong>
+                    <div id="backtest-blockstats" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;"></div>
+                </div>
             </div>
-            <!-- ADX mínimo -->
-            <div>
-                <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
-                    ADX mínimo
-                    <span style="color:var(--accent-yellow);cursor:help;" title="Valor mínimo de ADX para filtrar mercados laterais (padrão 25).">ⓘ</span>
-                </label>
-                <input type="number" id="param-adx" value="25" min="0" max="100" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
-                <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 25</div>
+            <div class="table-wrapper" id="backtest-table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Entrada (UTC)</th>
+                            <th>Ativo</th>
+                            <th>Direção</th>
+                            <th>Preço Entrada</th>
+                            <th>Stop Loss</th>
+                            <th>Take Profit 1</th>
+                            <th>Preço Saída</th>
+                            <th>Motivo</th>
+                            <th>P&L (%)</th>
+                            <th>Duração (h)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="backtest-tbody">
+                        <tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum backtest executado ainda.</td></tr>
+                    </tbody>
+                </table>
             </div>
-            <!-- Distância retest (%) -->
-            <div>
-                <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
-                    Dist. retest (%)
-                    <span style="color:var(--accent-yellow);cursor:help;" title="Distância máxima do preço em relação ao nível rompido para considerar reteste (padrão 0.8%).">ⓘ</span>
-                </label>
-                <input type="number" id="param-retest-dist" value="0.8" min="0" max="5" step="0.1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
-                <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 0.8%</div>
+            <div id="backtest-legend" style="font-size:0.75rem;color:var(--text-muted);margin-top:8px;background:var(--bg-card);padding:12px;border-radius:8px;border:1px solid var(--border);">
+                <strong>Legenda:</strong> Dados utilizados: Preços (Binance 1h/4h), Funding Rate (Binance), Open Interest (Binance), MVRV (CoinMetrics), Macro (Alpha Vantage). <strong>Order Book desconsiderado</strong> (indisponível historicamente). Carteira inicial: $10.000 USD. Parâmetros ajustáveis acima.
             </div>
-            <!-- R:R mínimo -->
-            <div>
-                <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
-                    R:R mínimo
-                    <span style="color:var(--accent-yellow);cursor:help;" title="Relação risco:retorno mínima exigida (padrão 1.5).">ⓘ</span>
-                </label>
-                <input type="number" id="param-rr" value="1.5" min="0.1" max="10" step="0.1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
-                <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 1.5</div>
+        </section>
+
+        <section>
+            <h2 class="section-title">📉 EVOLUÇÃO DO SCORE (Live)</h2>
+            <div class="chart-wrapper"><canvas id="chart_score_history"></canvas></div>
+        </section>
+
+        <section>
+            <h2 class="section-title">📌 RESUMO EXECUTIVO</h2>
+            <div class="summary-grid">
+                <div class="summary-card"><h3>Bitcoin</h3><div class="value negative" id="btc-price">$60.000</div><div class="subtext" id="btc-change">↓ 5,94%</div><span class="source-with-time" id="btc-source">Binance/Bybit • WS</span></div>
+                <div class="summary-card"><h3>Ethereum</h3><div class="value negative" id="eth-price">$1.573,53</div><div class="subtext" id="eth-change">↓ 0,15%</div><span class="source-with-time" id="eth-source">Binance/Bybit • WS</span></div>
+                <div class="summary-card"><h3>Solana</h3><div class="value negative" id="sol-price">$170,00</div><div class="subtext" id="sol-change">↓ 2,30%</div><span class="source-with-time" id="sol-source">Binance/Bybit • WS</span></div>
+                <div class="summary-card"><h3>Sentiment Macro</h3><div class="value negative" id="macro-summary">DXY 101,37 | US10Y 4,28%</div><div class="subtext" id="macro-status">Referência</div><span class="source-with-time" id="macro-source">Alpha Vantage</span></div>
+                <div class="summary-card"><h3>Tether Premium</h3><div class="value negative" id="tether-premium">Carregando...</div><div class="subtext">USDT/BRL vs USD/BRL</div><span class="source-with-time" id="tether-source">CoinGecko & Exchangerate</span></div>
             </div>
-            <!-- Retest EMA20 (checkbox) -->
-            <div style="display:flex;align-items:center;gap:8px;">
-                <input type="checkbox" id="param-ema-retest" checked style="accent-color:var(--accent-blue);">
-                <label for="param-ema-retest" style="font-size:0.8rem;color:var(--text-muted);">
-                    Retest EMA20
-                    <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, também considera reteste da EMA20 como alternativa (padrão: ativado).">ⓘ</span>
-                </label>
+        </section>
+
+        <section>
+            <h2 class="section-title">🕯️ GRÁFICOS DE CANDLESTICK (Live WS)</h2>
+            <div class="candles-grid">
+                <div class="candle-card"><h3>Bitcoin (BTC/USDT)</h3><div class="candle-stats" id="btc-stats"><span class="stat" id="btc-stat-1d"><span class="label">1D</span> --</span><span class="stat" id="btc-stat-1s"><span class="label">1S</span> --</span><span class="stat" id="btc-stat-1m"><span class="label">1M</span> --</span></div><div id="candle-btc" class="candle-container"></div><span class="source-with-time" id="candle-btc-source">Binance/Bybit • WS</span></div>
+                <div class="candle-card"><h3>Ethereum (ETH/USDT)</h3><div class="candle-stats" id="eth-stats"><span class="stat" id="eth-stat-1d"><span class="label">1D</span> --</span><span class="stat" id="eth-stat-1s"><span class="label">1S</span> --</span><span class="stat" id="eth-stat-1m"><span class="label">1M</span> --</span></div><div id="candle-eth" class="candle-container"></div><span class="source-with-time" id="candle-eth-source">Binance/Bybit • WS</span></div>
+                <div class="candle-card"><h3>Solana (SOL/USDT)</h3><div class="candle-stats" id="sol-stats"><span class="stat" id="sol-stat-1d"><span class="label">1D</span> --</span><span class="stat" id="sol-stat-1s"><span class="label">1S</span> --</span><span class="stat" id="sol-stat-1m"><span class="label">1M</span> --</span></div><div id="candle-sol" class="candle-container"></div><span class="source-with-time" id="candle-sol-source">Binance/Bybit • WS</span></div>
             </div>
-            <!-- Exigir MTF alinhado (checkbox) -->
-            <div style="display:flex;align-items:center;gap:8px;">
-                <input type="checkbox" id="param-mtf-required" checked style="accent-color:var(--accent-blue);">
-                <label for="param-mtf-required" style="font-size:0.8rem;color:var(--text-muted);">
-                    Exigir MTF alinhado
-                    <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, exige alinhamento MTF (1h/4h) para entrada (padrão: ativado).">ⓘ</span>
-                </label>
-            </div>
-            <!-- NOVO: Ignorar BOS (checkbox) -->
-            <div style="display:flex;align-items:center;gap:8px;">
-                <input type="checkbox" id="param-ignore-bos" style="accent-color:var(--accent-purple);">
-                <label for="param-ignore-bos" style="font-size:0.8rem;color:var(--text-muted);">
-                    Ignorar BOS
-                    <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, entra apenas com score + retest (sem exigir BOS). Útil para diagnóstico.">ⓘ</span>
-                </label>
-            </div>
-        </div>
-<!-- NOVO: Ignorar retest (checkbox) -->
-<div style="display:flex;align-items:center;gap:8px;">
-    <input type="checkbox" id="param-ignore-retest" style="accent-color:var(--accent-red);">
-    <label for="param-ignore-retest" style="font-size:0.8rem;color:var(--text-muted);">
-        Ignorar retest
-        <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, entra apenas com BOS (ou sem BOS, se 'Ignorar BOS' também estiver ativo). Útil para diagnóstico.">ⓘ</span>
-    </label>
-</div>
-        <!-- Botão e Status -->
-        <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
-            <button id="run-backtest-btn" class="backtest-btn">▶️ Executar Backtest</button>
-            <span id="backtest-status" style="color:var(--text-muted);">Aguardando execução</span>
-        </div>
+        </section>
 
-        <!-- Resumo -->
-        <div id="backtest-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:16px;"></div>
-
-        <!-- Diagnóstico (blockStats) -->
-        <div id="backtest-diagnostic" style="margin-top:12px;font-size:0.8rem;color:var(--text-muted);background:var(--bg-dark);padding:12px;border-radius:8px;border:1px solid var(--border);display:none;">
-            <strong>Diagnóstico de bloqueios:</strong>
-            <div id="backtest-blockstats" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;"></div>
-        </div>
-    </div>
-
-    <!-- Tabela de trades -->
-    <div class="table-wrapper" id="backtest-table-wrapper">
-        <table>
-            <thead>
-                <tr>
-                    <th>Entrada (UTC)</th>
-                    <th>Ativo</th>
-                    <th>Direção</th>
-                    <th>Preço Entrada</th>
-                    <th>Stop Loss</th>
-                    <th>Take Profit 1</th>
-                    <th>Preço Saída</th>
-                    <th>Motivo</th>
-                    <th>P&L (%)</th>
-                    <th>Duração (h)</th>
-                </tr>
-            </thead>
-            <tbody id="backtest-tbody">
-                <tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum backtest executado ainda.</td></tr>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Legenda -->
-    <div id="backtest-legend" style="font-size:0.75rem;color:var(--text-muted);margin-top:8px;background:var(--bg-card);padding:12px;border-radius:8px;border:1px solid var(--border);">
-        <strong>Legenda:</strong> Dados utilizados: Preços (Binance 1h/4h), Funding Rate (Binance), Open Interest (Binance), MVRV (CoinMetrics), Macro (Alpha Vantage). <strong>Order Book desconsiderado</strong> (indisponível historicamente). Carteira inicial: $10.000 USD. Parâmetros ajustáveis acima.
-    </div>
-</section>
-
-        <!-- Resumo -->
-        <div id="backtest-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:16px;"></div>
-
-        <!-- Diagnóstico (blockStats) -->
-        <div id="backtest-diagnostic" style="margin-top:12px;font-size:0.8rem;color:var(--text-muted);background:var(--bg-dark);padding:12px;border-radius:8px;border:1px solid var(--border);display:none;">
-            <strong>Diagnóstico de bloqueios:</strong>
-            <div id="backtest-blockstats" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;"></div>
-        </div>
-    </div>
-
-    <!-- Tabela de trades -->
-    <div class="table-wrapper" id="backtest-table-wrapper">
-        <table>
-            <thead>
-                <tr>
-                    <th>Entrada (UTC)</th>
-                    <th>Ativo</th>
-                    <th>Direção</th>
-                    <th>Preço Entrada</th>
-                    <th>Stop Loss</th>
-                    <th>Take Profit 1</th>
-                    <th>Preço Saída</th>
-                    <th>Motivo</th>
-                    <th>P&L (%)</th>
-                    <th>Duração (h)</th>
-                </tr>
-            </thead>
-            <tbody id="backtest-tbody">
-                <tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum backtest executado ainda.</td></tr>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Legenda -->
-    <div id="backtest-legend" style="font-size:0.75rem;color:var(--text-muted);margin-top:8px;background:var(--bg-card);padding:12px;border-radius:8px;border:1px solid var(--border);">
-        <strong>Legenda:</strong> Dados utilizados: Preços (Binance 1h/4h), Funding Rate (Binance), Open Interest (Binance), MVRV (CoinMetrics), Macro (Alpha Vantage). <strong>Order Book desconsiderado</strong> (indisponível historicamente). Carteira inicial: $10.000 USD. Parâmetros ajustáveis acima.
-    </div>
-</section>
         <!-- ===== TABELA ON-CHAIN & DERIVADOS ===== -->
         <section>
             <h2 class="section-title">⛓️ ANÁLISE ON-CHAIN &amp; DERIVADOS</h2>
@@ -620,6 +588,19 @@
             }
             return originalFetch(url, options);
         };
+
+        // ===== CONFIGURAÇÃO DO ROBÔ AO VIVO =====
+        const ROBOT_CONFIG = {
+            scoreMin: 60,                 // Score mínimo para entrada
+            adxMin: 10,                   // ADX mínimo (0 = desligado)
+            rrMin: 0.1,                   // R:R mínimo (apenas para cálculo, não bloqueia)
+            requireBOS: false,            // Se true, exige BOS (rompimento de estrutura)
+            requireRetest: false,         // Se true, exige retest do nível rompido
+            requireMTF: false,            // Se true, exige alinhamento MTF (1h/4h)
+            requireEMARetest: false,      // Se true, exige retest da EMA20 (fallback)
+            retestDistPct: 0.008,         // Distância para considerar retest (0.8%)
+        };
+        console.log('[ROBOT] Configuração ao vivo:', ROBOT_CONFIG);
 
         // ===== IMPORTS LIMPOS =====
         const {
@@ -1042,7 +1023,7 @@
             }
         }
 
-        // ===== UI DO PAINEL "FORÇA DO SINAL" (LEGADO) – CORRIGIDO =====
+        // ===== UI DO PAINEL "FORÇA DO SINAL" (LEGADO) =====
         function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData) {
             if (!scoreData) {
                 console.warn('[Força do Sinal] scoreData indefinido');
@@ -1519,7 +1500,7 @@
             }));
         }
 
-        // ===== AVALIAÇÃO DE MERCADO (CORRIGIDO – RETEST SMC + CONTINUE) =====
+        // ===== AVALIAÇÃO DE MERCADO (CORRIGIDO – COM ROBOT_CONFIG) =====
         async function evaluateMarkets() {
             for (const symbol of CONFIG.ASSETS) {
                 const data = assetsData[symbol];
@@ -1565,12 +1546,15 @@
                 
                 const scoreData = computeScore(symbol, assetsData, liqMap);
 
-                // BOS real
+                // BOS real (apenas para diagnóstico, não bloqueia)
                 const bosConfirmed = scoreData.direction !== 'NEUTRAL' && findSMCSetup(data, scoreData.direction);
                 data.currentBOS = bosConfirmed ? 'BOS' : 'NEUTRAL';
 
+                // MTF alinhado controlado pela configuração
+                const mtfAligned = ROBOT_CONFIG.requireMTF ? (data.mtfConfluence?.alinhado || false) : true;
+
                 const confidence = calculateConfidenceScore({
-                    mtfAligned: data.mtfConfluence?.alinhado || false,
+                    mtfAligned: mtfAligned,
                     adx: data.adx,
                     volumeAnomaly: data.volumeAnomaly,
                     fundingRate: data.fundingRate,
@@ -1584,24 +1568,32 @@
                 const score = confidence.score;
                 let blockReason = scoreData.blockReason;
                 
-                if (data.adx < 25 && !blockReason) {
-                    blockReason = blockReason ? blockReason + '; ADX < 25 (lateral)' : 'ADX < 25 (lateral)';
+                // Usa ADX da configuração
+                const adxValue = typeof data.adx === 'object' ? data.adx.adx : data.adx;
+                if (adxValue < ROBOT_CONFIG.adxMin && !blockReason) {
+                    blockReason = blockReason ? blockReason + `; ADX < ${ROBOT_CONFIG.adxMin} (lateral)` : `ADX < ${ROBOT_CONFIG.adxMin} (lateral)`;
                 }
                 if (data.macroBlackout && !blockReason) {
                     blockReason = blockReason ? blockReason + '; Macro blackout' : 'Macro blackout';
                 }
-                const primaryDirection = (score >= 70) ? 'LONG' : (score <= 30 ? 'SHORT' : null);
+                
+                // Direção baseada no scoreMin da configuração
+                const primaryDirection = (score >= ROBOT_CONFIG.scoreMin) ? 'LONG' : (score <= 30 ? 'SHORT' : null);
+                
                 if (primaryDirection === 'LONG' && data.price < vwap && !blockReason) {
                     blockReason = blockReason ? blockReason + '; Preço abaixo do VWAP' : 'Preço abaixo do VWAP';
                 } else if (primaryDirection === 'SHORT' && data.price > vwap && !blockReason) {
                     blockReason = blockReason ? blockReason + '; Preço acima do VWAP' : 'Preço acima do VWAP';
                 }
                 
-                if (primaryDirection === 'LONG' && data.htfStructure.bias === 'BEARISH' && !blockReason) {
-                    blockReason = blockReason ? blockReason + '; HTF 4H Bearish' : 'HTF 4H Bearish';
-                }
-                if (primaryDirection === 'SHORT' && data.htfStructure.bias === 'BULLISH' && !blockReason) {
-                    blockReason = blockReason ? blockReason + '; HTF 4H Bullish' : 'HTF 4H Bullish';
+                // HTF bloqueio controlado por requireMTF
+                if (ROBOT_CONFIG.requireMTF) {
+                    if (primaryDirection === 'LONG' && data.htfStructure.bias === 'BEARISH' && !blockReason) {
+                        blockReason = blockReason ? blockReason + '; HTF 4H Bearish' : 'HTF 4H Bearish';
+                    }
+                    if (primaryDirection === 'SHORT' && data.htfStructure.bias === 'BULLISH' && !blockReason) {
+                        blockReason = blockReason ? blockReason + '; HTF 4H Bullish' : 'HTF 4H Bullish';
+                    }
                 }
                 
                 if (!blockReason) {
@@ -1644,38 +1636,44 @@
                         const atr = data.atr_1H || (data.price * 0.02);
                         if (primaryDirection) {
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
-                            // ===== CORREÇÃO: return → continue =====
                             if (expCheck.blocked) continue;
                             
-                            // ===== RETEST DO NÍVEL ESTRUTURAL ROMPIDO (SMC) =====
-                            let retestConfirmed = false;
+                            // ===== RETEST (controlado por ROBOT_CONFIG.requireRetest) =====
+                            let retestConfirmed = true; // padrão: true (se não exigir retest)
                             let brokenLevel = null;
 
-                            if (primaryDirection === 'LONG') {
-                                const highsBelow = data.swingHighs.filter(h => h < data.price);
-                                if (highsBelow.length > 0) {
-                                    brokenLevel = Math.max(...highsBelow);
+                            if (ROBOT_CONFIG.requireRetest) {
+                                retestConfirmed = false;
+                                if (primaryDirection === 'LONG') {
+                                    const highsBelow = data.swingHighs.filter(h => h < data.price);
+                                    if (highsBelow.length > 0) {
+                                        brokenLevel = Math.max(...highsBelow);
+                                    }
+                                } else if (primaryDirection === 'SHORT') {
+                                    const lowsAbove = data.swingLows.filter(l => l > data.price);
+                                    if (lowsAbove.length > 0) {
+                                        brokenLevel = Math.min(...lowsAbove);
+                                    }
                                 }
-                            } else if (primaryDirection === 'SHORT') {
-                                const lowsAbove = data.swingLows.filter(l => l > data.price);
-                                if (lowsAbove.length > 0) {
-                                    brokenLevel = Math.min(...lowsAbove);
+
+                                if (brokenLevel !== null && brokenLevel > 0) {
+                                    const distPct = Math.abs(data.price - brokenLevel) / brokenLevel;
+                                    retestConfirmed = distPct < ROBOT_CONFIG.retestDistPct;
                                 }
-                            }
 
-                            if (brokenLevel !== null && brokenLevel > 0) {
-                                const distPct = Math.abs(data.price - brokenLevel) / brokenLevel;
-                                retestConfirmed = distPct < 0.008;
-                            }
-
-                            // Fallback: se não houver nível, tenta a EMA20
-                            if (!retestConfirmed) {
-                                const ema20 = calcEMA(data.candles1H.map(c=>c.close), 20).slice(-1)[0] || data.price;
-                                const emaDist = Math.abs(data.price - ema20) / ema20;
-                                retestConfirmed = emaDist < 0.005;
+                                // Fallback: EMA20 (controlado por requireEMARetest)
+                                if (!retestConfirmed && ROBOT_CONFIG.requireEMARetest) {
+                                    const ema20 = calcEMA(data.candles1H.map(c=>c.close), 20).slice(-1)[0] || data.price;
+                                    const emaDist = Math.abs(data.price - ema20) / ema20;
+                                    retestConfirmed = emaDist < 0.005;
+                                }
                             }
                             
-                            const smcSetup = findSMCSetup(data, primaryDirection);
+                            // ===== BOS (controlado por ROBOT_CONFIG.requireBOS) =====
+                            let smcSetup = true; // padrão: true (se não exigir BOS)
+                            if (ROBOT_CONFIG.requireBOS) {
+                                smcSetup = findSMCSetup(data, primaryDirection);
+                            }
                             
                             if (smcSetup && retestConfirmed) {
                                 let stop, tp1, tp2, tp3, structLevel;
@@ -1705,8 +1703,7 @@
                                     tp3 = liqTarget2 || (data.price - (atr * 6));
                                 }
                                 const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
-                                // ===== CORREÇÃO: return → continue =====
-                                if (rr1 < 1.5) continue;
+                                if (rr1 < ROBOT_CONFIG.rrMin) continue;
                                 
                                 // WinRate sem Laplace
                                 const stats = banco.getTradeStats();
@@ -1753,7 +1750,6 @@
             if (externalUpdating) return;
             externalUpdating = true;
             try {
-                // ===== MACRO =====
                 const macro = await fetchMacroStatic();
                 if (macro && typeof macro === 'object') {
                     document.getElementById('dxy-value').textContent = macro.dxy !== null && macro.dxy !== undefined ? macro.dxy.toFixed(2) : '--';
@@ -1985,98 +1981,93 @@
             });
 
             // Backtest
-            // Backtest
-// ===== BACKTEST (SUBSTITUIR O BLOCO INTEIRO) =====
-// ===== BACKTEST (SUBSTITUIR O BLOCO INTEIRO) =====
-document.getElementById('run-backtest-btn').addEventListener('click', async function() {
-    this.disabled = true;
-    this.textContent = '⏳ Processando...';
-    document.getElementById('backtest-status').textContent = 'Buscando dados históricos...';
-    try {
-        // ===== LER OS PARÂMETROS DO FORMULÁRIO =====
-        const options = {
-            scoreMin: parseFloat(document.getElementById('param-score').value) || 70,
-            adxMin: parseFloat(document.getElementById('param-adx').value) || 25,
-            retestDistPct: (parseFloat(document.getElementById('param-retest-dist').value) || 0.8) / 100,
-            rrMin: parseFloat(document.getElementById('param-rr').value) || 1.5,
-            emaRetest: document.getElementById('param-ema-retest').checked,
-            mtfRequired: document.getElementById('param-mtf-required').checked,
-            ignoreBOS: document.getElementById('param-ignore-bos').checked,   // NOVO
-            ignoreRetest: document.getElementById('param-ignore-retest').checked   // <-- ADICIONE ESTA LINHA
-        };
-        console.log('[Backtest UI] Parâmetros enviados:', options);
+            document.getElementById('run-backtest-btn').addEventListener('click', async function() {
+                this.disabled = true;
+                this.textContent = '⏳ Processando...';
+                document.getElementById('backtest-status').textContent = 'Buscando dados históricos...';
+                try {
+                    const options = {
+                        scoreMin: parseFloat(document.getElementById('param-score').value) || 60,
+                        adxMin: parseFloat(document.getElementById('param-adx').value) || 10,
+                        retestDistPct: (parseFloat(document.getElementById('param-retest-dist').value) || 0.8) / 100,
+                        rrMin: parseFloat(document.getElementById('param-rr').value) || 0.1,
+                        emaRetest: document.getElementById('param-ema-retest').checked,
+                        mtfRequired: document.getElementById('param-mtf-required').checked,
+                        ignoreBOS: document.getElementById('param-ignore-bos').checked,
+                        ignoreRetest: document.getElementById('param-ignore-retest').checked
+                    };
+                    console.log('[Backtest UI] Parâmetros enviados:', options);
 
-        const result = await runBacktest('BTCUSDT', 30, options);
-        const { trades, summary } = result;
-        
-        const summaryDiv = document.getElementById('backtest-summary');
-        if (summary.error) {
-            summaryDiv.innerHTML = `<div style="color:var(--accent-red);">❌ Erro: ${summary.error}</div>`;
-        } else {
-            summaryDiv.innerHTML = `
-                <div class="summary-card"><h3>Trades</h3><div class="value">${summary.totalTrades}</div></div>
-                <div class="summary-card"><h3>Winrate</h3><div class="value ${summary.winrate > 50 ? 'positive' : 'negative'}">${summary.winrate.toFixed(1)}%</div></div>
-                <div class="summary-card"><h3>P&L Total</h3><div class="value ${summary.totalPnlPct >= 0 ? 'positive' : 'negative'}">${summary.totalPnlPct.toFixed(2)}%</div></div>
-                <div class="summary-card"><h3>P&L (USD)</h3><div class="value ${summary.totalPnlUsd >= 0 ? 'positive' : 'negative'}">$${summary.totalPnlUsd.toFixed(2)}</div></div>
-                <div class="summary-card"><h3>Retorno Anualizado</h3><div class="value ${summary.annualizedReturn >= 0 ? 'positive' : 'negative'}">${summary.annualizedReturn.toFixed(2)}%</div></div>
-                <div class="summary-card"><h3>Drawdown Máx</h3><div class="value negative">${summary.maxDrawdown.toFixed(2)}%</div></div>
-                <div class="summary-card"><h3>Profit Factor</h3><div class="value">${summary.profitFactor.toFixed(2)}</div></div>
-                <div class="summary-card"><h3>Equity Final</h3><div class="value ${summary.finalEquity >= 10000 ? 'positive' : 'negative'}">$${summary.finalEquity.toFixed(2)}</div></div>
-            `;
+                    const result = await runBacktest('BTCUSDT', 30, options);
+                    const { trades, summary } = result;
+                    
+                    const summaryDiv = document.getElementById('backtest-summary');
+                    if (summary.error) {
+                        summaryDiv.innerHTML = `<div style="color:var(--accent-red);">❌ Erro: ${summary.error}</div>`;
+                    } else {
+                        summaryDiv.innerHTML = `
+                            <div class="summary-card"><h3>Trades</h3><div class="value">${summary.totalTrades}</div></div>
+                            <div class="summary-card"><h3>Winrate</h3><div class="value ${summary.winrate > 50 ? 'positive' : 'negative'}">${summary.winrate.toFixed(1)}%</div></div>
+                            <div class="summary-card"><h3>P&L Total</h3><div class="value ${summary.totalPnlPct >= 0 ? 'positive' : 'negative'}">${summary.totalPnlPct.toFixed(2)}%</div></div>
+                            <div class="summary-card"><h3>P&L (USD)</h3><div class="value ${summary.totalPnlUsd >= 0 ? 'positive' : 'negative'}">$${summary.totalPnlUsd.toFixed(2)}</div></div>
+                            <div class="summary-card"><h3>Retorno Anualizado</h3><div class="value ${summary.annualizedReturn >= 0 ? 'positive' : 'negative'}">${summary.annualizedReturn.toFixed(2)}%</div></div>
+                            <div class="summary-card"><h3>Drawdown Máx</h3><div class="value negative">${summary.maxDrawdown.toFixed(2)}%</div></div>
+                            <div class="summary-card"><h3>Profit Factor</h3><div class="value">${summary.profitFactor.toFixed(2)}</div></div>
+                            <div class="summary-card"><h3>Equity Final</h3><div class="value ${summary.finalEquity >= 10000 ? 'positive' : 'negative'}">$${summary.finalEquity.toFixed(2)}</div></div>
+                        `;
+                    }
 
-            // ===== MOSTRAR O DIAGNÓSTICO (blockStats) =====
-            const diagDiv = document.getElementById('backtest-diagnostic');
-            const statsDiv = document.getElementById('backtest-blockstats');
-            if (summary.blockStats && Object.keys(summary.blockStats).length > 0) {
-                diagDiv.style.display = 'block';
-                const totalCandles = Object.values(summary.blockStats).reduce((a, b) => a + b, 0) || 1;
-                statsDiv.innerHTML = Object.entries(summary.blockStats)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([reason, count]) => {
-                        const pct = ((count / totalCandles) * 100).toFixed(1);
-                        const isGood = reason === 'passou_filtros';
-                        const style = isGood
-                            ? 'background:rgba(0,230,118,0.15);color:#00e676;border:1px solid rgba(0,230,118,0.3);'
-                            : 'background:rgba(255,82,82,0.12);color:#ff5252;border:1px solid rgba(255,82,82,0.2);';
-                        return `<span style="padding:4px 10px;border-radius:6px;font-size:0.75rem;${style}">${reason}: ${count} (${pct}%)</span>`;
-                    }).join('');
-            } else {
-                diagDiv.style.display = 'none';
-            }
-        }
+                    if (summary.blockStats) {
+                        const diagDiv = document.getElementById('backtest-diagnostic');
+                        const statsDiv = document.getElementById('backtest-blockstats');
+                        diagDiv.style.display = 'block';
+                        const totalCandles = Object.values(summary.blockStats).reduce((a, b) => a + b, 0) || 1;
+                        statsDiv.innerHTML = Object.entries(summary.blockStats)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([reason, count]) => {
+                                const pct = ((count / totalCandles) * 100).toFixed(1);
+                                const isGood = reason === 'passou_filtros';
+                                const style = isGood
+                                    ? 'background:rgba(0,230,118,0.15);color:#00e676;border:1px solid rgba(0,230,118,0.3);'
+                                    : 'background:rgba(255,82,82,0.12);color:#ff5252;border:1px solid rgba(255,82,82,0.2);';
+                                return `<span style="padding:4px 10px;border-radius:6px;font-size:0.75rem;${style}">${reason}: ${count} (${pct}%)</span>`;
+                            }).join('');
+                    } else {
+                        document.getElementById('backtest-diagnostic').style.display = 'none';
+                    }
 
-        const tbody = document.getElementById('backtest-tbody');
-        if (!trades || trades.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum trade gerado no período.</td></tr>';
-        } else {
-            let html = '';
-            trades.forEach(t => {
-                const pnl = t.pnlPct !== null ? parseFloat(t.pnlPct) : 0;
-                const pnlClass = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
-                html += `<tr>
-                    <td>${t.entryTime}</td>
-                    <td>${t.symbol}</td>
-                    <td>${t.direction}</td>
-                    <td>$${t.entryPrice.toFixed(2)}</td>
-                    <td>$${t.stopLoss.toFixed(2)}</td>
-                    <td>$${t.takeProfit1.toFixed(2)}</td>
-                    <td>${t.exitPrice ? '$'+t.exitPrice.toFixed(2) : '--'}</td>
-                    <td>${t.reason}</td>
-                    <td class="${pnlClass}">${t.pnlPct !== null ? (pnl > 0 ? '+' : '') + t.pnlPct + '%' : '--'}</td>
-                    <td>${t.durationHours ? t.durationHours + 'h' : '--'}</td>
-                </tr>`;
+                    const tbody = document.getElementById('backtest-tbody');
+                    if (!trades || trades.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum trade gerado no período.</td></tr>';
+                    } else {
+                        let html = '';
+                        trades.forEach(t => {
+                            const pnl = t.pnlPct !== null ? parseFloat(t.pnlPct) : 0;
+                            const pnlClass = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
+                            html += `<tr>
+                                <td>${t.entryTime}</td>
+                                <td>${t.symbol}</td>
+                                <td>${t.direction}</td>
+                                <td>$${t.entryPrice.toFixed(2)}</td>
+                                <td>$${t.stopLoss.toFixed(2)}</td>
+                                <td>$${t.takeProfit1.toFixed(2)}</td>
+                                <td>${t.exitPrice ? '$'+t.exitPrice.toFixed(2) : '--'}</td>
+                                <td>${t.reason}</td>
+                                <td class="${pnlClass}">${t.pnlPct !== null ? (pnl > 0 ? '+' : '') + t.pnlPct + '%' : '--'}</td>
+                                <td>${t.durationHours ? t.durationHours + 'h' : '--'}</td>
+                            </tr>`;
+                        });
+                        tbody.innerHTML = html;
+                    }
+                    document.getElementById('backtest-status').textContent = `✅ Concluído em ${new Date().toLocaleTimeString()}`;
+                } catch (e) {
+                    console.error(e);
+                    document.getElementById('backtest-status').textContent = '❌ Erro: ' + e.message;
+                } finally {
+                    this.disabled = false;
+                    this.textContent = '▶️ Executar Backtest';
+                }
             });
-            tbody.innerHTML = html;
-        }
-        document.getElementById('backtest-status').textContent = `✅ Concluído em ${new Date().toLocaleTimeString()}`;
-    } catch (e) {
-        console.error(e);
-        document.getElementById('backtest-status').textContent = '❌ Erro: ' + e.message;
-    } finally {
-        this.disabled = false;
-        this.textContent = '▶️ Executar Backtest';
-    }
-});
 
             setInterval(() => {
                 const ts = getCurrentTimestamp();
