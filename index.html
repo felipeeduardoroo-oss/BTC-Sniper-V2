@@ -2087,17 +2087,18 @@
     const statusEl = document.getElementById('backtest-status');
     if (statusEl) statusEl.textContent = 'Buscando dados históricos...';
     try {
-        const options = {
-            scoreMin: ROBOT_CONFIG.scoreMin,
-            scoreMaxShort: ROBOT_CONFIG.scoreMaxShort,
-            adxMin: ROBOT_CONFIG.adxMin,
-            retestDistPct: ROBOT_CONFIG.retestDistPct,
-            rrMin: ROBOT_CONFIG.rrMin,
-            requireBOS: ROBOT_CONFIG.requireBOS,
-            requireRetest: ROBOT_CONFIG.requireRetest,
-            requireMTF: ROBOT_CONFIG.requireMTF,
-            requireEMARetest: ROBOT_CONFIG.requireEMARetest,
-        };
+   const options = {
+    scoreMin: ROBOT_CONFIG.scoreMin,
+    scoreMaxShort: ROBOT_CONFIG.scoreMaxShort,
+    adxMin: ROBOT_CONFIG.adxMin,
+    retestDistPct: ROBOT_CONFIG.retestDistPct,
+    rrMin: ROBOT_CONFIG.rrMin,
+    emaRetest: ROBOT_CONFIG.requireEMARetest,
+    mtfRequired: ROBOT_CONFIG.requireMTF,
+    // CORREÇÃO: usar ignoreBOS e ignoreRetest (invertendo a lógica)
+    ignoreBOS: !ROBOT_CONFIG.requireBOS,
+    ignoreRetest: !ROBOT_CONFIG.requireRetest,
+};
         console.log('[Backtest UI] Parâmetros enviados:', options);
 
         const result = await runBacktest('BTCUSDT', 30, options);
