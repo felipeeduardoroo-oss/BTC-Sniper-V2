@@ -428,132 +428,100 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             }
 
             // ===== ENTRADA (COM IGNORAR BOS) =====
-            if (!position && !blockReason && primaryDirection) {
-                const atr = state.atr_1H || (state.price * 0.02);
-                
-                // 1. Retest do nível estrutural
-                let retestConfirmed = false;
-                let brokenLevel = null;
+            // ===== ENTRADA (CORRIGIDO – BOS/retest unificados + diagnóstico honesto) =====
+if (!position && !blockReason && primaryDirection) {
+    const atr = state.atr_1H || (state.price * 0.02);
+    
+    // --- 1. Cálculo unificado de BOS e retest ---
+    const structure = checkBOSAndRetest(state, primaryDirection, retestDistPct);
+    const smcSetup = structure.bos;
+    const retestConfirmed = structure.retest;
+    const brokenLevel = structure.level;
 
-                if (primaryDirection === 'LONG') {
-                    const highsBelow = state.swingHighs.filter(h => h < state.price);
-                    if (highsBelow.length > 0) {
-                        brokenLevel = Math.max(...highsBelow);
-                    }
-                } else if (primaryDirection === 'SHORT') {
-                    const lowsAbove = state.swingLows.filter(l => l > state.price);
-                    if (lowsAbove.length > 0) {
-                        brokenLevel = Math.min(...lowsAbove);
-                    }
-                }
+    // Fallback: EMA20 (controlado pelo checkbox)
+    let emaRetestConfirmed = false;
+    if (!retestConfirmed && emaRetest) {
+        const ema20 = calcEMA(state.candles1H.map(c => c.close), 20).slice(-1)[0] || state.price;
+        const emaDist = Math.abs(state.price - ema20) / ema20;
+        emaRetestConfirmed = emaDist < 0.005;
+    }
+    const finalRetest = retestConfirmed || emaRetestConfirmed;
 
-                if (brokenLevel !== null && brokenLevel > 0) {
-                    const distPct = Math.abs(state.price - brokenLevel) / brokenLevel;
-                    retestConfirmed = distPct < retestDistPct;
-                }
+    // --- 2. Verifica se os filtros estruturais são exigidos ---
+    const bosRequired = !ignoreBOS;
+    const retestRequired = !ignoreRetest;
 
-                // Fallback: EMA20
-                if (!retestConfirmed && emaRetest) {
-                    const ema20 = calcEMA(state.candles1H.map(c => c.close), 20).slice(-1)[0] || state.price;
-                    const emaDist = Math.abs(state.price - ema20) / ema20;
-                    retestConfirmed = emaDist < 0.005;
-                }
+    const bosPassed = bosRequired ? smcSetup : true;
+    const retestPassed = retestRequired ? finalRetest : true;
+    const structureOk = bosPassed && retestPassed;
 
-                              // 2. BOS ORIGINAL (verifica apenas o candle atual)
-                let smcSetup = false;
-                if (primaryDirection === 'LONG') {
-                    const lastSwingHigh = Math.max(...state.swingHighs);
-                    if (state.price > lastSwingHigh) {
-                        smcSetup = true;
-                    }
-                } else if (primaryDirection === 'SHORT') {
-                    const lastSwingLow = Math.min(...state.swingLows);
-                    if (state.price < lastSwingLow) {
-                        smcSetup = true;
-                    }
-                }
+    // --- 3. Contabiliza diagnóstico honesto ---
+    totalCandlesProcessed++;
+    let reasonKey = blockReason;
+    if (!blockReason && primaryDirection) {
+        if (!bosPassed && !retestPassed) reasonKey = 'sem_BOS_e_retest';
+        else if (!bosPassed) reasonKey = 'sem_BOS';
+        else if (!retestPassed) reasonKey = 'sem_retest';
+        else reasonKey = 'passou_filtros';
+    } else if (!blockReason && !primaryDirection) {
+        reasonKey = 'score_neutro';
+    }
+    blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
-                // ===== LOG PARA VERIFICAR OS VALORES (a cada 50 candles) =====
-                if (i % 50 === 0) {
-                    console.log(`[Loop] ignoreBOS=${ignoreBOS}, ignoreRetest=${ignoreRetest}, retestConfirmed=${retestConfirmed}, smcSetup=${smcSetup}`);
-                }
+    // --- 4. Abrir posição se estrutura OK e R:R suficiente ---
+    if (structureOk) {
+        let stop, tp1, tp2;
+        if (primaryDirection === 'LONG') {
+            const structLevel = Math.min(...state.swingLows) - (atr * 0.3);
+            stop = Math.min(structLevel, state.price - atr * 1.5);
+            tp1 = state.price + (atr * 2);
+            tp2 = state.price + (atr * 4);
+        } else {
+            const structLevel = Math.max(...state.swingHighs) + (atr * 0.3);
+            stop = Math.max(structLevel, state.price + atr * 1.5);
+            tp1 = state.price - (atr * 2);
+            tp2 = state.price - (atr * 4);
+        }
+        const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
+        if (rr1 >= rrMin) {
+            // Kelly sizing
+            const totalTrades = winCount + lossCount;
+            const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
+            const kellyPct = KellyPositionSize(winRate, rr1);
+            const riskFraction = Math.min(kellyPct, 0.05);
 
-                // 3. Contabiliza diagnóstico
-                totalCandlesProcessed++;
-                const reasonKey = blockReason || (primaryDirection ? 
-                    (retestConfirmed ? (smcSetup ? 'passou_filtros' : 'sem_BOS') : 'sem_retest') 
-                    : 'score_neutro');
-                blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
-                // Log para diagnóstico
-if (ignoreRetest && retestConfirmed === false) {
-    console.log(`[IgnoreRetest] Entrando sem retest no candle ${i}, score=${score}`);
+            const stopDistancePct = primaryDirection === 'LONG' ? (state.price - stop) / state.price : (stop - state.price) / state.price;
+            const positionSizeUSD = (riskFraction * equity) / stopDistancePct;
+            const sizeMultiplier = Math.min(positionSizeUSD / equity, 1.0);
+
+            position = {
+                type: primaryDirection,
+                entryPrice: state.price,
+                stop: stop,
+                tp1: tp1,
+                tp2: tp2,
+                trailingStop: stop,
+                partialTaken: false,
+                sizeRemaining: sizeMultiplier,
+                entryTime: candle.time * 1000
+            };
+            trades.push({
+                entryTime: new Date(candle.time * 1000).toISOString(),
+                exitTime: null,
+                symbol,
+                direction: primaryDirection,
+                entryPrice: state.price,
+                stopLoss: stop,
+                takeProfit1: tp1,
+                exitPrice: null,
+                pnlPct: null,
+                pnlUsd: null,
+                durationHours: null,
+                reason: 'Aberta'
+            });
+        }
+    }
 }
-                // ===== LOG DE SWINGS (a cada 50 candles) =====
-                if (i % 50 === 0) {
-                    console.log(`[Swings] HIGH: ${state.swingHighs.length} | LOW: ${state.swingLows.length}`);
-                    console.log(`  lastSwingHigh: ${Math.max(...state.swingHighs)} | lastSwingLow: ${Math.min(...state.swingLows)}`);
-                    console.log(`  price: ${state.price} | primaryDirection: ${primaryDirection}`);
-                }
-
-                              // 4. Abrir posição se todas as condições forem atendidas
-                // Se ignoreRetest for true, ignora o retest
-                const entryCondition = ignoreRetest ? true : retestConfirmed;
-                // Se ignoreBOS for true, entra apenas com entryCondition
-                // Se ignoreBOS for false, exige BOS E entryCondition
-                if (ignoreBOS ? entryCondition : (smcSetup && entryCondition)) {
-                    let stop, tp1, tp2;
-                    if (primaryDirection === 'LONG') {
-                        const structLevel = Math.min(...state.swingLows) - (atr * 0.3);
-                        stop = Math.min(structLevel, state.price - atr * 1.5);
-                        tp1 = state.price + (atr * 2);
-                        tp2 = state.price + (atr * 4);
-                    } else {
-                        const structLevel = Math.max(...state.swingHighs) + (atr * 0.3);
-                        stop = Math.max(structLevel, state.price + atr * 1.5);
-                        tp1 = state.price - (atr * 2);
-                        tp2 = state.price - (atr * 4);
-                    }
-                    const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
-                    if (rr1 < rrMin) continue;
-                    // ... resto do código (Kelly, position, trades.push, etc.)
-                    // Kelly sizing
-                    const totalTrades = winCount + lossCount;
-                    const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
-                    const kellyPct = KellyPositionSize(winRate, rr1);
-                    const riskFraction = Math.min(kellyPct, 0.05);
-
-                    const stopDistancePct = primaryDirection === 'LONG' ? (state.price - stop) / state.price : (stop - state.price) / state.price;
-                    const positionSizeUSD = (riskFraction * equity) / stopDistancePct;
-                    const sizeMultiplier = Math.min(positionSizeUSD / equity, 1.0);
-
-                    position = {
-                        type: primaryDirection,
-                        entryPrice: state.price,
-                        stop: stop,
-                        tp1: tp1,
-                        tp2: tp2,
-                        trailingStop: stop,
-                        partialTaken: false,
-                        sizeRemaining: sizeMultiplier,
-                        entryTime: candle.time * 1000
-                    };
-                    trades.push({
-                        entryTime: new Date(candle.time * 1000).toISOString(),
-                        exitTime: null,
-                        symbol,
-                        direction: primaryDirection,
-                        entryPrice: state.price,
-                        stopLoss: stop,
-                        takeProfit1: tp1,
-                        exitPrice: null,
-                        pnlPct: null,
-                        pnlUsd: null,
-                        durationHours: null,
-                        reason: 'Aberta'
-                    });
-                }
-            }
-        } // <-- FIM DO LOOP PRINCIPAL
 
         // Fechar posição remanescente
         if (position) {
