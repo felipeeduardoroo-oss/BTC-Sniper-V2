@@ -116,7 +116,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         rrMin = 1.5,
         emaRetest = true,
         mtfRequired = true,
-        ignoreBOS = false   // NOVO
+        ignoreBOS = false,   // NOVO
         ignoreRetest = false   // <-- ADICIONE ESTA LINHA
     } = options;
 
