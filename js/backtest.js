@@ -119,7 +119,10 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         ignoreBOS = false,
         ignoreRetest = false
     } = options;
+    console.log('[Backtest] ignoreBOS recebido:', ignoreBOS);
+    console.log('[Backtest] ignoreRetest recebido:', ignoreRetest);
 
+    logDebug(`Iniciando backtest REAL para ${symbol} (${days} dias)`);
     logDebug(`Iniciando backtest REAL para ${symbol} (${days} dias)`);
     logDebug('Parâmetros:', options);
     const now = Date.now();
@@ -456,7 +459,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     retestConfirmed = emaDist < 0.005;
                 }
 
-                // 2. BOS ORIGINAL (verifica apenas o candle atual)
+                              // 2. BOS ORIGINAL (verifica apenas o candle atual)
                 let smcSetup = false;
                 if (primaryDirection === 'LONG') {
                     const lastSwingHigh = Math.max(...state.swingHighs);
@@ -468,6 +471,11 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     if (state.price < lastSwingLow) {
                         smcSetup = true;
                     }
+                }
+
+                // ===== LOG PARA VERIFICAR OS VALORES (a cada 50 candles) =====
+                if (i % 50 === 0) {
+                    console.log(`[Loop] ignoreBOS=${ignoreBOS}, ignoreRetest=${ignoreRetest}, retestConfirmed=${retestConfirmed}, smcSetup=${smcSetup}`);
                 }
 
                 // 3. Contabiliza diagnóstico
