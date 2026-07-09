@@ -109,16 +109,16 @@ async function fetchHistoricalMVRV(startDate, endDate) {
 
 // ===== FUNÇÃO PRINCIPAL com parâmetros =====
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
-        const {
-        scoreMin = 70,
-        adxMin = 25,
-        retestDistPct = 0.008,
-        rrMin = 1.5,
-        emaRetest = true,
-        mtfRequired = true,
-        ignoreBOS = false,
-        ignoreRetest = false
-    } = options;
+   const {
+    scoreMin = 70,
+    adxMin = 25,
+    retestDistPct = 0.008,
+    rrMin = 1.5,
+    emaRetest = true,
+    mtfRequired = true,
+    ignoreBOS = true,      // <-- FORÇADO
+    ignoreRetest = true    // <-- FORÇADO
+} = options;
     console.log('[Backtest] ignoreBOS recebido:', ignoreBOS);
     console.log('[Backtest] ignoreRetest recebido:', ignoreRetest);
 
