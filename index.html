@@ -367,7 +367,14 @@
                 </label>
             </div>
         </div>
-
+<!-- NOVO: Ignorar retest (checkbox) -->
+<div style="display:flex;align-items:center;gap:8px;">
+    <input type="checkbox" id="param-ignore-retest" style="accent-color:var(--accent-red);">
+    <label for="param-ignore-retest" style="font-size:0.8rem;color:var(--text-muted);">
+        Ignorar retest
+        <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, entra apenas com BOS (ou sem BOS, se 'Ignorar BOS' também estiver ativo). Útil para diagnóstico.">ⓘ</span>
+    </label>
+</div>
         <!-- Botão e Status -->
         <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
             <button id="run-backtest-btn" class="backtest-btn">▶️ Executar Backtest</button>
@@ -1995,6 +2002,7 @@ document.getElementById('run-backtest-btn').addEventListener('click', async func
             emaRetest: document.getElementById('param-ema-retest').checked,
             mtfRequired: document.getElementById('param-mtf-required').checked,
             ignoreBOS: document.getElementById('param-ignore-bos').checked   // NOVO
+            ignoreRetest: document.getElementById('param-ignore-retest').checked   // <-- ADICIONE ESTA LINHA
         };
         console.log('[Backtest UI] Parâmetros enviados:', options);
 
