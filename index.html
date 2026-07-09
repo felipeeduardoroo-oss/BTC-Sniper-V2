@@ -57,25 +57,24 @@
         .score-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
         .confirmation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
         /* ===== CARDS REUTILIZÁVEIS ===== */
-.candle-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px 20px 12px 20px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    min-height: 480px;          /* altura suficiente para caber tudo */
-}
-
-.summary-card, .score-box, .confirmation-pillar, .whale-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
+        .candle-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px 20px 12px 20px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 380px;
+        }
+        .summary-card, .score-box, .confirmation-pillar, .whale-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
         .candle-card:hover, .summary-card:hover, .score-box:hover { border-color: var(--border-active); background: var(--bg-card-hover); transform: translateY(-2px); box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3); }
         .candle-card h3, .summary-card h3 { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; font-weight: 500; }
         .summary-card .value { font-size: 1.75rem; font-weight: 700; margin-bottom: 4px; font-family: var(--font-mono); letter-spacing: -0.5px; }
@@ -86,7 +85,7 @@
         .candle-stats .stat { padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.03); font-family: var(--font-mono); }
         .candle-stats .stat.positive { color: var(--accent-green); background: rgba(0, 232, 150, 0.05); }
         .candle-stats .stat.negative { color: var(--accent-red); background: rgba(255, 77, 109, 0.05); }
-        .candle-container { width: 100%; height: 280px; }
+        .candle-container { width: 100%; flex: 1; min-height: 180px; max-height: 280px; }
         .section-title { font-size: 1.1rem; font-weight: 600; margin: 32px 0 16px 0; padding-bottom: 12px; border-bottom: 1px solid var(--border); color: var(--text-light); display: flex; align-items: center; gap: 8px; }
         .table-wrapper { overflow-x: auto; margin-bottom: 32px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
         table { width: 100%; border-collapse: collapse; }
@@ -190,55 +189,66 @@
             color: var(--accent-yellow);
         }
 
-       /* ===== BARRAS DE SCORE (AJUSTADAS) ===== */
-.score-bar-container {
-    margin: 8px 0 12px 0;        /* mais espaço vertical */
-    padding: 6px 10px;
-    background: var(--bg-dark);
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    flex-shrink: 0;              /* impede que a barra encolha */
-}
+        /* ===== BARRAS DE SCORE (SEÇÃO INDEPENDENTE) ===== */
+        .score-bars-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .score-bar-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px 20px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .score-bar-card h3 {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 500;
+            margin: 0;
+        }
+        .score-bar-card .score-value-large {
+            font-size: 2.2rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            letter-spacing: -1px;
+        }
+        .score-bar-card .score-bar-track {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .score-bar-card .score-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease, background 0.3s ease;
+        }
+        .score-bar-card .score-direction {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 2px;
+        }
+        .score-bar-card .score-direction.long { color: var(--accent-green); }
+        .score-bar-card .score-direction.short { color: var(--accent-red); }
+        .score-bar-card .score-direction.neutral { color: var(--text-muted); }
 
-.score-bar-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-bottom: 4px;
-}
+        @media (max-width: 768px) {
+            .score-bars-grid {
+                grid-template-columns: 1fr;
+            }
+        }
 
-.score-bar-label .value {
-    font-weight: 700;
-    color: var(--text-light);
-}
-
-.score-bar-track {
-    width: 100%;
-    height: 6px;
-    background: rgba(255,255,255,0.05);
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-.score-bar-fill {
-    height: 100%;
-    border-radius: 3px;
-    transition: width 0.3s ease, background 0.3s ease;
-}
-
-.score-bar-direction {
-    text-align: right;
-    font-size: 0.7rem;
-    font-weight: 600;
-    margin-top: 2px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.score-bar-direction.long { color: var(--accent-green); }
-.score-bar-direction.short { color: var(--accent-red); }
-.score-bar-direction.neutral { color: var(--text-muted); }
         /* ===== PAINEL DE PARÂMETROS AO VIVO ===== */
         .live-params {
             background: var(--bg-card);
@@ -338,9 +348,9 @@
             </div>
         </div>
 
-        <!-- ===== GRÁFICOS DE CANDLESTICK NO TOPO ===== -->
+        <!-- ===== GRÁFICOS DE CANDLESTICK ===== -->
         <section>
-            <h2 class="section-title">🕯️ GRÁFICOS DE CANDLESTICK (Live WS) + Score em Tempo Real</h2>
+            <h2 class="section-title">🕯️ GRÁFICOS DE CANDLESTICK (Live WS)</h2>
             <div class="candles-grid">
                 <!-- BTC -->
                 <div class="candle-card">
@@ -349,17 +359,6 @@
                         <span class="stat" id="btc-stat-1d"><span class="label">1D</span> --</span>
                         <span class="stat" id="btc-stat-1s"><span class="label">1S</span> --</span>
                         <span class="stat" id="btc-stat-1m"><span class="label">1M</span> --</span>
-                    </div>
-                    <!-- BARRA DE SCORE BTC -->
-                    <div class="score-bar-container" id="btc-score-bar">
-                        <div class="score-bar-label">
-                            <span>Score</span>
-                            <span class="value" id="btc-score-value">50</span>
-                        </div>
-                        <div class="score-bar-track">
-                            <div class="score-bar-fill" id="btc-score-fill" style="width:50%; background: #ffc107;"></div>
-                        </div>
-                        <div class="score-bar-direction neutral" id="btc-score-direction">NEUTRO</div>
                     </div>
                     <div id="candle-btc" class="candle-container"></div>
                     <span class="source-with-time" id="candle-btc-source">Binance/Bybit • WS</span>
@@ -372,16 +371,6 @@
                         <span class="stat" id="eth-stat-1s"><span class="label">1S</span> --</span>
                         <span class="stat" id="eth-stat-1m"><span class="label">1M</span> --</span>
                     </div>
-                    <div class="score-bar-container" id="eth-score-bar">
-                        <div class="score-bar-label">
-                            <span>Score</span>
-                            <span class="value" id="eth-score-value">50</span>
-                        </div>
-                        <div class="score-bar-track">
-                            <div class="score-bar-fill" id="eth-score-fill" style="width:50%; background: #ffc107;"></div>
-                        </div>
-                        <div class="score-bar-direction neutral" id="eth-score-direction">NEUTRO</div>
-                    </div>
                     <div id="candle-eth" class="candle-container"></div>
                     <span class="source-with-time" id="candle-eth-source">Binance/Bybit • WS</span>
                 </div>
@@ -393,18 +382,48 @@
                         <span class="stat" id="sol-stat-1s"><span class="label">1S</span> --</span>
                         <span class="stat" id="sol-stat-1m"><span class="label">1M</span> --</span>
                     </div>
-                    <div class="score-bar-container" id="sol-score-bar">
-                        <div class="score-bar-label">
-                            <span>Score</span>
-                            <span class="value" id="sol-score-value">50</span>
-                        </div>
-                        <div class="score-bar-track">
-                            <div class="score-bar-fill" id="sol-score-fill" style="width:50%; background: #ffc107;"></div>
-                        </div>
-                        <div class="score-bar-direction neutral" id="sol-score-direction">NEUTRO</div>
-                    </div>
                     <div id="candle-sol" class="candle-container"></div>
                     <span class="source-with-time" id="candle-sol-source">Binance/Bybit • WS</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== NOVA SEÇÃO: SCORE EM TEMPO REAL ===== -->
+        <section>
+            <h2 class="section-title">📊 SCORE EM TEMPO REAL (BTC, ETH, SOL)</h2>
+            <div class="score-bars-grid">
+                <!-- BTC Score -->
+                <div class="score-bar-card">
+                    <h3>Bitcoin (BTC/USDT)</h3>
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                        <span class="score-value-large" id="btc-score-value-large">50</span>
+                        <span class="score-direction neutral" id="btc-score-direction-large">NEUTRO</span>
+                    </div>
+                    <div class="score-bar-track">
+                        <div class="score-bar-fill" id="btc-score-fill-large" style="width:50%; background: #ffc107;"></div>
+                    </div>
+                </div>
+                <!-- ETH Score -->
+                <div class="score-bar-card">
+                    <h3>Ethereum (ETH/USDT)</h3>
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                        <span class="score-value-large" id="eth-score-value-large">50</span>
+                        <span class="score-direction neutral" id="eth-score-direction-large">NEUTRO</span>
+                    </div>
+                    <div class="score-bar-track">
+                        <div class="score-bar-fill" id="eth-score-fill-large" style="width:50%; background: #ffc107;"></div>
+                    </div>
+                </div>
+                <!-- SOL Score -->
+                <div class="score-bar-card">
+                    <h3>Solana (SOL/USDT)</h3>
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                        <span class="score-value-large" id="sol-score-value-large">50</span>
+                        <span class="score-direction neutral" id="sol-score-direction-large">NEUTRO</span>
+                    </div>
+                    <div class="score-bar-track">
+                        <div class="score-bar-fill" id="sol-score-fill-large" style="width:50%; background: #ffc107;"></div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -725,7 +744,7 @@
             return originalFetch(url, options);
         };
 
-        // ===== FUNÇÃO UNIFICADA DE BOS E RETEST (CORREÇÃO) =====
+        // ===== FUNÇÃO UNIFICADA DE BOS E RETEST =====
         function checkBOSAndRetest(state, direction, retestDistPct) {
             const recentHighs = state.swingHighs.slice(-3);
             const recentLows = state.swingLows.slice(-3);
@@ -1181,7 +1200,7 @@
             }
         }
 
-        // ===== UI DO PAINEL "FORÇA DO SINAL" (LEGADO) =====
+        // ===== UI DO PAINEL "FORÇA DO SINAL" =====
         function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData) {
             if (!scoreData) {
                 console.warn('[Força do Sinal] scoreData indefinido');
@@ -1295,13 +1314,36 @@
             }
         }
 
-        // ===== UPDATE WHALE UI =====
-        function updateWhaleUI() {
-            // Mantido apenas para compatibilidade, mas a seção foi removida
-            // A função ainda pode ser chamada, mas não afeta o layout
+        // ===== FUNÇÃO PARA ATUALIZAR AS BARRAS DE SCORE =====
+        function updateScoreBars() {
+            CONFIG.ASSETS.forEach(symbol => {
+                const data = assetsData[symbol];
+                if (!data) return;
+                const score = data.score !== undefined ? data.score : 50;
+                const dir = data.direction || 'NEUTRO';
+                const prefix = symbol.replace('USDT', '').toLowerCase();
+
+                // Elementos da nova seção
+                const valueEl = document.getElementById(`${prefix}-score-value-large`);
+                const dirEl = document.getElementById(`${prefix}-score-direction-large`);
+                const fillEl = document.getElementById(`${prefix}-score-fill-large`);
+
+                if (valueEl) valueEl.textContent = Math.round(score);
+                if (dirEl) {
+                    dirEl.textContent = dir;
+                    dirEl.className = `score-direction ${dir.toLowerCase()}`;
+                }
+                if (fillEl) {
+                    const pct = Math.min(100, Math.max(0, score));
+                    fillEl.style.width = pct + '%';
+                    const red = Math.round(255 - (pct / 100) * 255);
+                    const green = Math.round((pct / 100) * 255);
+                    fillEl.style.background = `rgb(${red}, ${green}, 0)`;
+                }
+            });
         }
 
-        // ===== WEBSOCKET COM FAILOVER =====
+        // ===== WEBSOCKET =====
         let wsRetryCount = 0;
         const WS_MAX_RETRIES = 5;
         let wsInstance = null;
@@ -1339,7 +1381,6 @@
                         setCurrentPrice(symbol, price);
                         const tradeValue = price * qty;
                         if (tradeValue > 100000) {
-                            // Atualiza whaleTrades apenas para manter estado, mas não exibe
                             if (isBuy) whaleTrades[symbol].buys += tradeValue;
                             else whaleTrades[symbol].sells += tradeValue;
                             whaleTrades[symbol].lastTx = {
@@ -1635,7 +1676,7 @@
             }));
         }
 
-        // ===== AVALIAÇÃO DE MERCADO (CORRIGIDO – UNIFICADO) =====
+        // ===== AVALIAÇÃO DE MERCADO =====
         async function evaluateMarkets() {
             for (const symbol of CONFIG.ASSETS) {
                 const data = assetsData[symbol];
@@ -1682,11 +1723,9 @@
                 
                 const scoreData = computeScore(symbol, assetsData, liqMap);
 
-                // BOS real (apenas para diagnóstico, não bloqueia)
                 const structureForScore = checkBOSAndRetest(data, scoreData.direction, ROBOT_CONFIG.retestDistPct);
                 data.currentBOS = structureForScore.bos ? 'BOS' : 'NEUTRAL';
 
-                // MTF alinhado controlado pela configuração
                 const mtfAligned = ROBOT_CONFIG.requireMTF ? (data.mtfConfluence?.alinhado || false) : true;
 
                 const confidence = calculateConfidenceScore({
@@ -1734,7 +1773,6 @@
                     if (!derivCheck.allow) blockReason = derivCheck.reason;
                 }
                 
-                // ===== MVRV + FEAR & GREED COMO BÔNUS =====
                 let onChainBonus = false;
                 let onChainMultiplier = 1.0;
                 if (symbol === 'BTCUSDT' && data.mvrv !== null && data.mvrv !== undefined) {
@@ -1761,6 +1799,10 @@
                     }
                 }
                 
+                // Atualiza assetsData com score e direção (para as barras)
+                assetsData[symbol].score = confidence.score;
+                assetsData[symbol].direction = confidence.direction || 'NEUTRO';
+                
                 const prevScore = previousScores[symbol] || 50;
                 if (!activePositions[symbol] && !blockReason && isSafeToTrade()) {
                     const now = Date.now();
@@ -1771,7 +1813,6 @@
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
                             if (expCheck.blocked) continue;
                             
-                            // ===== RETEST E BOS UNIFICADOS =====
                             const structure = checkBOSAndRetest(data, primaryDirection, ROBOT_CONFIG.retestDistPct);
                             const smcSetup = structure.bos;
                             let retestConfirmed = structure.retest;
@@ -1858,7 +1899,8 @@
                 if (prevScore > 50 && score <= 50) telegram.sendTelegramAlert(`🔄 <b>TENDÊNCIA MUDOU (${symbol})</b>\nScore caiu para ${score}. Possível reversão Short.`);
                 previousScores[symbol] = score;
             }
-            // Não há mais gráfico de evolução, então não chamamos updateScoreChart
+            // Atualiza as barras de score após cada avaliação
+            updateScoreBars();
         }
 
         // ===== ATUALIZAÇÃO DE DADOS EXTERNOS =====
@@ -1869,7 +1911,7 @@
             try {
                 const macro = await fetchMacroStatic();
                 if (macro && typeof macro === 'object') {
-                    // Atualiza campos macro, mas a seção foi removida, então apenas mantém para referência
+                    // Mantido para compatibilidade
                 }
 
                 const mvrv = await fetchMVRV();
@@ -1925,10 +1967,10 @@
                 setTextOrNA('eth-gas', ethGas, '', ' Gwei');
 
                 const premium = await fetchTetherPremium();
-                // Removido o elemento tether-premium, então não faz nada
+                // removido
 
                 const fedRate = await fetchFedRate();
-                // Removido
+                // removido
 
                 const defi = await fetchDeFiData();
                 if (defi) {
@@ -2016,8 +2058,6 @@
             await updateExternalData();
             await updateMTFAndOI();
             await evaluateMarkets();
-
-            setTimeout(runCommittee, 1000);
 
             // Força do Sinal a cada 10s
             setInterval(async () => {
@@ -2201,7 +2241,8 @@
                 }
             }, 1000);
 
-            // O gráfico de whale foi removido, então não chamamos mais updateWhaleChart
+            // Inicia o motor do comitê
+            setTimeout(runCommittee, 1000);
         }
 
         init();
