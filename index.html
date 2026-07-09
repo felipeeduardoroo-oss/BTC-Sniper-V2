@@ -2139,16 +2139,17 @@
                 this.textContent = '⏳ Processando...';
                 document.getElementById('backtest-status').textContent = 'Buscando dados históricos...';
                 try {
-                    const options = {
-                        scoreMin: parseFloat(document.getElementById('param-score').value) || 60,
-                        adxMin: parseFloat(document.getElementById('param-adx').value) || 10,
-                        retestDistPct: (parseFloat(document.getElementById('param-retest-dist').value) || 0.8) / 100,
-                        rrMin: parseFloat(document.getElementById('param-rr').value) || 0.1,
-                        emaRetest: document.getElementById('param-ema-retest').checked,
-                        mtfRequired: document.getElementById('param-mtf-required').checked,
-                        ignoreBOS: document.getElementById('param-ignore-bos').checked,
-                        ignoreRetest: document.getElementById('param-ignore-retest').checked
-                    };
+                 const options = {
+    scoreMin: ROBOT_CONFIG.scoreMin,
+    scoreMaxShort: ROBOT_CONFIG.scoreMaxShort,
+    adxMin: ROBOT_CONFIG.adxMin,
+    retestDistPct: ROBOT_CONFIG.retestDistPct,
+    rrMin: ROBOT_CONFIG.rrMin,
+    requireBOS: ROBOT_CONFIG.requireBOS,
+    requireRetest: ROBOT_CONFIG.requireRetest,
+    requireMTF: ROBOT_CONFIG.requireMTF,
+    requireEMARetest: ROBOT_CONFIG.requireEMARetest,
+};
                     console.log('[Backtest UI] Parâmetros enviados:', options);
 
                     const result = await runBacktest('BTCUSDT', 30, options);
