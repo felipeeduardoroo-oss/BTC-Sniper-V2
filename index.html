@@ -67,7 +67,7 @@
         .candle-stats .stat { padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.03); font-family: var(--font-mono); }
         .candle-stats .stat.positive { color: var(--accent-green); background: rgba(0, 232, 150, 0.05); }
         .candle-stats .stat.negative { color: var(--accent-red); background: rgba(255, 77, 109, 0.05); }
-        .candle-container { width: 100%; height: 220px; }
+        .candle-container { width: 100%; height: 280px; }
         .section-title { font-size: 1.1rem; font-weight: 600; margin: 32px 0 16px 0; padding-bottom: 12px; border-bottom: 1px solid var(--border); color: var(--text-light); display: flex; align-items: center; gap: 8px; }
         .table-wrapper { overflow-x: auto; margin-bottom: 32px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
         table { width: 100%; border-collapse: collapse; }
@@ -172,13 +172,13 @@
         }
 
         /* ===== NOVAS BARRAS DE SCORE ===== */
-        .score-bar-container {
-            margin-top: 12px;
-            padding: 8px 12px;
-            background: var(--bg-dark);
-            border-radius: 6px;
-            border: 1px solid var(--border);
-        }
+      .score-bar-container {
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: var(--bg-dark);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+}
         .score-bar-label {
             display: flex;
             justify-content: space-between;
@@ -289,23 +289,28 @@
                     <input type="number" id="live-score-min" value="60" min="0" max="100" step="1">
                 </label>
                 <span class="badge-param" id="live-score-badge">Atual: 60</span>
-            </div>
-            <div class="param-group">
-                <label for="live-adx-min">ADX mínimo:
-                    <input type="number" id="live-adx-min" value="10" min="0" max="100" step="1">
-                </label>
-                <span class="badge-param" id="live-adx-badge">Atual: 10</span>
-            </div>
-            <div class="param-group">
-                <label>
-                    <input type="checkbox" id="live-require-bos"> Exigir BOS
-                </label>
-                <label>
-                    <input type="checkbox" id="live-require-retest"> Exigir retest
-                </label>
-                <button id="live-apply-btn" class="backtest-btn" style="padding:6px 16px;font-size:0.8rem;background:var(--accent-blue);">Aplicar</button>
-            </div>
-        </div>
+           <div class="param-group">
+    <label for="live-adx-min">ADX mínimo:
+        <input type="number" id="live-adx-min" value="10" min="0" max="100" step="1">
+    </label>
+    <span class="badge-param" id="live-adx-badge">Atual: 10</span>
+</div>
+<!-- NOVO CAMPO: Score máximo SHORT -->
+<div class="param-group">
+    <label for="live-score-max-short">Score máximo SHORT:
+        <input type="number" id="live-score-max-short" value="30" min="0" max="100" step="1">
+    </label>
+    <span class="badge-param" id="live-score-short-badge">Atual: 30</span>
+</div>
+<div class="param-group">
+    <label>
+        <input type="checkbox" id="live-require-bos"> Exigir BOS
+    </label>
+    <label>
+        <input type="checkbox" id="live-require-retest"> Exigir retest
+    </label>
+    <button id="live-apply-btn" class="backtest-btn" style="padding:6px 16px;font-size:0.8rem;background:var(--accent-blue);">Aplicar</button>
+</div>
 
         <!-- ===== GRÁFICOS DE CANDLESTICK NO TOPO ===== -->
         <section>
@@ -560,11 +565,7 @@
             </div>
         </section>
 
-        <!-- ===== RESTO DO CONTEÚDO (mantido) ===== -->
-        <section>
-            <h2 class="section-title">📉 EVOLUÇÃO DO SCORE (Live)</h2>
-            <div class="chart-wrapper"><canvas id="chart_score_history"></canvas></div>
-        </section>
+      
 
         <section>
             <h2 class="section-title">📌 RESUMO EXECUTIVO</h2>
@@ -613,25 +614,7 @@
             </div>
         </section>
 
-        <!-- ===== INDICADORES MACROECONÔMICOS ===== -->
-        <section>
-            <h2 class="section-title">🌍 INDICADORES MACROECONÔMICOS</h2>
-            <div class="table-wrapper">
-                <table>
-                    <thead><tr><th>Indicador</th><th>Valor</th><th>Interpretação</th><th>Fonte</th></tr></thead>
-                    <tbody>
-                        <tr><td><strong>DXY</strong></td><td id="dxy-value">Carregando...</td><td id="dxy-interp">🔴 USD Forte</td><td><span class="data-source">Alpha Vantage</span></td></tr>
-                        <tr><td><strong>Fed Rate</strong></td><td id="fed-rate">Carregando...</td><td id="fed-interp">⚠️ Juros restritivos</td><td><span class="data-source">Alpha Vantage</span></td></tr>
-                        <tr><td><strong>US 10Y Yield</strong></td><td id="us10y-value">Carregando...</td><td id="us10y-interp">⚠️ Yields elevados</td><td><span class="data-source">Alpha Vantage</span></td></tr>
-                        <tr><td><strong>VIX</strong></td><td id="vix-value">Carregando...</td><td id="vix-interp">ℹ️ Estresse de mercado</td><td><span class="data-source">Alpha Vantage</span></td></tr>
-                        <tr><td><strong>NASDAQ % (24h)</strong></td><td id="nasdaq-value">Carregando...</td><td>🔴 Tech</td><td><span class="data-source">Alpha Vantage</span></td></tr>
-                        <tr><td><strong>S&amp;P 500 % (24h)</strong></td><td id="sp500-value">Carregando...</td><td>ℹ️ Broad market</td><td><span class="data-source">Alpha Vantage</span></td></tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="chart-wrapper"><canvas id="chart_macro_rates"></canvas></div>
-        </section>
-
+      
         <!-- ===== ATIVIDADE DE BALEIAS ===== -->
         <section>
             <h2 class="section-title">🐋 ATIVIDADE DE BALEIAS (Live Trade Tracker)</h2>
@@ -764,6 +747,7 @@
         // ===== CONFIGURAÇÃO DO ROBÔ AO VIVO =====
         const ROBOT_CONFIG = {
             scoreMin: 60,
+            scoreMaxShort: 30,
             adxMin: 10,
             rrMin: 0.1,
             requireBOS: false,
@@ -1779,7 +1763,7 @@
                     blockReason = blockReason ? blockReason + '; Macro blackout' : 'Macro blackout';
                 }
                 
-                const primaryDirection = (score >= ROBOT_CONFIG.scoreMin) ? 'LONG' : (score <= 30 ? 'SHORT' : null);
+                const primaryDirection = (score >= ROBOT_CONFIG.scoreMin) ? 'LONG' : (score <= ROBOT_CONFIG.scoreMaxShort ? 'SHORT' : null);
                 
                 if (primaryDirection === 'LONG' && data.price < vwap && !blockReason) {
                     blockReason = blockReason ? blockReason + '; Preço abaixo do VWAP' : 'Preço abaixo do VWAP';
@@ -2056,20 +2040,24 @@
 
         // ===== PAINEL DE PARÂMETROS AO VIVO =====
         function applyLiveParams() {
-            const scoreMin = parseInt(document.getElementById('live-score-min').value) || 60;
-            const adxMin = parseInt(document.getElementById('live-adx-min').value) || 10;
-            const requireBOS = document.getElementById('live-require-bos').checked;
-            const requireRetest = document.getElementById('live-require-retest').checked;
+    const scoreMin = parseInt(document.getElementById('live-score-min').value) || 60;
+    const scoreMaxShort = parseInt(document.getElementById('live-score-max-short').value) || 30; // NOVO
+    const adxMin = parseInt(document.getElementById('live-adx-min').value) || 10;
+    const requireBOS = document.getElementById('live-require-bos').checked;
+    const requireRetest = document.getElementById('live-require-retest').checked;
 
-            ROBOT_CONFIG.scoreMin = scoreMin;
-            ROBOT_CONFIG.adxMin = adxMin;
-            ROBOT_CONFIG.requireBOS = requireBOS;
-            ROBOT_CONFIG.requireRetest = requireRetest;
+    ROBOT_CONFIG.scoreMin = scoreMin;
+    ROBOT_CONFIG.scoreMaxShort = scoreMaxShort; // NOVO
+    ROBOT_CONFIG.adxMin = adxMin;
+    ROBOT_CONFIG.requireBOS = requireBOS;
+    ROBOT_CONFIG.requireRetest = requireRetest;
 
-            document.getElementById('live-score-badge').textContent = 'Atual: ' + scoreMin;
-            document.getElementById('live-adx-badge').textContent = 'Atual: ' + adxMin;
-            console.log('[ROBOT] Parâmetros atualizados:', ROBOT_CONFIG);
-        }
+    document.getElementById('live-score-badge').textContent = 'Atual: ' + scoreMin;
+    document.getElementById('live-score-short-badge').textContent = 'Atual: ' + scoreMaxShort; // NOVO
+    document.getElementById('live-adx-badge').textContent = 'Atual: ' + adxMin;
+    console.log('[ROBOT] Parâmetros atualizados:', ROBOT_CONFIG);
+}
+
 
         // ===== BOOTSTRAP =====
         async function init() {
