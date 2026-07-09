@@ -117,6 +117,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         emaRetest = true,
         mtfRequired = true,
         ignoreBOS = false   // NOVO
+        ignoreRetest = false   // <-- ADICIONE ESTA LINHA
     } = options;
 
     logDebug(`Iniciando backtest REAL para ${symbol} (${days} dias)`);
@@ -483,9 +484,12 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     console.log(`  price: ${state.price} | primaryDirection: ${primaryDirection}`);
                 }
 
-                // 4. Abrir posição se todas as condições forem atendidas
-                // Se ignoreBOS for true, entra apenas com retestConfirmed
-                if (ignoreBOS ? retestConfirmed : (smcSetup && retestConfirmed)) {
+                              // 4. Abrir posição se todas as condições forem atendidas
+                // Se ignoreRetest for true, ignora o retest
+                const entryCondition = ignoreRetest ? true : retestConfirmed;
+                // Se ignoreBOS for true, entra apenas com entryCondition
+                // Se ignoreBOS for false, exige BOS E entryCondition
+                if (ignoreBOS ? entryCondition : (smcSetup && entryCondition)) {
                     let stop, tp1, tp2;
                     if (primaryDirection === 'LONG') {
                         const structLevel = Math.min(...state.swingLows) - (atr * 0.3);
@@ -500,7 +504,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     }
                     const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
                     if (rr1 < rrMin) continue;
-
+                    // ... resto do código (Kelly, position, trades.push, etc.)
                     // Kelly sizing
                     const totalTrades = winCount + lossCount;
                     const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
