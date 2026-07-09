@@ -300,7 +300,7 @@
         </section>
 
         <!-- ===== BACKTEST 30 DIAS ===== -->
-        <!-- ===== BACKTEST 30 DIAS (NOVO) ===== -->
+   <!-- ===== BACKTEST 30 DIAS (NOVO) ===== -->
 <section>
     <h2 class="section-title">📈 BACKTEST — ÚLTIMOS 30 DIAS (DADOS REAIS)</h2>
     <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
@@ -330,7 +330,7 @@
                     Dist. retest (%)
                     <span style="color:var(--accent-yellow);cursor:help;" title="Distância máxima do preço em relação ao nível rompido para considerar reteste (padrão 0.8%).">ⓘ</span>
                 </label>
-                <input type="number" id="param-retest-dist" value="0.8" min="0.1" max="5" step="0.1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
+                <input type="number" id="param-retest-dist" value="0.8" min="0" max="5" step="0.1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
                 <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 0.8%</div>
             </div>
             <!-- R:R mínimo -->
@@ -339,7 +339,7 @@
                     R:R mínimo
                     <span style="color:var(--accent-yellow);cursor:help;" title="Relação risco:retorno mínima exigida (padrão 1.5).">ⓘ</span>
                 </label>
-                <input type="number" id="param-rr" value="1.5" min="0.5" max="10" step="0.1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
+                <input type="number" id="param-rr" value="1.5" min="0.1" max="10" step="0.1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
                 <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 1.5</div>
             </div>
             <!-- Retest EMA20 (checkbox) -->
@@ -358,6 +358,14 @@
                     <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, exige alinhamento MTF (1h/4h) para entrada (padrão: ativado).">ⓘ</span>
                 </label>
             </div>
+            <!-- NOVO: Ignorar BOS (checkbox) -->
+            <div style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="param-ignore-bos" style="accent-color:var(--accent-purple);">
+                <label for="param-ignore-bos" style="font-size:0.8rem;color:var(--text-muted);">
+                    Ignorar BOS
+                    <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, entra apenas com score + retest (sem exigir BOS). Útil para diagnóstico.">ⓘ</span>
+                </label>
+            </div>
         </div>
 
         <!-- Botão e Status -->
@@ -365,6 +373,45 @@
             <button id="run-backtest-btn" class="backtest-btn">▶️ Executar Backtest</button>
             <span id="backtest-status" style="color:var(--text-muted);">Aguardando execução</span>
         </div>
+
+        <!-- Resumo -->
+        <div id="backtest-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:16px;"></div>
+
+        <!-- Diagnóstico (blockStats) -->
+        <div id="backtest-diagnostic" style="margin-top:12px;font-size:0.8rem;color:var(--text-muted);background:var(--bg-dark);padding:12px;border-radius:8px;border:1px solid var(--border);display:none;">
+            <strong>Diagnóstico de bloqueios:</strong>
+            <div id="backtest-blockstats" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;"></div>
+        </div>
+    </div>
+
+    <!-- Tabela de trades -->
+    <div class="table-wrapper" id="backtest-table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Entrada (UTC)</th>
+                    <th>Ativo</th>
+                    <th>Direção</th>
+                    <th>Preço Entrada</th>
+                    <th>Stop Loss</th>
+                    <th>Take Profit 1</th>
+                    <th>Preço Saída</th>
+                    <th>Motivo</th>
+                    <th>P&L (%)</th>
+                    <th>Duração (h)</th>
+                </tr>
+            </thead>
+            <tbody id="backtest-tbody">
+                <tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum backtest executado ainda.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Legenda -->
+    <div id="backtest-legend" style="font-size:0.75rem;color:var(--text-muted);margin-top:8px;background:var(--bg-card);padding:12px;border-radius:8px;border:1px solid var(--border);">
+        <strong>Legenda:</strong> Dados utilizados: Preços (Binance 1h/4h), Funding Rate (Binance), Open Interest (Binance), MVRV (CoinMetrics), Macro (Alpha Vantage). <strong>Order Book desconsiderado</strong> (indisponível historicamente). Carteira inicial: $10.000 USD. Parâmetros ajustáveis acima.
+    </div>
+</section>
 
         <!-- Resumo -->
         <div id="backtest-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:16px;"></div>
@@ -1933,6 +1980,7 @@
             // Backtest
             // Backtest
 // ===== BACKTEST (SUBSTITUIR O BLOCO INTEIRO) =====
+// ===== BACKTEST (SUBSTITUIR O BLOCO INTEIRO) =====
 document.getElementById('run-backtest-btn').addEventListener('click', async function() {
     this.disabled = true;
     this.textContent = '⏳ Processando...';
@@ -1945,7 +1993,8 @@ document.getElementById('run-backtest-btn').addEventListener('click', async func
             retestDistPct: (parseFloat(document.getElementById('param-retest-dist').value) || 0.8) / 100,
             rrMin: parseFloat(document.getElementById('param-rr').value) || 1.5,
             emaRetest: document.getElementById('param-ema-retest').checked,
-            mtfRequired: document.getElementById('param-mtf-required').checked
+            mtfRequired: document.getElementById('param-mtf-required').checked,
+            ignoreBOS: document.getElementById('param-ignore-bos').checked   // NOVO
         };
         console.log('[Backtest UI] Parâmetros enviados:', options);
 
