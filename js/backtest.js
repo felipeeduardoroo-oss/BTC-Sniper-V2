@@ -476,7 +476,10 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     (retestConfirmed ? (smcSetup ? 'passou_filtros' : 'sem_BOS') : 'sem_retest') 
                     : 'score_neutro');
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
-
+                // Log para diagnóstico
+if (ignoreRetest && retestConfirmed === false) {
+    console.log(`[IgnoreRetest] Entrando sem retest no candle ${i}, score=${score}`);
+}
                 // ===== LOG DE SWINGS (a cada 50 candles) =====
                 if (i % 50 === 0) {
                     console.log(`[Swings] HIGH: ${state.swingHighs.length} | LOW: ${state.swingLows.length}`);
