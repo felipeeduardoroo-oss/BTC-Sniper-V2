@@ -262,6 +262,75 @@
             color: var(--text-muted);
             border: 1px solid var(--border);
         }
+
+        /* ===== CORREÇÃO DE REDIMENSIONAMENTO ===== */
+        /* Garante que nada force a largura além do container */
+        .container,
+        .container > *,
+        .container > * > * {
+            max-width: 100% !important;
+            overflow-x: hidden !important;
+            box-sizing: border-box !important;
+        }
+        .table-wrapper,
+        pre,
+        code,
+        .chart-wrapper,
+        #backtest-results,
+        #backtest-summary,
+        #backtest-diagnostic {
+            max-width: 100% !important;
+            overflow-x: auto !important;
+            word-wrap: break-word !important;
+            white-space: normal !important;
+        }
+        .container > * {
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        /* Reforça grids para quebra em telas pequenas */
+        @media (max-width: 768px) {
+            .candles-grid,
+            .summary-grid,
+            .score-container,
+            .confirmation-grid,
+            .live-params {
+                grid-template-columns: 1fr !important;
+                gap: 12px !important;
+            }
+            .header-meta {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 6px;
+            }
+            .chart-wrapper {
+                height: 220px;
+                padding: 12px;
+            }
+            .score-value {
+                font-size: 2.8rem;
+            }
+            .telegram-test-btn {
+                bottom: 12px;
+                right: 12px;
+                padding: 10px 16px;
+                font-size: 0.8rem;
+            }
+        }
+        @media (max-width: 480px) {
+            .container {
+                padding: 10px;
+            }
+            .candle-container {
+                height: 200px;
+            }
+            .score-card {
+                padding: 16px;
+            }
+            .score-details {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -565,8 +634,6 @@
             </div>
         </section>
 
-      
-
         <section>
             <h2 class="section-title">📌 RESUMO EXECUTIVO</h2>
             <div class="summary-grid">
@@ -614,7 +681,6 @@
             </div>
         </section>
 
-      
         <!-- ===== ATIVIDADE DE BALEIAS ===== -->
         <section>
             <h2 class="section-title">🐋 ATIVIDADE DE BALEIAS (Live Trade Tracker)</h2>
@@ -678,32 +744,7 @@
     </div>
 
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
- /* ===== CORREÇÃO DE OVERFLOW ===== */
-    .container,
-    .container > *,
-    .container > * > * {
-        max-width: 100% !important;
-        overflow-x: hidden !important;
-        box-sizing: border-box !important;
-    }
 
-    .table-wrapper, pre, code, .chart-wrapper {
-        max-width: 100% !important;
-        overflow-x: auto !important;
-    }
-
-    #backtest-results, #backtest-summary, #backtest-diagnostic {
-        max-width: 100% !important;
-        overflow-x: auto !important;
-        word-wrap: break-word !important;
-        white-space: normal !important;
-    }
-
-    .container > * {
-        width: 100% !important;
-        box-sizing: border-box !important;
-    }
-</style>
     <script type="module">
         // ===== IMPORTAÇÕES =====
         import {
