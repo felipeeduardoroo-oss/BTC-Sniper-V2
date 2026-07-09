@@ -1558,7 +1558,8 @@
             const volAnomaly = detectVolumeAnomaly(data.candles1H, 20, volThreshold);
             data.volumeAnomaly = volAnomaly;
             
-            const vwap = calculateVWAP(data.candles1H);
+           const last24Candles = data.candles1H.slice(-24);
+            const vwap = calculateVWAP(last24Candles);
             data.vwap = vwap;
             
             const macroCheck = await isHighImpactEventNow();
@@ -1567,8 +1568,8 @@
             const scoreData = computeScore(symbol, assetsData, liqMap);
 
             // BOS real (apenas para diagnóstico, não bloqueia)
-            const bosConfirmed = scoreData.direction !== 'NEUTRAL' && findSMCSetup(data, scoreData.direction);
-            data.currentBOS = bosConfirmed ? 'BOS' : 'NEUTRAL';
+            const structureForScore = checkBOSAndRetest(data, scoreData.direction, ROBOT_CONFIG.retestDistPct);
+            data.currentBOS = structureForScore.bos ? 'BOS' : 'NEUTRAL';
 
             // MTF alinhado controlado pela configuração
             const mtfAligned = ROBOT_CONFIG.requireMTF ? (data.mtfConfluence?.alinhado || false) : true;
@@ -1690,19 +1691,22 @@
                                 }
                             }
                             
-                            if (primaryDirection === 'LONG') {
-                                structLevel = Math.min(...data.swingLows) - (atr * 0.3);
-                                stop = Math.min(structLevel, data.price - atr * 1.5);
-                                tp1 = data.price + (atr * 2);
-                                tp2 = liqTarget1 || (data.price + (atr * 4));
-                                tp3 = liqTarget2 || (data.price + (atr * 6));
-                            } else {
-                                structLevel = Math.max(...data.swingHighs) + (atr * 0.3);
-                                stop = Math.max(structLevel, data.price + atr * 1.5);
-                                tp1 = data.price - (atr * 2);
-                                tp2 = liqTarget1 || (data.price - (atr * 4));
-                                tp3 = liqTarget2 || (data.price - (atr * 6));
-                            }
+                     if (primaryDirection === 'LONG') {
+    const recentLows = data.swingLows.slice(-3);
+    structLevel = (recentLows.length ? Math.min(...recentLows) : data.price * 0.98) - (atr * 0.3);
+    stop = Math.min(structLevel, data.price - atr * 1.5);
+    tp1 = data.price + (atr * 2);
+    tp2 = liqTarget1 || (data.price + (atr * 4));
+    tp3 = liqTarget2 || (data.price + (atr * 6));
+} else {
+    const recentHighs = data.swingHighs.slice(-3);
+    structLevel = (recentHighs.length ? Math.max(...recentHighs) : data.price * 1.02) + (atr * 0.3);
+    stop = Math.max(structLevel, data.price + atr * 1.5);
+    tp1 = data.price - (atr * 2);
+    tp2 = liqTarget1 || (data.price - (atr * 4));
+    tp3 = liqTarget2 || (data.price - (atr * 6));
+}
+
                             const rr1 = primaryDirection === 'LONG' ? (tp1 - data.price) / (data.price - stop) : (data.price - tp1) / (stop - data.price);
                             if (rr1 < ROBOT_CONFIG.rrMin) continue;
                             
