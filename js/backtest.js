@@ -1,4 +1,4 @@
-// js/backtest.js – Backtest com dados reais dos últimos 30 dias (CORRIGIDO)
+// js/backtest.js – Backtest com dados reais dos últimos 30 dias (CORRIGIDO + IGNORAR BOS)
 import { CONFIG } from './config.js';
 import {
     fetchHistoricalCandles,
@@ -115,7 +115,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         retestDistPct = 0.008,
         rrMin = 1.5,
         emaRetest = true,
-        mtfRequired = true
+        mtfRequired = true,
+        ignoreBOS = false   // NOVO
     } = options;
 
     logDebug(`Iniciando backtest REAL para ${symbol} (${days} dias)`);
@@ -422,7 +423,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 }
             }
 
-            // ===== ENTRADA (BOS ORIGINAL – sem lookback) =====
+            // ===== ENTRADA (COM IGNORAR BOS) =====
             if (!position && !blockReason && primaryDirection) {
                 const atr = state.atr_1H || (state.price * 0.02);
                 
@@ -475,8 +476,16 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     : 'score_neutro');
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
+                // ===== LOG DE SWINGS (a cada 50 candles) =====
+                if (i % 50 === 0) {
+                    console.log(`[Swings] HIGH: ${state.swingHighs.length} | LOW: ${state.swingLows.length}`);
+                    console.log(`  lastSwingHigh: ${Math.max(...state.swingHighs)} | lastSwingLow: ${Math.min(...state.swingLows)}`);
+                    console.log(`  price: ${state.price} | primaryDirection: ${primaryDirection}`);
+                }
+
                 // 4. Abrir posição se todas as condições forem atendidas
-                if (smcSetup && retestConfirmed) {
+                // Se ignoreBOS for true, entra apenas com retestConfirmed
+                if (ignoreBOS ? retestConfirmed : (smcSetup && retestConfirmed)) {
                     let stop, tp1, tp2;
                     if (primaryDirection === 'LONG') {
                         const structLevel = Math.min(...state.swingLows) - (atr * 0.3);
@@ -583,7 +592,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             finalEquity: equity,
             blockStats: blockStats,
             totalCandlesProcessed: totalCandlesProcessed,
-            disclaimer: "MTF Confluence calculado com candles históricos (1h e 4h). BOS original (sem lookback). BlockStats mostra distribuição dos motivos de bloqueio."
+            disclaimer: "MTF Confluence calculado com candles históricos (1h e 4h). BOS original (sem lookback). Ignorar BOS disponível como opção de diagnóstico."
         };
 
         logDebug('Backtest REAL concluído!', summary);
