@@ -67,7 +67,7 @@
         .candle-stats .stat { padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.03); font-family: var(--font-mono); }
         .candle-stats .stat.positive { color: var(--accent-green); background: rgba(0, 232, 150, 0.05); }
         .candle-stats .stat.negative { color: var(--accent-red); background: rgba(255, 77, 109, 0.05); }
-        .candle-container { width: 100%; height: 310px; } /* ALTERADO: 220px -> 280px */
+        .candle-container { width: 100%; height: 280px; }
         .section-title { font-size: 1.1rem; font-weight: 600; margin: 32px 0 16px 0; padding-bottom: 12px; border-bottom: 1px solid var(--border); color: var(--text-light); display: flex; align-items: center; gap: 8px; }
         .table-wrapper { overflow-x: auto; margin-bottom: 32px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
         table { width: 100%; border-collapse: collapse; }
@@ -173,11 +173,11 @@
 
         /* ===== NOVAS BARRAS DE SCORE ===== */
         .score-bar-container {
-            margin-top: 5px;
+            margin-top: 8px;
             padding: 6px 10px;
             background: var(--bg-dark);
-            border-radius: 20px;
-            border: 20px solid var(--border);
+            border-radius: 6px;
+            border: 1px solid var(--border);
         }
         .score-bar-label {
             display: flex;
@@ -296,7 +296,6 @@
                 </label>
                 <span class="badge-param" id="live-adx-badge">Atual: 10</span>
             </div>
-            <!-- NOVO CAMPO: Score máximo SHORT -->
             <div class="param-group">
                 <label for="live-score-max-short">Score máximo SHORT:
                     <input type="number" id="live-score-max-short" value="30" min="0" max="100" step="1">
@@ -318,72 +317,70 @@
         <section>
             <h2 class="section-title">🕯️ GRÁFICOS DE CANDLESTICK (Live WS) + Score em Tempo Real</h2>
             <div class="candles-grid">
-            <!-- BTC -->
-<div class="candle-card">
-    <h3>Bitcoin (BTC/USDT)</h3>
-    <div class="candle-stats" id="btc-stats">
-        <span class="stat" id="btc-stat-1d"><span class="label">1D</span> --</span>
-        <span class="stat" id="btc-stat-1s"><span class="label">1S</span> --</span>
-        <span class="stat" id="btc-stat-1m"><span class="label">1M</span> --</span>
-    </div>
-    <!-- BARRA DE SCORE BTC (agora acima do gráfico) -->
-    <div class="score-bar-container" id="btc-score-bar">
-        <div class="score-bar-label">
-            <span>Score</span>
-            <span class="value" id="btc-score-value">50</span>
-        </div>
-        <div class="score-bar-track">
-            <div class="score-bar-fill" id="btc-score-fill" style="width:50%; background: #ffc107;"></div>
-        </div>
-        <div class="score-bar-direction neutral" id="btc-score-direction">NEUTRO</div>
-    </div>
-    <div id="candle-btc" class="candle-container"></div>
-    <span class="source-with-time" id="candle-btc-source">Binance/Bybit • WS</span>
-</div>
-
-<!-- ETH -->
-<div class="candle-card">
-    <h3>Ethereum (ETH/USDT)</h3>
-    <div class="candle-stats" id="eth-stats">
-        <span class="stat" id="eth-stat-1d"><span class="label">1D</span> --</span>
-        <span class="stat" id="eth-stat-1s"><span class="label">1S</span> --</span>
-        <span class="stat" id="eth-stat-1m"><span class="label">1M</span> --</span>
-    </div>
-    <div class="score-bar-container" id="eth-score-bar">
-        <div class="score-bar-label">
-            <span>Score</span>
-            <span class="value" id="eth-score-value">50</span>
-        </div>
-        <div class="score-bar-track">
-            <div class="score-bar-fill" id="eth-score-fill" style="width:50%; background: #ffc107;"></div>
-        </div>
-        <div class="score-bar-direction neutral" id="eth-score-direction">NEUTRO</div>
-    </div>
-    <div id="candle-eth" class="candle-container"></div>
-    <span class="source-with-time" id="candle-eth-source">Binance/Bybit • WS</span>
-</div>
-
-<!-- SOL -->
-<div class="candle-card">
-    <h3>Solana (SOL/USDT)</h3>
-    <div class="candle-stats" id="sol-stats">
-        <span class="stat" id="sol-stat-1d"><span class="label">1D</span> --</span>
-        <span class="stat" id="sol-stat-1s"><span class="label">1S</span> --</span>
-        <span class="stat" id="sol-stat-1m"><span class="label">1M</span> --</span>
-    </div>
-    <div class="score-bar-container" id="sol-score-bar">
-        <div class="score-bar-label">
-            <span>Score</span>
-            <span class="value" id="sol-score-value">50</span>
-        </div>
-        <div class="score-bar-track">
-            <div class="score-bar-fill" id="sol-score-fill" style="width:50%; background: #ffc107;"></div>
-        </div>
-        <div class="score-bar-direction neutral" id="sol-score-direction">NEUTRO</div>
-    </div>
-    <div id="candle-sol" class="candle-container"></div>
-    <span class="source-with-time" id="candle-sol-source">Binance/Bybit • WS</span>
-</div> 
+                <!-- BTC -->
+                <div class="candle-card">
+                    <h3>Bitcoin (BTC/USDT)</h3>
+                    <div class="candle-stats" id="btc-stats">
+                        <span class="stat" id="btc-stat-1d"><span class="label">1D</span> --</span>
+                        <span class="stat" id="btc-stat-1s"><span class="label">1S</span> --</span>
+                        <span class="stat" id="btc-stat-1m"><span class="label">1M</span> --</span>
+                    </div>
+                    <!-- BARRA DE SCORE BTC -->
+                    <div class="score-bar-container" id="btc-score-bar">
+                        <div class="score-bar-label">
+                            <span>Score</span>
+                            <span class="value" id="btc-score-value">50</span>
+                        </div>
+                        <div class="score-bar-track">
+                            <div class="score-bar-fill" id="btc-score-fill" style="width:50%; background: #ffc107;"></div>
+                        </div>
+                        <div class="score-bar-direction neutral" id="btc-score-direction">NEUTRO</div>
+                    </div>
+                    <div id="candle-btc" class="candle-container"></div>
+                    <span class="source-with-time" id="candle-btc-source">Binance/Bybit • WS</span>
+                </div>
+                <!-- ETH -->
+                <div class="candle-card">
+                    <h3>Ethereum (ETH/USDT)</h3>
+                    <div class="candle-stats" id="eth-stats">
+                        <span class="stat" id="eth-stat-1d"><span class="label">1D</span> --</span>
+                        <span class="stat" id="eth-stat-1s"><span class="label">1S</span> --</span>
+                        <span class="stat" id="eth-stat-1m"><span class="label">1M</span> --</span>
+                    </div>
+                    <div class="score-bar-container" id="eth-score-bar">
+                        <div class="score-bar-label">
+                            <span>Score</span>
+                            <span class="value" id="eth-score-value">50</span>
+                        </div>
+                        <div class="score-bar-track">
+                            <div class="score-bar-fill" id="eth-score-fill" style="width:50%; background: #ffc107;"></div>
+                        </div>
+                        <div class="score-bar-direction neutral" id="eth-score-direction">NEUTRO</div>
+                    </div>
+                    <div id="candle-eth" class="candle-container"></div>
+                    <span class="source-with-time" id="candle-eth-source">Binance/Bybit • WS</span>
+                </div>
+                <!-- SOL -->
+                <div class="candle-card">
+                    <h3>Solana (SOL/USDT)</h3>
+                    <div class="candle-stats" id="sol-stats">
+                        <span class="stat" id="sol-stat-1d"><span class="label">1D</span> --</span>
+                        <span class="stat" id="sol-stat-1s"><span class="label">1S</span> --</span>
+                        <span class="stat" id="sol-stat-1m"><span class="label">1M</span> --</span>
+                    </div>
+                    <div class="score-bar-container" id="sol-score-bar">
+                        <div class="score-bar-label">
+                            <span>Score</span>
+                            <span class="value" id="sol-score-value">50</span>
+                        </div>
+                        <div class="score-bar-track">
+                            <div class="score-bar-fill" id="sol-score-fill" style="width:50%; background: #ffc107;"></div>
+                        </div>
+                        <div class="score-bar-direction neutral" id="sol-score-direction">NEUTRO</div>
+                    </div>
+                    <div id="candle-sol" class="candle-container"></div>
+                    <span class="source-with-time" id="candle-sol-source">Binance/Bybit • WS</span>
+                </div>
             </div>
         </section>
 
@@ -569,18 +566,6 @@
             </div>
         </section>
 
-        <!-- ===== RESUMO EXECUTIVO ===== -->
-        <section>
-            <h2 class="section-title">📌 RESUMO EXECUTIVO</h2>
-            <div class="summary-grid">
-                <div class="summary-card"><h3>Bitcoin</h3><div class="value negative" id="btc-price">$60.000</div><div class="subtext" id="btc-change">↓ 5,94%</div><span class="source-with-time" id="btc-source">Binance/Bybit • WS</span></div>
-                <div class="summary-card"><h3>Ethereum</h3><div class="value negative" id="eth-price">$1.573,53</div><div class="subtext" id="eth-change">↓ 0,15%</div><span class="source-with-time" id="eth-source">Binance/Bybit • WS</span></div>
-                <div class="summary-card"><h3>Solana</h3><div class="value negative" id="sol-price">$170,00</div><div class="subtext" id="sol-change">↓ 2,30%</div><span class="source-with-time" id="sol-source">Binance/Bybit • WS</span></div>
-                <div class="summary-card"><h3>Sentiment Macro</h3><div class="value negative" id="macro-summary">DXY 101,37 | US10Y 4,28%</div><div class="subtext" id="macro-status">Referência</div><span class="source-with-time" id="macro-source">Alpha Vantage</span></div>
-                <div class="summary-card"><h3>Tether Premium</h3><div class="value negative" id="tether-premium">Carregando...</div><div class="subtext">USDT/BRL vs USD/BRL</div><span class="source-with-time" id="tether-source">CoinGecko & Exchangerate</span></div>
-            </div>
-        </section>
-
         <!-- ===== ANÁLISE ON-CHAIN & DERIVADOS ===== -->
         <section>
             <h2 class="section-title">⛓️ ANÁLISE ON-CHAIN &amp; DERIVADOS</h2>
@@ -616,17 +601,6 @@
                 </div>
                 <div class="confirmation-description"><strong>Análise:</strong> 3/5 pilares confirmam fundo. Mercado em capitulação tática.</div>
             </div>
-        </section>
-
-        <!-- ===== ATIVIDADE DE BALEIAS ===== -->
-        <section>
-            <h2 class="section-title">🐋 ATIVIDADE DE BALEIAS (Live Trade Tracker)</h2>
-            <div class="whale-activity" id="whale-container">
-                <div class="whale-card" id="whale-btc"><div class="whale-header"><span class="whale-entity">🪙 Bitcoin</span><span class="whale-action accumulating">ANALISANDO</span></div><div class="whale-value">$0.00M</div><div class="whale-transaction">Aguardando grandes trades (>$100k)...</div><span class="source-with-time" id="whale-btc-source">Binance/Bybit Live WS</span></div>
-                <div class="whale-card" id="whale-eth"><div class="whale-header"><span class="whale-entity">💎 Ethereum</span><span class="whale-action accumulating">ANALISANDO</span></div><div class="whale-value">$0.00M</div><div class="whale-transaction">Aguardando grandes trades (>$100k)...</div><span class="source-with-time" id="whale-eth-source">Binance/Bybit Live WS</span></div>
-                <div class="whale-card" id="whale-sol"><div class="whale-header"><span class="whale-entity">🚀 Solana</span><span class="whale-action accumulating">ANALISANDO</span></div><div class="whale-value">$0.00M</div><div class="whale-transaction">Aguardando grandes trades (>$100k)...</div><span class="source-with-time" id="whale-sol-source">Binance/Bybit Live WS</span></div>
-            </div>
-            <div class="chart-wrapper"><canvas id="chart_whale_flow"></canvas></div>
         </section>
 
         <!-- ===== STABLECOINS & DEFI ===== -->
@@ -750,7 +724,7 @@
         // ===== CONFIGURAÇÃO DO ROBÔ AO VIVO =====
         const ROBOT_CONFIG = {
             scoreMin: 60,
-            scoreMaxShort: 30,   // ADICIONADO
+            scoreMaxShort: 30,
             adxMin: 10,
             rrMin: 0.1,
             requireBOS: false,
@@ -1298,30 +1272,8 @@
 
         // ===== UPDATE WHALE UI =====
         function updateWhaleUI() {
-            CONFIG.ASSETS.forEach(symbol => {
-                const id = symbol.toLowerCase().replace('usdt', '');
-                const el = document.getElementById(`whale-${id}`);
-                if (!el) return;
-                const data = whaleTrades[symbol];
-                const totalBuy = data.buys / 1e6;
-                const totalSell = data.sells / 1e6;
-                
-                const actionEl = el.querySelector('.whale-action');
-                if (totalBuy > totalSell) { actionEl.textContent = 'ACUMULANDO'; actionEl.className = 'whale-action accumulating'; }
-                else if (totalSell > totalBuy) { actionEl.textContent = 'DISTRIBUINDO'; actionEl.className = 'whale-action distributing'; }
-                else { actionEl.textContent = 'EQUILIBRADO'; actionEl.className = 'whale-action'; }
-                
-                el.querySelector('.whale-value').textContent = `$${(totalBuy + totalSell).toFixed(2)}M`;
-                
-                const txEl = el.querySelector('.whale-transaction');
-                if (data.lastTx) {
-                    const side = data.lastTx.side === 'BUY' ? '🟢 Compra' : '🔴 Venda';
-                    txEl.textContent = `${side} de $${(data.lastTx.value / 1e6).toFixed(2)}M @ $${data.lastTx.price.toFixed(2)}`;
-                } else {
-                    txEl.textContent = 'Aguardando grandes trades (>$100k)...';
-                }
-            });
-            graficos.updateWhaleChart(whaleTrades);
+            // Mantido apenas para compatibilidade, mas a seção foi removida
+            // A função ainda pode ser chamada, mas não afeta o layout
         }
 
         // ===== WEBSOCKET COM FAILOVER =====
@@ -1362,6 +1314,7 @@
                         setCurrentPrice(symbol, price);
                         const tradeValue = price * qty;
                         if (tradeValue > 100000) {
+                            // Atualiza whaleTrades apenas para manter estado, mas não exibe
                             if (isBuy) whaleTrades[symbol].buys += tradeValue;
                             else whaleTrades[symbol].sells += tradeValue;
                             whaleTrades[symbol].lastTx = {
@@ -1370,7 +1323,6 @@
                                 time: Date.now(),
                                 side: isBuy ? 'BUY' : 'SELL'
                             };
-                            updateWhaleUI();
                         }
                         if (assetsData[symbol]) {
                             assetsData[symbol].price = price;
@@ -1448,7 +1400,6 @@
                                     time: Date.now(),
                                     side: isBuy ? 'BUY' : 'SELL'
                                 };
-                                updateWhaleUI();
                             }
                             if (assetsData[symbol]) {
                                 assetsData[symbol].price = price;
@@ -1736,7 +1687,7 @@
                     blockReason = blockReason ? blockReason + '; Macro blackout' : 'Macro blackout';
                 }
                 
-                const primaryDirection = (score >= ROBOT_CONFIG.scoreMin) ? 'LONG' : (score <= ROBOT_CONFIG.scoreMaxShort ? 'SHORT' : null); // USANDO CONFIG
+                const primaryDirection = (score >= ROBOT_CONFIG.scoreMin) ? 'LONG' : (score <= ROBOT_CONFIG.scoreMaxShort ? 'SHORT' : null);
                 
                 if (primaryDirection === 'LONG' && data.price < vwap && !blockReason) {
                     blockReason = blockReason ? blockReason + '; Preço abaixo do VWAP' : 'Preço abaixo do VWAP';
@@ -1795,20 +1746,18 @@
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
                             if (expCheck.blocked) continue;
                             
-                            // ===== RETEST E BOS UNIFICADOS (MESMO NÍVEL) =====
+                            // ===== RETEST E BOS UNIFICADOS =====
                             const structure = checkBOSAndRetest(data, primaryDirection, ROBOT_CONFIG.retestDistPct);
                             const smcSetup = structure.bos;
                             let retestConfirmed = structure.retest;
                             const brokenLevel = structure.level;
 
-                            // Fallback EMA20 (controlado pela configuração)
                             if (!retestConfirmed && ROBOT_CONFIG.requireEMARetest) {
                                 const ema20 = calcEMA(data.candles1H.map(c => c.close), 20).slice(-1)[0] || data.price;
                                 const emaDist = Math.abs(data.price - ema20) / ema20;
                                 retestConfirmed = emaDist < 0.005;
                             }
 
-                            // Verifica se os filtros são exigidos
                             const bosRequired = ROBOT_CONFIG.requireBOS;
                             const retestRequired = ROBOT_CONFIG.requireRetest;
 
@@ -1872,7 +1821,6 @@
                                         realizedPNL: 0, 
                                         entryTime: Date.now()
                                     };
-                                    // Cooldown é atualizado corretamente
                                     alertCooldowns[symbol] = Date.now();
                                     addSignal(symbol, primaryDirection, data.price, stop, tp1);
                                     updateActiveTradesUI();
@@ -1885,7 +1833,7 @@
                 if (prevScore > 50 && score <= 50) telegram.sendTelegramAlert(`🔄 <b>TENDÊNCIA MUDOU (${symbol})</b>\nScore caiu para ${score}. Possível reversão Short.`);
                 previousScores[symbol] = score;
             }
-            // O gráfico de evolução do score foi removido, portanto não chamamos updateScoreChart
+            // Não há mais gráfico de evolução, então não chamamos updateScoreChart
         }
 
         // ===== ATUALIZAÇÃO DE DADOS EXTERNOS =====
@@ -1896,29 +1844,7 @@
             try {
                 const macro = await fetchMacroStatic();
                 if (macro && typeof macro === 'object') {
-                    document.getElementById('dxy-value').textContent = macro.dxy !== null && macro.dxy !== undefined ? macro.dxy.toFixed(2) : '--';
-                    document.getElementById('us10y-value').textContent = macro.us10y !== null && macro.us10y !== undefined ? macro.us10y.toFixed(2) + '%' : '--';
-                    document.getElementById('vix-value').textContent = macro.vix !== null && macro.vix !== undefined ? macro.vix.toFixed(2) : '--';
-                    
-                    const nasdaqChange = macro.nasdaqChange;
-                    document.getElementById('nasdaq-value').textContent = nasdaqChange !== null && nasdaqChange !== undefined 
-                        ? (nasdaqChange >= 0 ? '+' : '') + nasdaqChange.toFixed(2) + '%' 
-                        : '--';
-                    
-                    const spChange = macro.spChange;
-                    document.getElementById('sp500-value').textContent = spChange !== null && spChange !== undefined 
-                        ? (spChange >= 0 ? '+' : '') + spChange.toFixed(2) + '%' 
-                        : '--';
-                    
-                    const dxyDisplay = macro.dxy !== null && macro.dxy !== undefined ? macro.dxy.toFixed(2) : '--';
-                    const us10yDisplay = macro.us10y !== null && macro.us10y !== undefined ? macro.us10y.toFixed(2) : '--';
-                    document.getElementById('macro-summary').textContent = `DXY ${dxyDisplay} | US10Y ${us10yDisplay}%`;
-                } else {
-                    const macroFields = ['dxy-value', 'us10y-value', 'vix-value', 'nasdaq-value', 'sp500-value', 'macro-summary'];
-                    macroFields.forEach(id => {
-                        const el = document.getElementById(id);
-                        if (el) el.textContent = '--';
-                    });
+                    // Atualiza campos macro, mas a seção foi removida, então apenas mantém para referência
                 }
 
                 const mvrv = await fetchMVRV();
@@ -1974,14 +1900,10 @@
                 setTextOrNA('eth-gas', ethGas, '', ' Gwei');
 
                 const premium = await fetchTetherPremium();
-                const tetherEl = document.getElementById('tether-premium');
-                if (tetherEl) {
-                    tetherEl.textContent = premium !== null ? ((premium >= 0 ? '+' : '') + premium.toFixed(2) + '%') : 'N/A';
-                    tetherEl.className = 'value ' + (premium > 0 ? 'positive' : 'negative');
-                }
+                // Removido o elemento tether-premium, então não faz nada
 
                 const fedRate = await fetchFedRate();
-                setTextOrNA('fed-rate', fedRate, '', '%');
+                // Removido
 
                 const defi = await fetchDeFiData();
                 if (defi) {
@@ -2008,7 +1930,7 @@
         // ===== PAINEL DE PARÂMETROS AO VIVO =====
         function applyLiveParams() {
             const scoreMin = parseInt(document.getElementById('live-score-min').value) || 60;
-            const scoreMaxShort = parseInt(document.getElementById('live-score-max-short').value) || 30; // NOVO
+            const scoreMaxShort = parseInt(document.getElementById('live-score-max-short').value) || 30;
             const adxMin = parseInt(document.getElementById('live-adx-min').value) || 10;
             const requireBOS = document.getElementById('live-require-bos').checked;
             const requireRetest = document.getElementById('live-require-retest').checked;
@@ -2254,10 +2176,7 @@
                 }
             }, 1000);
 
-            setInterval(() => {
-                graficos.updateWhaleChart(whaleTrades);
-                updateWhaleUI();
-            }, 30000);
+            // O gráfico de whale foi removido, então não chamamos mais updateWhaleChart
         }
 
         init();
