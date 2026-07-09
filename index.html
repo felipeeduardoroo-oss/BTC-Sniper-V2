@@ -190,7 +190,109 @@
             </div>
         </header>
 
-        <!-- Score Card -->
+        <!-- ===== PAINEL DE PARÂMETROS AO VIVO ===== -->
+        <div class="live-params">
+            <div class="param-group">
+                <label for="live-score-min">Score mínimo LONG:
+                    <input type="number" id="live-score-min" value="60" min="0" max="100" step="1">
+                </label>
+                <span class="badge-param" id="live-score-badge">Atual: 60</span>
+            </div>
+            <div class="param-group">
+                <label for="live-adx-min">ADX mínimo:
+                    <input type="number" id="live-adx-min" value="10" min="0" max="100" step="1">
+                </label>
+                <span class="badge-param" id="live-adx-badge">Atual: 10</span>
+            </div>
+            <div class="param-group">
+                <label for="live-score-max-short">Score máximo SHORT:
+                    <input type="number" id="live-score-max-short" value="30" min="0" max="100" step="1">
+                </label>
+                <span class="badge-param" id="live-score-short-badge">Atual: 30</span>
+            </div>
+            <div class="param-group">
+                <label>
+                    <input type="checkbox" id="live-require-bos"> Exigir BOS
+                </label>
+                <label>
+                    <input type="checkbox" id="live-require-retest"> Exigir retest
+                </label>
+                <button id="live-apply-btn" class="backtest-btn" style="padding:6px 16px;font-size:0.8rem;background:var(--accent-blue);">Aplicar</button>
+            </div>
+        </div>
+
+        <!-- ===== GRÁFICOS DE CANDLESTICK NO TOPO ===== -->
+        <section>
+            <h2 class="section-title">🕯️ GRÁFICOS DE CANDLESTICK (Live WS) + Score em Tempo Real</h2>
+            <div class="candles-grid">
+                <!-- BTC -->
+                <div class="candle-card">
+                    <h3>Bitcoin (BTC/USDT)</h3>
+                    <div class="candle-stats" id="btc-stats">
+                        <span class="stat" id="btc-stat-1d"><span class="label">1D</span> --</span>
+                        <span class="stat" id="btc-stat-1s"><span class="label">1S</span> --</span>
+                        <span class="stat" id="btc-stat-1m"><span class="label">1M</span> --</span>
+                    </div>
+                    <div id="candle-btc" class="candle-container"></div>
+                    <!-- BARRA DE SCORE BTC -->
+                    <div class="score-bar-container" id="btc-score-bar">
+                        <div class="score-bar-label">
+                            <span>Score</span>
+                            <span class="value" id="btc-score-value">50</span>
+                        </div>
+                        <div class="score-bar-track">
+                            <div class="score-bar-fill" id="btc-score-fill" style="width:50%; background: #ffc107;"></div>
+                        </div>
+                        <div class="score-bar-direction neutral" id="btc-score-direction">NEUTRO</div>
+                    </div>
+                    <span class="source-with-time" id="candle-btc-source">Binance/Bybit • WS</span>
+                </div>
+                <!-- ETH -->
+                <div class="candle-card">
+                    <h3>Ethereum (ETH/USDT)</h3>
+                    <div class="candle-stats" id="eth-stats">
+                        <span class="stat" id="eth-stat-1d"><span class="label">1D</span> --</span>
+                        <span class="stat" id="eth-stat-1s"><span class="label">1S</span> --</span>
+                        <span class="stat" id="eth-stat-1m"><span class="label">1M</span> --</span>
+                    </div>
+                    <div id="candle-eth" class="candle-container"></div>
+                    <div class="score-bar-container" id="eth-score-bar">
+                        <div class="score-bar-label">
+                            <span>Score</span>
+                            <span class="value" id="eth-score-value">50</span>
+                        </div>
+                        <div class="score-bar-track">
+                            <div class="score-bar-fill" id="eth-score-fill" style="width:50%; background: #ffc107;"></div>
+                        </div>
+                        <div class="score-bar-direction neutral" id="eth-score-direction">NEUTRO</div>
+                    </div>
+                    <span class="source-with-time" id="candle-eth-source">Binance/Bybit • WS</span>
+                </div>
+                <!-- SOL -->
+                <div class="candle-card">
+                    <h3>Solana (SOL/USDT)</h3>
+                    <div class="candle-stats" id="sol-stats">
+                        <span class="stat" id="sol-stat-1d"><span class="label">1D</span> --</span>
+                        <span class="stat" id="sol-stat-1s"><span class="label">1S</span> --</span>
+                        <span class="stat" id="sol-stat-1m"><span class="label">1M</span> --</span>
+                    </div>
+                    <div id="candle-sol" class="candle-container"></div>
+                    <div class="score-bar-container" id="sol-score-bar">
+                        <div class="score-bar-label">
+                            <span>Score</span>
+                            <span class="value" id="sol-score-value">50</span>
+                        </div>
+                        <div class="score-bar-track">
+                            <div class="score-bar-fill" id="sol-score-fill" style="width:50%; background: #ffc107;"></div>
+                        </div>
+                        <div class="score-bar-direction neutral" id="sol-score-direction">NEUTRO</div>
+                    </div>
+                    <span class="source-with-time" id="candle-sol-source">Binance/Bybit • WS</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== SCORE CARD ===== -->
         <section>
             <div class="score-card">
                 <div class="score-label">Score Institucional (BTC Benchmark)</div>
@@ -207,14 +309,13 @@
                 </div>
                 <div id="block-reason" style="margin-top:10px;font-weight:700;color:var(--accent-red);display:none;"></div>
             </div>
-            <!-- LEGENDA -->
             <div class="score-footer">
                 <span class="info-icon">ℹ️</span>
                 <span><strong>Score Institucional:</strong> Macro Contexto / Big Picture — 1H + 4H + 1D. Dá a nota geral do mercado (0 a 100). Leva em conta VWAP, estrutura HTF (4H), Macro (DXY/Juros), Blackouts e Risco. <strong>Não gera entrada</strong>, apenas define se o ambiente está seguro para operar.</span>
             </div>
         </section>
 
-        <!-- Força do Sinal (Legado) -->
+        <!-- ===== FORÇA DO SINAL (LEGADO) ===== -->
         <section>
             <div id="signalStrengthPanel">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -233,14 +334,13 @@
                 </div>
                 <div id="mainSignal" style="margin-top:12px;padding:10px;background:#0d1117;border-radius:8px;border:1px solid #30363d;text-align:center;"><div style="color:#8b949e;font-size:14px;">Aguardando dados...</div></div>
             </div>
-            <!-- LEGENDA -->
             <div class="score-footer">
                 <span class="info-icon">ℹ️</span>
                 <span><strong>Força do Sinal:</strong> Motor Técnico Genérico (Legado) — 15m, 1H, 4H (Confluência). Mostra a força da tendência baseada em EMA 20/50, RSI, ADX e Taxa de Funding. Diz se o momento atual é "Forte/Alta" ou "Fraco/Baixa". <span class="highlight">Atualmente está órfão no código (não é atualizado), mas a lógica existe.</span></span>
             </div>
         </section>
 
-        <!-- PAINEL DO COMITÊ (NOVO) -->
+        <!-- ===== PAINEL DO COMITÊ ===== -->
         <section>
             <div id="committeePanel" style="background: linear-gradient(135deg, #0d1117 0%, #161b22 100%); border: 1px solid #30363d; border-radius: 12px; padding: 16px; margin: 12px 0 32px 0; font-family: 'Segoe UI', system-ui, sans-serif;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -266,14 +366,13 @@
                     <div style="color:#8b949e;font-size:14px;">Aguardando dados...</div>
                 </div>
             </div>
-            <!-- LEGENDA -->
             <div class="score-footer">
                 <span class="info-icon">ℹ️</span>
                 <span><strong>Comitê:</strong> Motor de Entrada (Ação Imediata) — Exclusivamente 15m. É o gatilho de entrada. Analisa o livro de ordens (Order Book), divergências, liquidações e gera níveis exatos de Stop Loss, Take Profit e Trailing Stop. Se ele der sinal, é para <strong>entrar na operação agora</strong>.</span>
             </div>
         </section>
 
-        <!-- ===== HISTÓRICO DE SINAIS (BACKTEST) ===== -->
+        <!-- ===== HISTÓRICO DE SINAIS ===== -->
         <section>
             <h2 class="section-title">📊 HISTÓRICO DE SINAIS (BACKTEST)</h2>
             <div class="table-wrapper">
@@ -301,70 +400,44 @@
         <section>
             <h2 class="section-title">📈 BACKTEST — ÚLTIMOS 30 DIAS (DADOS REAIS)</h2>
             <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
-                <!-- PAINEL DE PARÂMETROS -->
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
                     <div>
-                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
-                            Score mínimo
-                            <span style="color:var(--accent-yellow);cursor:help;" title="Score mínimo para considerar um sinal de entrada (padrão 70).">ⓘ</span>
-                        </label>
+                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">Score mínimo <span style="color:var(--accent-yellow);cursor:help;" title="Score mínimo para considerar um sinal de entrada (padrão 70).">ⓘ</span></label>
                         <input type="number" id="param-score" value="60" min="0" max="100" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
                         <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 60</div>
                     </div>
                     <div>
-                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
-                            ADX mínimo
-                            <span style="color:var(--accent-yellow);cursor:help;" title="Valor mínimo de ADX para filtrar mercados laterais (padrão 25).">ⓘ</span>
-                        </label>
+                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">ADX mínimo <span style="color:var(--accent-yellow);cursor:help;" title="Valor mínimo de ADX para filtrar mercados laterais (padrão 25).">ⓘ</span></label>
                         <input type="number" id="param-adx" value="10" min="0" max="100" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
                         <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 10</div>
                     </div>
                     <div>
-                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
-                            Dist. retest (%)
-                            <span style="color:var(--accent-yellow);cursor:help;" title="Distância máxima do preço em relação ao nível rompido para considerar reteste (padrão 0.8%).">ⓘ</span>
-                        </label>
+                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">Dist. retest (%) <span style="color:var(--accent-yellow);cursor:help;" title="Distância máxima do preço em relação ao nível rompido para considerar reteste (padrão 0.8%).">ⓘ</span></label>
                         <input type="number" id="param-retest-dist" value="0.8" min="0" max="5" step="0.1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
                         <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 0.8%</div>
                     </div>
                     <div>
-                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">
-                            R:R mínimo
-                            <span style="color:var(--accent-yellow);cursor:help;" title="Relação risco:retorno mínima exigida (padrão 1.5).">ⓘ</span>
-                        </label>
+                        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">R:R mínimo <span style="color:var(--accent-yellow);cursor:help;" title="Relação risco:retorno mínima exigida (padrão 1.5).">ⓘ</span></label>
                         <input type="number" id="param-rr" value="0.1" min="0.1" max="10" step="0.1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-light);">
                         <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px;">Padrão: 0.1</div>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <input type="checkbox" id="param-ema-retest" style="accent-color:var(--accent-blue);">
-                        <label for="param-ema-retest" style="font-size:0.8rem;color:var(--text-muted);">
-                            Retest EMA20
-                            <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, também considera reteste da EMA20 como alternativa.">ⓘ</span>
-                        </label>
+                        <label for="param-ema-retest" style="font-size:0.8rem;color:var(--text-muted);">Retest EMA20 <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, também considera reteste da EMA20 como alternativa.">ⓘ</span></label>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <input type="checkbox" id="param-mtf-required" style="accent-color:var(--accent-blue);">
-                        <label for="param-mtf-required" style="font-size:0.8rem;color:var(--text-muted);">
-                            Exigir MTF alinhado
-                            <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, exige alinhamento MTF (1h/4h) para entrada.">ⓘ</span>
-                        </label>
+                        <label for="param-mtf-required" style="font-size:0.8rem;color:var(--text-muted);">Exigir MTF alinhado <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, exige alinhamento MTF (1h/4h) para entrada.">ⓘ</span></label>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <input type="checkbox" id="param-ignore-bos" checked style="accent-color:var(--accent-purple);">
-                        <label for="param-ignore-bos" style="font-size:0.8rem;color:var(--text-muted);">
-                            Ignorar BOS
-                            <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, entra apenas com score + retest (sem exigir BOS).">ⓘ</span>
-                        </label>
+                        <label for="param-ignore-bos" style="font-size:0.8rem;color:var(--text-muted);">Ignorar BOS <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, entra apenas com score + retest (sem exigir BOS).">ⓘ</span></label>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <input type="checkbox" id="param-ignore-retest" checked style="accent-color:var(--accent-red);">
-                        <label for="param-ignore-retest" style="font-size:0.8rem;color:var(--text-muted);">
-                            Ignorar retest
-                            <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, entra apenas com BOS (ou sem BOS, se 'Ignorar BOS' também estiver ativo).">ⓘ</span>
-                        </label>
+                        <label for="param-ignore-retest" style="font-size:0.8rem;color:var(--text-muted);">Ignorar retest <span style="color:var(--accent-yellow);cursor:help;" title="Se marcado, entra apenas com BOS (ou sem BOS, se 'Ignorar BOS' também estiver ativo).">ⓘ</span></label>
                     </div>
                 </div>
-
                 <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
                     <button id="run-backtest-btn" class="backtest-btn">▶️ Executar Backtest</button>
                     <span id="backtest-status" style="color:var(--text-muted);">Aguardando execução</span>
@@ -401,11 +474,13 @@
             </div>
         </section>
 
+        <!-- ===== EVOLUÇÃO DO SCORE ===== -->
         <section>
             <h2 class="section-title">📉 EVOLUÇÃO DO SCORE (Live)</h2>
             <div class="chart-wrapper"><canvas id="chart_score_history"></canvas></div>
         </section>
 
+        <!-- ===== RESUMO EXECUTIVO ===== -->
         <section>
             <h2 class="section-title">📌 RESUMO EXECUTIVO</h2>
             <div class="summary-grid">
@@ -417,16 +492,7 @@
             </div>
         </section>
 
-        <section>
-            <h2 class="section-title">🕯️ GRÁFICOS DE CANDLESTICK (Live WS)</h2>
-            <div class="candles-grid">
-                <div class="candle-card"><h3>Bitcoin (BTC/USDT)</h3><div class="candle-stats" id="btc-stats"><span class="stat" id="btc-stat-1d"><span class="label">1D</span> --</span><span class="stat" id="btc-stat-1s"><span class="label">1S</span> --</span><span class="stat" id="btc-stat-1m"><span class="label">1M</span> --</span></div><div id="candle-btc" class="candle-container"></div><span class="source-with-time" id="candle-btc-source">Binance/Bybit • WS</span></div>
-                <div class="candle-card"><h3>Ethereum (ETH/USDT)</h3><div class="candle-stats" id="eth-stats"><span class="stat" id="eth-stat-1d"><span class="label">1D</span> --</span><span class="stat" id="eth-stat-1s"><span class="label">1S</span> --</span><span class="stat" id="eth-stat-1m"><span class="label">1M</span> --</span></div><div id="candle-eth" class="candle-container"></div><span class="source-with-time" id="candle-eth-source">Binance/Bybit • WS</span></div>
-                <div class="candle-card"><h3>Solana (SOL/USDT)</h3><div class="candle-stats" id="sol-stats"><span class="stat" id="sol-stat-1d"><span class="label">1D</span> --</span><span class="stat" id="sol-stat-1s"><span class="label">1S</span> --</span><span class="stat" id="sol-stat-1m"><span class="label">1M</span> --</span></div><div id="candle-sol" class="candle-container"></div><span class="source-with-time" id="candle-sol-source">Binance/Bybit • WS</span></div>
-            </div>
-        </section>
-
-        <!-- ===== TABELA ON-CHAIN & DERIVADOS ===== -->
+        <!-- ===== ANÁLISE ON-CHAIN & DERIVADOS ===== -->
         <section>
             <h2 class="section-title">⛓️ ANÁLISE ON-CHAIN &amp; DERIVADOS</h2>
             <div class="table-wrapper">
@@ -448,6 +514,7 @@
             <div class="chart-wrapper"><canvas id="chart_etf_flows"></canvas></div>
         </section>
 
+        <!-- ===== PAINEL DE CONFIRMAÇÃO DE FUNDO ===== -->
         <section>
             <h2 class="section-title">✅ PAINEL DE CONFIRMAÇÃO DE FUNDO</h2>
             <div class="confirmation-panel">
@@ -544,6 +611,9 @@
     </div>
 
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
+
+
+
 <script type="module">
     // ===== IMPORTAÇÕES =====
     import {
