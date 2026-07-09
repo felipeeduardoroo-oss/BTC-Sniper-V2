@@ -109,15 +109,15 @@ async function fetchHistoricalMVRV(startDate, endDate) {
 
 // ===== FUNÇÃO PRINCIPAL com parâmetros =====
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
-    const {
+        const {
         scoreMin = 70,
         adxMin = 25,
         retestDistPct = 0.008,
         rrMin = 1.5,
         emaRetest = true,
         mtfRequired = true,
-        ignoreBOS = false,   // NOVO
-        ignoreRetest = false   // <-- ADICIONE ESTA LINHA
+        ignoreBOS = false,
+        ignoreRetest = false
     } = options;
 
     logDebug(`Iniciando backtest REAL para ${symbol} (${days} dias)`);
