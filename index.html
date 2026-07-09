@@ -2001,8 +2001,8 @@ document.getElementById('run-backtest-btn').addEventListener('click', async func
             rrMin: parseFloat(document.getElementById('param-rr').value) || 1.5,
             emaRetest: document.getElementById('param-ema-retest').checked,
             mtfRequired: document.getElementById('param-mtf-required').checked,
-            ignoreBOS: document.getElementById('param-ignore-bos').checked   // NOVO
-            ignoreRetest: document.getElementById('param-ignore-retest').checked   // <-- ADICIONE ESTA LINHA
+            ignoreBOS: document.getElementById('param-ignore-bos').checked,   // NOVO
+            ignoreRetest: document.getElementById('param-ignore-retest').checked,   // <-- ADICIONE ESTA LINHA
         };
         console.log('[Backtest UI] Parâmetros enviados:', options);
 
