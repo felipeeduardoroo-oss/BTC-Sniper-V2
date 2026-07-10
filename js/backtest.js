@@ -331,8 +331,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             const liqMap = { [symbol]: { longs: 0, shorts: 0 } };
 
             const scoreData = computeScore(symbol, simAssets, liqMap);
-            const bosConfirmed = scoreData.direction !== 'NEUTRAL' && findSMCSetup(state, scoreData.direction);
-            state.currentBOS = bosConfirmed ? 'BOS' : 'NEUTRAL';
+            const structureForScore = checkBOSAndRetest(state, scoreData.direction, retestDistPct);
+state.currentBOS = structureForScore.bos ? 'BOS' : 'NEUTRAL';
 
             // Se mtfRequired for false, forçamos alinhado a true
             const mtfAligned = mtfRequired ? (simAssets[symbol].mtfConfluence?.alinhado || false) : true;
@@ -489,19 +489,23 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
                 // --- 4. Abrir posição se estrutura OK e R:R suficiente ---
-                if (structureOk) {
-                    let stop, tp1, tp2;
-                    if (primaryDirection === 'LONG') {
-                        const structLevel = Math.min(...state.swingLows) - (atr * 0.3);
-                        stop = Math.min(structLevel, state.price - atr * 1.5);
-                        tp1 = state.price + (atr * 2);
-                        tp2 = state.price + (atr * 4);
-                    } else {
-                        const structLevel = Math.max(...state.swingHighs) + (atr * 0.3);
-                        stop = Math.max(structLevel, state.price + atr * 1.5);
-                        tp1 = state.price - (atr * 2);
-                        tp2 = state.price - (atr * 4);
-                    }
+              if (structureOk) {
+    let stop, tp1, tp2;
+    if (primaryDirection === 'LONG') {
+        // Usar apenas os 3 últimos swings (mesma lógica do robô ao vivo)
+        const recentLows = state.swingLows.slice(-3);
+        const structLevel = (recentLows.length ? Math.min(...recentLows) : state.price * 0.98) - (atr * 0.3);
+        stop = Math.min(structLevel, state.price - atr * 1.5);
+        tp1 = state.price + (atr * 2);
+        tp2 = state.price + (atr * 4);
+    } else {
+        const recentHighs = state.swingHighs.slice(-3);
+        const structLevel = (recentHighs.length ? Math.max(...recentHighs) : state.price * 1.02) + (atr * 0.3);
+        stop = Math.max(structLevel, state.price + atr * 1.5);
+        tp1 = state.price - (atr * 2);
+        tp2 = state.price - (atr * 4);
+    }
+               
                     const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
                     if (rr1 >= rrMin) {
                         // Kelly sizing
