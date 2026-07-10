@@ -293,13 +293,24 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
         }
     }
 
+ // Funding com distinção de direção
+if (direction === 'LONG') {
     if (fundingRate > 0.01) {
         score -= 10;
-        reasons.push('Funding muito positivo');
+        reasons.push('Funding muito positivo (desfavorável p/ LONG)');
     } else if (fundingRate < -0.01) {
         score += 10;
-        reasons.push('Funding negativo (favorável para LONG)');
+        reasons.push('Funding negativo (favorável p/ LONG)');
     }
+} else if (direction === 'SHORT') {
+    if (fundingRate < -0.01) {
+        score -= 10;
+        reasons.push('Funding muito negativo (desfavorável p/ SHORT)');
+    } else if (fundingRate > 0.01) {
+        score += 10;
+        reasons.push('Funding positivo (favorável p/ SHORT)');
+    }
+}
 
     if (divergence) {
         if (divergence.type === 'BULLISH_REGULAR' && direction === 'LONG') {
