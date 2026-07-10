@@ -437,7 +437,7 @@ export function computeScore(symbol, assetsData, liqMap) {
         blockReason,
         components
     };
-}
+
 
 // ===== FILTROS PARA O COMITÊ E MOTOR DE ENTRADA =====
 
