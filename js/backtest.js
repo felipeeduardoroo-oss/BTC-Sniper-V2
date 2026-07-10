@@ -1,5 +1,7 @@
-// js/backtest.js – Backtest com dados reais dos últimos 30 dias (SINCRONIZADO COM ROBOT_CONFIG)
-// CORREÇÃO: Lógica de BOS/Retest aprimorada (últimos 5 swings)
+// ================================================================
+// js/backtest.js – Backtest com dados reais (SINCRONIZADO)
+// ================================================================
+
 import { CONFIG } from './config.js';
 import {
     fetchHistoricalCandles,
@@ -24,6 +26,9 @@ import {
     checkPortfolioExposure
 } from './indicadores.js';
 
+// ===== CONSTANTE UNIFICADA =====
+const SWING_LOOKBACK = 3; // mesmo valor usado no live
+
 // ===== HELPERS =====
 function logDebug(message, data = null) {
     console.log(`[Backtest] ${message}`, data || '');
@@ -36,10 +41,10 @@ function findMostRecent(arr, cond) {
     return null;
 }
 
-// ===== FUNÇÃO UNIFICADA DE BOS E RETEST (NÃO USADA DIRETAMENTE NA ENTRADA, MAS MANTIDA PARA OUTROS USOS) =====
+// ===== FUNÇÃO UNIFICADA DE BOS E RETEST =====
 function checkBOSAndRetest(state, direction, retestDistPct) {
-    const recentHighs = state.swingHighs.slice(-3);
-    const recentLows = state.swingLows.slice(-3);
+    const recentHighs = state.swingHighs.slice(-SWING_LOOKBACK);
+    const recentLows = state.swingLows.slice(-SWING_LOOKBACK);
 
     if (direction === 'LONG') {
         const brokenLevel = recentHighs.length ? Math.max(...recentHighs) : null;
@@ -57,7 +62,7 @@ function checkBOSAndRetest(state, direction, retestDistPct) {
     return { bos: false, retest: false, level: null };
 }
 
-// ===== MTF HISTÓRICO (sem chamada de rede ao vivo) =====
+// ===== MTF HISTÓRICO =====
 function getMTFAlignmentAtTime(candles1H, candles4H, currentTime) {
     const relevant1H = candles1H.filter(c => c.time <= currentTime).slice(-50);
     const relevant4H = candles4H.filter(c => c.time <= currentTime).slice(-50);
@@ -83,10 +88,7 @@ function getMTFAlignmentAtTime(candles1H, candles4H, currentTime) {
     const bears = [dir1H, dir4H].filter(d => d === 'BEAR').length;
 
     return {
-        directions: [
-            { tf: '1h', dir: dir1H },
-            { tf: '4h', dir: dir4H }
-        ],
+        directions: [{ tf: '1h', dir: dir1H }, { tf: '4h', dir: dir4H }],
         score: bulls - bears,
         alinhado: bulls === 2 || bears === 2
     };
@@ -127,9 +129,8 @@ async function fetchHistoricalMVRV(startDate, endDate) {
     } catch (e) { return []; }
 }
 
-// ===== FUNÇÃO PRINCIPAL com parâmetros (SINCRONIZADA COM ROBOT_CONFIG) =====
+// ===== FUNÇÃO PRINCIPAL =====
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
-    // Parâmetros com valores padrão alinhados ao ROBOT_CONFIG
     const {
         scoreMin = 60,
         scoreMaxShort = 30,
@@ -142,7 +143,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         ignoreRetest = false
     } = options;
 
-    logDebug(`Iniciando backtest REAL para ${symbol} (${days} dias)`);
+    logDebug(`Iniciando backtest para ${symbol} (${days} dias)`);
     logDebug('Parâmetros:', options);
     const now = Date.now();
     const startTime = now - days * 24 * 60 * 60 * 1000;
@@ -193,8 +194,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         let trades = [];
         let equity = 10000;
         let highWaterMark = equity;
-        let winCount = 0,
-            lossCount = 0;
+        let winCount = 0, lossCount = 0;
         const blockStats = {};
         let totalCandlesProcessed = 0;
 
@@ -338,7 +338,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             if (adxValue < adxMin && !blockReason) blockReason = `ADX < ${adxMin} (lateral)`;
             if (state.macroBlackout && !blockReason) blockReason = 'Macro blackout';
 
-          const primaryDirection = (score >= scoreMin) ? 'LONG' : (score <= scoreMaxShort ? 'SHORT' : null);
+            const primaryDirection = (score >= scoreMin) ? 'LONG' : (score <= scoreMaxShort ? 'SHORT' : null);
 
             if (primaryDirection === 'LONG' && state.price < state.vwap && !blockReason)
                 blockReason = 'Preço abaixo do VWAP';
@@ -355,7 +355,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 if (!derivCheck.allow) blockReason = derivCheck.reason;
             }
 
-            // ----- GERENCIAMENTO DE POSIÇÃO -----
+            // ===== GERENCIAR POSIÇÃO =====
             if (position) {
                 const high = candle.high;
                 const low = candle.low;
@@ -421,17 +421,17 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 }
             }
 
-            // ----- ENTRADA (NOVA LÓGICA DE BOS/RETEST) -----
+            // ===== ENTRADA (CORRIGIDO) =====
             if (!position && !blockReason && primaryDirection) {
                 const atr = state.atr_1H || (state.price * 0.02);
 
-                // NOVA LÓGICA DE BOS E RETEST: analisa os últimos 5 swings
                 let smcSetup = false;
                 let retestConfirmed = false;
                 let brokenLevel = null;
 
-                const recentHighs = state.swingHighs.slice(-5);
-                const recentLows = state.swingLows.slice(-5);
+                // Usa SWING_LOOKBACK = 3 (sincronizado com o live)
+                const recentHighs = state.swingHighs.slice(-SWING_LOOKBACK);
+                const recentLows = state.swingLows.slice(-SWING_LOOKBACK);
 
                 if (primaryDirection === 'LONG') {
                     const brokenHighs = recentHighs.filter(h => h < state.price);
@@ -451,7 +451,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     }
                 }
 
-                // Fallback: EMA20 (se habilitado)
                 if (!retestConfirmed && emaRetest) {
                     const ema20 = calcEMA(state.candles1H.map(c => c.close), 20).slice(-1)[0] || state.price;
                     const emaDist = Math.abs(state.price - ema20) / ema20;
@@ -459,13 +458,12 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     if (retestConfirmed) smcSetup = true;
                 }
 
-                // Aplica os checkboxes ignoreBOS e ignoreRetest
                 const bosRequired = !ignoreBOS;
                 const retestRequired = !ignoreRetest;
                 const bosPassed = bosRequired ? smcSetup : true;
                 const retestPassed = retestRequired ? retestConfirmed : true;
+                const structureOk = bosPassed && retestPassed;
 
-                // Diagnóstico
                 totalCandlesProcessed++;
                 let reasonKey = blockReason;
                 if (!blockReason && primaryDirection) {
@@ -478,59 +476,70 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 }
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
-                // Abrir posição se estrutura OK e R:R suficiente
-                if (bosPassed && retestPassed) {
+                if (structureOk) {
                     let stop, tp1, tp2;
                     if (primaryDirection === 'LONG') {
-                        const recentLows = state.swingLows.slice(-3);
+                        const recentLows = state.swingLows.slice(-SWING_LOOKBACK);
                         const structLevel = (recentLows.length ? Math.min(...recentLows) : state.price * 0.98) - (atr * 0.3);
                         stop = Math.min(structLevel, state.price - atr * 1.5);
                         tp1 = state.price + (atr * 2);
                         tp2 = state.price + (atr * 4);
                     } else {
-                        const recentHighs = state.swingHighs.slice(-3);
+                        const recentHighs = state.swingHighs.slice(-SWING_LOOKBACK);
                         const structLevel = (recentHighs.length ? Math.max(...recentHighs) : state.price * 1.02) + (atr * 0.3);
                         stop = Math.max(structLevel, state.price + atr * 1.5);
                         tp1 = state.price - (atr * 2);
                         tp2 = state.price - (atr * 4);
                     }
-                    const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
-                    if (rr1 >= rrMin) {
-                        const totalTrades = winCount + lossCount;
-                        const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
-                        const kellyPct = KellyPositionSize(winRate, rr1);
-                        const riskFraction = Math.min(kellyPct, 0.05);
 
-                        const stopDistancePct = primaryDirection === 'LONG' ? (state.price - stop) / state.price : (stop - state.price) / state.price;
-                        const positionSizeUSD = (riskFraction * equity) / stopDistancePct;
-                        const sizeMultiplier = Math.min(positionSizeUSD / equity, 1.0);
-
-                        position = {
-                            type: primaryDirection,
-                            entryPrice: state.price,
-                            stop: stop,
-                            tp1: tp1,
-                            tp2: tp2,
-                            trailingStop: stop,
-                            partialTaken: false,
-                            sizeRemaining: sizeMultiplier,
-                            entryTime: candle.time * 1000
-                        };
-                        trades.push({
-                            entryTime: new Date(candle.time * 1000).toISOString(),
-                            exitTime: null,
-                            symbol,
-                            direction: primaryDirection,
-                            entryPrice: state.price,
-                            stopLoss: stop,
-                            takeProfit1: tp1,
-                            exitPrice: null,
-                            pnlPct: null,
-                            pnlUsd: null,
-                            durationHours: null,
-                            reason: 'Aberta'
-                        });
+                    // ==== RR PONDERADO (sincronizado com o live) ====
+                    let rrPonderado;
+                    if (primaryDirection === 'LONG') {
+                        const ganhoPonderado = (tp1 - state.price) * 0.6 + (tp2 - state.price) * 0.4;
+                        const risco = state.price - stop;
+                        rrPonderado = risco > 0 ? ganhoPonderado / risco : 0;
+                    } else {
+                        const ganhoPonderado = (state.price - tp1) * 0.6 + (state.price - tp2) * 0.4;
+                        const risco = stop - state.price;
+                        rrPonderado = risco > 0 ? ganhoPonderado / risco : 0;
                     }
+
+                    if (rrPonderado < rrMin) continue;
+
+                    const totalTrades = winCount + lossCount;
+                    const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
+                    const kellyPct = KellyPositionSize(winRate, rrPonderado);
+                    const riskFraction = Math.min(kellyPct, 0.05);
+
+                    const stopDistancePct = primaryDirection === 'LONG' ? (state.price - stop) / state.price : (stop - state.price) / state.price;
+                    const positionSizeUSD = (riskFraction * equity) / stopDistancePct;
+                    const sizeMultiplier = Math.min(positionSizeUSD / equity, 1.0);
+
+                    position = {
+                        type: primaryDirection,
+                        entryPrice: state.price,
+                        stop: stop,
+                        tp1: tp1,
+                        tp2: tp2,
+                        trailingStop: stop,
+                        partialTaken: false,
+                        sizeRemaining: sizeMultiplier,
+                        entryTime: candle.time * 1000
+                    };
+                    trades.push({
+                        entryTime: new Date(candle.time * 1000).toISOString(),
+                        exitTime: null,
+                        symbol,
+                        direction: primaryDirection,
+                        entryPrice: state.price,
+                        stopLoss: stop,
+                        takeProfit1: tp1,
+                        exitPrice: null,
+                        pnlPct: null,
+                        pnlUsd: null,
+                        durationHours: null,
+                        reason: 'Aberta'
+                    });
                 }
             }
         }
@@ -587,15 +596,15 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             finalEquity: equity,
             blockStats: blockStats,
             totalCandlesProcessed: totalCandlesProcessed,
-            disclaimer: "MTF Confluence calculado com candles históricos (1h e 4h). BOS/retest unificados com os 5 últimos swings. Diagnóstico honesto. Parâmetros sincronizados com ROBOT_CONFIG."
+            disclaimer: "MTF histórico, BOS/retest com os 3 últimos swings (sincronizado com live). RR ponderado (60/40)."
         };
 
-        logDebug('Backtest REAL concluído!', summary);
+        logDebug('Backtest concluído!', summary);
         console.log('[blockStats FINAL]', blockStats);
         return { trades, summary };
 
     } catch (error) {
-        logDebug('ERRO FATAL no backtest:', error.message);
+        logDebug('ERRO FATAL:', error.message);
         return { trades: [], summary: { error: error.message } };
     }
 }
