@@ -1,5 +1,5 @@
 // ================================================================
-// js/indicadores.js – Motor de indicadores V2 (OTIMIZADO)
+// js/indicadores.js – Motor de indicadores V2 (OTIMIZADO E CORRIGIDO)
 // ================================================================
 
 // ===== FUNÇÕES AUXILIARES BÁSICAS =====
@@ -183,13 +183,10 @@ export function updateSwingPoints(state) {
     const prev = candles[candles.length - 2];
     if (!last || !prev) return;
 
-    // Swing High: high > previous high and high > next high
     if (candles.length >= 5) {
-        const c1 = candles[candles.length - 5];
-        const c2 = candles[candles.length - 4];
         const c3 = candles[candles.length - 3];
+        const c2 = candles[candles.length - 4];
         const c4 = candles[candles.length - 2];
-        const c5 = candles[candles.length - 1];
         if (c3.high > c2.high && c3.high > c4.high) {
             state.swingHighs.push(c3.high);
             if (state.swingHighs.length > 20) state.swingHighs.shift();
@@ -232,7 +229,6 @@ export function checkLateralMarket(adxValue, threshold = 25) {
 // ===== FILTROS DE RISCO E CONDIÇÕES =====
 
 export function checkOnChainFilter(mvrv, direction) {
-    // Exemplo: MVRV baixo favorece LONG, MVRV alto favorece SHORT
     if (mvrv === null || mvrv === undefined) return { allow: true, reason: 'MVRV indisponível' };
     if (direction === 'LONG' && mvrv < 1.0) return { allow: true, reason: 'MVRV baixo (favorável)' };
     if (direction === 'SHORT' && mvrv > 1.5) return { allow: true, reason: 'MVRV alto (favorável)' };
@@ -240,10 +236,8 @@ export function checkOnChainFilter(mvrv, direction) {
 }
 
 export function checkDerivativesFilter(fundingRate, oiDelta) {
-    // Funding extremo: evitar LONG com funding > 0.05% ou SHORT com funding < -0.05%
     if (fundingRate > 0.0005) return { allow: false, reason: 'Funding muito positivo (overbought em futuros)' };
     if (fundingRate < -0.0005) return { allow: false, reason: 'Funding muito negativo (oversold em futuros)' };
-    // OI Delta: se estiver crescendo muito rápido, evitar seguir a manada
     if (Math.abs(oiDelta) > 10) return { allow: false, reason: 'OI Delta extremo' };
     return { allow: true, reason: 'Derivativos OK' };
 }
@@ -251,12 +245,10 @@ export function checkDerivativesFilter(fundingRate, oiDelta) {
 export function checkPortfolioExposure(activePositions, direction) {
     const count = Object.keys(activePositions).length;
     if (count >= 1) return { blocked: true, reason: 'Já há posição aberta' };
-    // Pode adicionar lógica de exposição máxima
     return { blocked: false, reason: 'Portfólio disponível' };
 }
 
 export function isSafeToTrade() {
-    // Pode adicionar verificações de horário, volatilidade, etc.
     return true;
 }
 
@@ -289,7 +281,6 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
     let score = 50;
     const reasons = [];
 
-    // MTF alinhado: +20
     if (mtfAligned) {
         score += 20;
         reasons.push('MTF alinhado');
@@ -297,7 +288,6 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
         reasons.push('MTF desalinhado');
     }
 
-    // ADX: quanto maior, mais tendência
     const adxVal = typeof adx === 'object' ? adx.adx : adx;
     if (adxVal >= 25) {
         score += 15;
@@ -307,7 +297,6 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
         reasons.push(`ADX ${adxVal.toFixed(1)} (lateral)`);
     }
 
-    // Volume anômalo: alto volume confirma direção
     if (volumeAnomaly) {
         if (volumeAnomaly.type === 'HIGH' && direction === 'LONG') {
             score += 10;
@@ -318,7 +307,6 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
         }
     }
 
-    // Funding: extremos penalizam
     if (fundingRate > 0.01) {
         score -= 10;
         reasons.push('Funding muito positivo');
@@ -327,7 +315,6 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
         reasons.push('Funding negativo (favorável para LONG)');
     }
 
-    // Divergência: +10 se favorável
     if (divergence) {
         if (divergence.type === 'BULLISH_REGULAR' && direction === 'LONG') {
             score += 10;
@@ -338,19 +325,16 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
         }
     }
 
-    // Macro blackout: penaliza
     if (macroBlackout) {
         score -= 20;
         reasons.push('Macro blackout');
     }
 
-    // Estrutura SMC: +5 se confirmada
     if (smcStructure === 'BOS') {
         score += 5;
         reasons.push('BOS confirmado');
     }
 
-    // Open Interest trend
     if (openInterestTrend === 'INCREASING' && direction === 'LONG') {
         score += 5;
         reasons.push('OI crescente (LONG)');
@@ -359,7 +343,6 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
         reasons.push('OI decrescente (SHORT)');
     }
 
-    // Normaliza entre 0 e 100
     score = Math.min(100, Math.max(0, score));
 
     let level = 'MEDIUM';
@@ -369,7 +352,6 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
     else if (score >= 20) level = 'LOW';
     else level = 'VERY_LOW';
 
-    // Direção final (se score >= 60 -> LONG, se <= 40 -> SHORT)
     let finalDirection = 'NEUTRO';
     if (score >= 60) finalDirection = 'LONG';
     else if (score <= 40) finalDirection = 'SHORT';
@@ -382,6 +364,10 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
     };
 }
 
+/**
+ * COMPUTE SCORE – Função principal usada pelo index.html e backtest.js
+ * Versão corrigida: RSI alinhado com tendência (trend‑following)
+ */
 export function computeScore(symbol, assetsData, liqMap) {
     const data = assetsData[symbol];
     if (!data) return { score: 50, direction: 'NEUTRAL', components: {}, blockReason: 'Sem dados' };
@@ -420,25 +406,6 @@ export function computeScore(symbol, assetsData, liqMap) {
     };
 }
 
-    const blockReason = null; // pode ser preenchido com base em filtros externos
-
-    const components = {
-        mtf: mtfAligned ? '✅' : '❌',
-        smc: smcStructure === 'BOS' ? '✅' : '❌',
-        mom: adxVal >= 25 ? 'Forte' : 'Fraco',
-        of: data.volumeAnomaly ? (data.volumeAnomaly.type === 'HIGH' ? '✅' : '⚠️') : 'ℹ️',
-        macro: macroBlackout ? '⚠️' : '✅',
-        oi: data.oiDelta > 5 ? '🟢' : (data.oiDelta < -5 ? '🔴' : 'ℹ️')
-    };
-
-    return {
-        score: confidence.score,
-        direction: confidence.direction,
-        blockReason,
-        components
-    };
-
-
 // ===== FILTROS PARA O COMITÊ E MOTOR DE ENTRADA =====
 
 export function adxFilter(candles, threshold = 25) {
@@ -462,7 +429,6 @@ export function fundingFilter(fundingData, direction) {
 
 export function orderBookFilter(obData, direction) {
     if (!obData || !obData.bids || !obData.asks) return { pass: true, reason: 'Order Book indisponível' };
-    // Exemplo: se houver grande desbalanceamento, pode rejeitar
     const totalBid = obData.bids.reduce((s, b) => s + b.qty, 0);
     const totalAsk = obData.asks.reduce((s, a) => s + a.qty, 0);
     const ratio = totalAsk > 0 ? totalBid / totalAsk : 1;
@@ -478,7 +444,6 @@ export function orderBookFilter(obData, direction) {
 export function fearGreedFilter(fgData, direction) {
     if (!fgData || fgData.value === undefined) return { pass: true, reason: 'Fear & Greed indisponível', multiplier: 1 };
     const value = fgData.value;
-    // Se extremo medo, favorece LONG (menor risco); se extrema ganância, favorece SHORT
     let multiplier = 1;
     if (direction === 'LONG' && value < 25) {
         return { pass: true, reason: `Fear & Greed ${value} (medo extremo)`, multiplier: 1.2 };
@@ -525,13 +490,12 @@ export function generateTrailingStopParams(candles, currentPrice, direction) {
     };
 }
 
-// ===== SCORE DE SINAL PARA O COMITÊ =====
+// ===== SCORE DE SINAL PARA O COMITÊ (CORRIGIDO) =====
 
 export function calculateSignalScore(indicators) {
-    // Função usada pelo comitê (runCommittee) para gerar score rápido
     let score = 50;
     const reasons = [];
-    const { close, ema20, ema50, rsi, adx, trend, divergence, mtfScore, fundingRate, volumeRatio, macdHist, macdHistPrev } = indicators;
+    const { close, ema20, ema50, rsi, adx, divergence, mtfScore, fundingRate, volumeRatio } = indicators;
 
     // EMA cross
     if (ema20 > ema50) {
@@ -551,13 +515,13 @@ export function calculateSignalScore(indicators) {
         reasons.push('Preço abaixo EMA20');
     }
 
-    // RSI
+    // CORREÇÃO: RSI trend‑following
     if (rsi > 70) {
-        score -= 10;
-        reasons.push('RSI sobrecompra');
+        score += 10;   // Sobrecompra → confirma força altista
+        reasons.push('RSI sobrecompra (forte)');
     } else if (rsi < 30) {
-        score += 10;
-        reasons.push('RSI sobrevenda');
+        score -= 10;   // Sobrevenda → confirma força baixista
+        reasons.push('RSI sobrevenda (fraco)');
     } else {
         reasons.push(`RSI ${rsi.toFixed(1)}`);
     }
@@ -609,7 +573,6 @@ export function calculateSignalScore(indicators) {
         reasons.push('Funding negativo');
     }
 
-    // Normaliza
     score = Math.min(100, Math.max(0, score));
 
     let direction = 'NEUTRO';
@@ -656,6 +619,3 @@ export function updateStatefulRSI(state, candles, period = 14) {
 export function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
 }
-
-// ===== REMOVIDO: isHighImpactEventNow (agora em dados_externos.js) =====
-// A função foi movida para dados_externos.js com cache (getMacroBlackoutStatus).
