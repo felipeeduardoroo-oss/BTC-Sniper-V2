@@ -2122,25 +2122,28 @@
             const statusEl = document.getElementById('backtest-status');
             if (statusEl) statusEl.textContent = 'Buscando dados históricos...';
 
-              try {
-       const options = {
-    scoreMin: parseFloat(document.getElementById('param-score').value) || 60,      // se existir
-    scoreMaxShort: parseFloat(document.getElementById('param-score-max-short').value) || 30, // se existir
-    adxMin: parseFloat(document.getElementById('param-adx').value) || 10,
-    retestDistPct: (parseFloat(document.getElementById('param-retest-dist').value) || 0.8) / 100,
-    rrMin: parseFloat(document.getElementById('param-rr').value) || 1.5,
-    emaRetest: document.getElementById('param-ema-retest')?.checked || false,
-    mtfRequired: document.getElementById('param-mtf-required')?.checked || false,
-    ignoreBOS: document.getElementById('param-ignore-bos')?.checked || false,
-    ignoreRetest: document.getElementById('param-ignore-retest')?.checked || false,
-};
-                console.log('[Backtest UI] Parâmetros:', options);
+try {
+    // Parâmetros sincronizados com ROBOT_CONFIG
+    const options = {
+        scoreMin: ROBOT_CONFIG.scoreMin,
+        scoreMaxShort: ROBOT_CONFIG.scoreMaxShort,
+        adxMin: ROBOT_CONFIG.adxMin,
+        retestDistPct: ROBOT_CONFIG.retestDistPct,
+        rrMin: ROBOT_CONFIG.rrMin,
+        emaRetest: ROBOT_CONFIG.requireEMARetest || false,
+        mtfRequired: ROBOT_CONFIG.requireMTF || false,
+        ignoreBOS: !ROBOT_CONFIG.requireBOS,
+        ignoreRetest: !ROBOT_CONFIG.requireRetest,
+    };
+    console.log('[Backtest UI] Parâmetros enviados:', options);
 
-                for (const sym of symbols) {
-                    if (statusEl) statusEl.textContent = `Processando ${sym}... (${allResults.length+1}/${symbols.length})`;
-                    const result = await runBacktest(sym, 30, options);
-                    allResults.push({ symbol: sym, ...result });
-                }
+    const result = await runBacktest('BTCUSDT', 30, options);
+    // ... resto do código (exibir resultados)
+} catch (e) {
+    console.error(e);
+    const statusEl = document.getElementById('backtest-status');
+    if (statusEl) statusEl.textContent = '❌ Erro: ' + e.message;
+}
 
                 // Consolida resultados
                 const totalTrades = allResults.reduce((acc, r) => acc + (r.summary?.totalTrades || 0), 0);
