@@ -694,7 +694,8 @@
             fetchCQActiveAddresses,
             fetchHashrate,
             fetchOIDelta,
-            sleep
+            sleep,
+            getMacroBlackoutStatus   // <-- ADICIONADO (nova função cacheada)
         } from './js/dados_externos.js';
 
         import * as indicadores from './js/indicadores.js';
@@ -1648,8 +1649,11 @@
             }));
         }
 
-        // ===== AVALIAÇÃO DE MERCADO =====
+        // ===== AVALIAÇÃO DE MERCADO (OTIMIZADO) =====
         async function evaluateMarkets() {
+            // 🔥 OTIMIZAÇÃO: Busca o status de blackout UMA VEZ antes do loop (cache de 15 min)
+            const macroBlackout = await getMacroBlackoutStatus();
+
             for (const symbol of CONFIG.ASSETS) {
                 const data = assetsData[symbol];
                 updateSwingPoints(data);
@@ -1690,8 +1694,10 @@
                 const vwap = calculateVWAP(last24Candles);
                 data.vwap = vwap;
                 
-                const macroCheck = await isHighImpactEventNow();
-                data.macroBlackout = macroCheck.isBlackout && macroCheck.impact === 'HIGH';
+                // 🔥 REMOVIDO: const macroCheck = await isHighImpactEventNow();
+                // 🔥 REMOVIDO: data.macroBlackout = macroCheck.isBlackout && macroCheck.impact === 'HIGH';
+                // 🔥 NOVO: usa o valor cacheado
+                data.macroBlackout = macroBlackout;
                 
                 const scoreData = computeScore(symbol, assetsData, liqMap);
 
