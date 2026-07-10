@@ -527,12 +527,15 @@
                             <th>Entrada</th>
                             <th>Stop Loss</th>
                             <th>Take Profit</th>
+                            <th>Stop Loss (%)</th>
+                            <th>Take Profit (%)</th>
                             <th>Status</th>
-                            <th>Resultado (P&L %)</th>
+                            <th>P&L (%)</th>
+                            <th>P&L % ao vivo</th>
                         </tr>
                     </thead>
                     <tbody id="signal-history-body">
-                        <tr><td colspan="8" style="text-align:center;color:var(--text-muted);">Aguardando sinais...</td></tr>
+                        <tr><td colspan="11" style="text-align:center;color:var(--text-muted);">Aguardando sinais...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -932,19 +935,44 @@
             }
         }
 
+        // ===== RENDER SIGNAL TABLE (ATUALIZADA COM NOVAS COLUNAS) =====
         function renderSignalTable() {
             const tbody = document.getElementById('signal-history-body');
             if (!tbody) return;
             if (signalHistory.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">Nenhum sinal registrado ainda.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-muted);">Nenhum sinal registrado ainda.</td></tr>`;
                 return;
             }
             const sorted = [...signalHistory].reverse();
             let html = '';
             for (const s of sorted) {
+                let stopPct = 0, takePct = 0;
+                if (s.direction === 'LONG') {
+                    stopPct = ((s.stop - s.entry) / s.entry) * 100;
+                    takePct = ((s.tp - s.entry) / s.entry) * 100;
+                } else if (s.direction === 'SHORT') {
+                    stopPct = ((s.entry - s.stop) / s.entry) * 100;
+                    takePct = ((s.entry - s.tp) / s.entry) * 100;
+                }
+
+                let livePnl = '--';
+                const currentPrice = assetsData[s.symbol]?.price;
+                if (currentPrice && s.status === 'ABERTA') {
+                    if (s.direction === 'LONG') {
+                        livePnl = ((currentPrice - s.entry) / s.entry) * 100;
+                    } else if (s.direction === 'SHORT') {
+                        livePnl = ((s.entry - currentPrice) / s.entry) * 100;
+                    }
+                    livePnl = (livePnl >= 0 ? '+' : '') + livePnl.toFixed(2) + '%';
+                } else if (s.pnl !== null) {
+                    livePnl = (s.pnl >= 0 ? '+' : '') + s.pnl.toFixed(2) + '%';
+                }
+
                 const statusClass = s.status === 'ABERTA' ? 'color:var(--accent-green);' : 'color:var(--accent-red);';
                 const pnlColor = s.pnl !== null ? (s.pnl >= 0 ? 'color:var(--accent-green);' : 'color:var(--accent-red);') : '';
-                const pnlDisplay = s.pnl !== null ? (s.pnl >= 0 ? '+' : '') + s.pnl.toFixed(2) + '%' : '--';
+                const stopColor = stopPct < 0 ? 'color:var(--accent-red);' : '';
+                const takeColor = takePct > 0 ? 'color:var(--accent-green);' : '';
+
                 html += `
                     <tr>
                         <td>${s.timestamp}</td>
@@ -953,8 +981,11 @@
                         <td>$${s.entry.toFixed(2)}</td>
                         <td>$${s.stop.toFixed(2)}</td>
                         <td>$${s.tp.toFixed(2)}</td>
+                        <td style="${stopColor}">${stopPct.toFixed(2)}%</td>
+                        <td style="${takeColor}">${takePct.toFixed(2)}%</td>
                         <td style="${statusClass}">${s.status}</td>
-                        <td style="${pnlColor}">${pnlDisplay}</td>
+                        <td style="${pnlColor}">${s.pnl !== null ? (s.pnl >= 0 ? '+' : '') + s.pnl.toFixed(2) + '%' : '--'}</td>
+                        <td>${livePnl}</td>
                     </tr>
                 `;
             }
@@ -1312,6 +1343,56 @@
                     fillEl.style.background = `rgb(${red}, ${green}, 0)`;
                 }
             });
+        }
+
+        // ===== FUNÇÃO PARA ATUALIZAR TIMEFRAMES (1D, 1S, 1M) =====
+        async function updateTimeframeStats() {
+            const symbols = CONFIG.ASSETS;
+            for (const symbol of symbols) {
+                const prefix = symbol.replace('USDT', '').toLowerCase();
+                try {
+                    const [candles1d, candles7d, candles30d] = await Promise.all([
+                        fetchHistoricalCandles(symbol, '1d', 2),
+                        fetchHistoricalCandles(symbol, '1d', 8),
+                        fetchHistoricalCandles(symbol, '1d', 31)
+                    ]);
+
+                    let change1d = 0, change7d = 0, change30d = 0;
+
+                    if (candles1d.length >= 2) {
+                        const last = candles1d[candles1d.length - 1].close;
+                        const prev = candles1d[candles1d.length - 2].close;
+                        change1d = ((last - prev) / prev) * 100;
+                    }
+                    if (candles7d.length >= 2) {
+                        const last = candles7d[candles7d.length - 1].close;
+                        const prev = candles7d[0].close;
+                        change7d = ((last - prev) / prev) * 100;
+                    }
+                    if (candles30d.length >= 2) {
+                        const last = candles30d[candles30d.length - 1].close;
+                        const prev = candles30d[0].close;
+                        change30d = ((last - prev) / prev) * 100;
+                    }
+
+                    const el1d = document.getElementById(`${prefix}-stat-1d`);
+                    const el1s = document.getElementById(`${prefix}-stat-1s`);
+                    const el1m = document.getElementById(`${prefix}-stat-1m`);
+
+                    if (el1d) el1d.innerHTML = `<span class="label">1D</span> ${change1d >= 0 ? '+' : ''}${change1d.toFixed(2)}%`;
+                    if (el1s) el1s.innerHTML = `<span class="label">1S</span> ${change7d >= 0 ? '+' : ''}${change7d.toFixed(2)}%`;
+                    if (el1m) el1m.innerHTML = `<span class="label">1M</span> ${change30d >= 0 ? '+' : ''}${change30d.toFixed(2)}%`;
+
+                    [el1d, el1s, el1m].forEach(el => {
+                        if (el) {
+                            const value = parseFloat(el.textContent.replace(/[^0-9.-]/g, ''));
+                            el.className = `stat ${value >= 0 ? 'positive' : 'negative'}`;
+                        }
+                    });
+                } catch (e) {
+                    console.warn(`Erro ao atualizar timeframe stats para ${symbol}:`, e);
+                }
+            }
         }
 
         // ===== WEBSOCKET =====
@@ -2068,6 +2149,7 @@
             await updateExternalData();
             await updateMTFAndOI();
             await evaluateMarkets();
+            await updateTimeframeStats(); // Atualiza 1D, 1S, 1M
 
             setInterval(async () => {
                 const symbol = 'BTCUSDT';
@@ -2126,6 +2208,7 @@
                 }
                 await updateMTFAndOI();
                 await evaluateMarkets();
+                await updateTimeframeStats(); // Atualiza também os timeframes
             }, 300000);
 
             document.getElementById('live-apply-btn').addEventListener('click', applyLiveParams);
@@ -2170,16 +2253,14 @@
                         allResults.push({ symbol: sym, ...result });
                     }
 
-                    // Consolida resultados
                     const totalTrades = allResults.reduce((acc, r) => acc + (r.summary?.totalTrades || 0), 0);
                     const totalPnlUsd = allResults.reduce((acc, r) => acc + (r.summary?.totalPnlUsd || 0), 0);
                     const weightedWinrate = allResults.reduce((acc, r) => {
                         const t = r.summary?.totalTrades || 0;
                         return acc + (r.summary?.winrate || 0) * t;
                     }, 0) / (totalTrades || 1);
-                    const totalPnlPct = (totalPnlUsd / (10000 * symbols.length)) * 100; // capital total = 30.000
+                    const totalPnlPct = (totalPnlUsd / (10000 * symbols.length)) * 100;
 
-                    // Exibe consolidado
                     const summaryDiv = document.getElementById('backtest-summary');
                     if (!summaryDiv) throw new Error('Elemento #backtest-summary não encontrado');
 
@@ -2197,7 +2278,6 @@
                     `;
                     summaryDiv.innerHTML = html;
 
-                    // Diagnóstico consolidado
                     const consolidatedBlockStats = {};
                     allResults.forEach(r => {
                         if (r.summary?.blockStats) {
@@ -2225,7 +2305,6 @@
                         diagDiv.style.display = 'none';
                     }
 
-                    // Tabela consolidada de trades
                     const allTrades = allResults.flatMap(r => r.trades || []);
                     const tbody = document.getElementById('backtest-tbody');
                     if (!tbody) throw new Error('Elemento #backtest-tbody não encontrado');
