@@ -31,6 +31,9 @@
       "type": "image/png"
     }
   ],
-  "categories": ["finance", "productivity"],
+  "categories": [
+    "finance",
+    "productivity"
+  ],
   "prefer_related_applications": false
 }
