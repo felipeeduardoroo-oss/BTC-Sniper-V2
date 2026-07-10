@@ -1999,12 +1999,18 @@
                     document.getElementById('btc-hashrate').textContent = (hashrate / 1e6).toFixed(2) + ' EH/s';
                 }
 
-                const funding = await fetchFundingRate('BTCUSDT');
-                if (funding) {
-                    document.getElementById('funding-rate').textContent = (funding.rate * 100).toFixed(4) + '%';
-                    document.getElementById('funding-rate-interp').textContent = funding.interpretacao;
-                    if (assetsData['BTCUSDT']) assetsData['BTCUSDT'].fundingRate = funding.rate;
-                }
+                // Busca funding para todos os ativos
+for (const symbol of CONFIG.ASSETS) {
+    const funding = await fetchFundingRate(symbol);
+    if (funding && assetsData[symbol]) {
+        assetsData[symbol].fundingRate = funding.rate;
+        // Atualiza a tabela apenas para BTCUSDT (mantém exibição)
+        if (symbol === 'BTCUSDT') {
+            document.getElementById('funding-rate').textContent = (funding.rate * 100).toFixed(4) + '%';
+            document.getElementById('funding-rate-interp').textContent = funding.interpretacao;
+        }
+    }
+}
 
                 const oiData = await fetchOIDelta('BTCUSDT');
                 if (oiData) {
