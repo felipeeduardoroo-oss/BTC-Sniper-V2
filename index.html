@@ -2361,6 +2361,11 @@
             }, 1000);
 
             setTimeout(runCommittee, 1000);
+            // Atualiza a tabela de sinais a cada 2 segundos (P&L ao vivo)
+setInterval(() => {
+    renderSignalTable();
+}, 2000);
+
         }
 
         init();
