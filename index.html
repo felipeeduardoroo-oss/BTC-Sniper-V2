@@ -672,7 +672,7 @@
 
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
-   <script type="module">
+  <script type="module">
     // ===== IMPORTAÇÕES =====
     import {
         fetchHistoricalCandles,
@@ -1831,7 +1831,7 @@
                                 tp3 = liqTarget2 || (data.price - (atr * 6));
                             }
 
-                            // ===== RR PONDERADO (USA TP1, TP2, TP3) =====
+                            // ===== RR PONDERADO =====
                             let rrPonderado;
                             if (primaryDirection === 'LONG') {
                                 const ganhoPonderado = (tp1 - data.price) * 0.5 + (tp2 - data.price) * 0.3 + (tp3 - data.price) * 0.2;
@@ -2115,7 +2115,7 @@
             }, 3000);
         });
 
-        // ===== BACKTEST (APENAS UM LISTENER, CORRIGIDO) =====
+        // ===== BACKTEST MULTI-ATIVO (BTC, ETH, SOL) =====
         document.getElementById('run-backtest-btn').addEventListener('click', async function() {
             this.disabled = true;
             this.textContent = '⏳ Processando...';
@@ -2123,6 +2123,8 @@
             if (statusEl) statusEl.textContent = 'Buscando dados históricos...';
 
             try {
+                const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+                const allResults = [];
                 const options = {
                     scoreMin: ROBOT_CONFIG.scoreMin,
                     scoreMaxShort: ROBOT_CONFIG.scoreMaxShort,
@@ -2134,35 +2136,56 @@
                     ignoreBOS: !ROBOT_CONFIG.requireBOS,
                     ignoreRetest: !ROBOT_CONFIG.requireRetest,
                 };
-                console.log('[Backtest UI] Parâmetros enviados:', options);
+                console.log('[Backtest UI] Parâmetros:', options);
 
-                const result = await runBacktest('BTCUSDT', 30, options);
-                const { trades, summary } = result;
+                for (const sym of symbols) {
+                    if (statusEl) statusEl.textContent = `Processando ${sym}... (${allResults.length+1}/${symbols.length})`;
+                    const result = await runBacktest(sym, 30, options);
+                    allResults.push({ symbol: sym, ...result });
+                }
 
+                // Consolida resultados
+                const totalTrades = allResults.reduce((acc, r) => acc + (r.summary?.totalTrades || 0), 0);
+                const totalPnlUsd = allResults.reduce((acc, r) => acc + (r.summary?.totalPnlUsd || 0), 0);
+                const weightedWinrate = allResults.reduce((acc, r) => {
+                    const t = r.summary?.totalTrades || 0;
+                    return acc + (r.summary?.winrate || 0) * t;
+                }, 0) / (totalTrades || 1);
+                const totalPnlPct = (totalPnlUsd / (10000 * symbols.length)) * 100; // capital total = 30.000
+
+                // Exibe consolidado
                 const summaryDiv = document.getElementById('backtest-summary');
                 if (!summaryDiv) throw new Error('Elemento #backtest-summary não encontrado');
 
-                if (summary.error) {
-                    summaryDiv.innerHTML = `<div style="color:var(--accent-red);">❌ Erro: ${summary.error}</div>`;
-                } else {
-                    summaryDiv.innerHTML = `
-                        <div class="summary-card"><h3>Trades</h3><div class="value">${summary.totalTrades}</div></div>
-                        <div class="summary-card"><h3>Winrate</h3><div class="value ${summary.winrate > 50 ? 'positive' : 'negative'}">${summary.winrate.toFixed(1)}%</div></div>
-                        <div class="summary-card"><h3>P&L Total</h3><div class="value ${summary.totalPnlPct >= 0 ? 'positive' : 'negative'}">${summary.totalPnlPct.toFixed(2)}%</div></div>
-                        <div class="summary-card"><h3>P&L (USD)</h3><div class="value ${summary.totalPnlUsd >= 0 ? 'positive' : 'negative'}">$${summary.totalPnlUsd.toFixed(2)}</div></div>
-                        <div class="summary-card"><h3>Retorno Anualizado</h3><div class="value ${summary.annualizedReturn >= 0 ? 'positive' : 'negative'}">${summary.annualizedReturn.toFixed(2)}%</div></div>
-                        <div class="summary-card"><h3>Drawdown Máx</h3><div class="value negative">${summary.maxDrawdown.toFixed(2)}%</div></div>
-                        <div class="summary-card"><h3>Profit Factor</h3><div class="value">${summary.profitFactor.toFixed(2)}</div></div>
-                        <div class="summary-card"><h3>Equity Final</h3><div class="value ${summary.finalEquity >= 10000 ? 'positive' : 'negative'}">$${summary.finalEquity.toFixed(2)}</div></div>
-                    `;
-                }
+                let html = `
+                    <div class="summary-card"><h3>Trades Totais</h3><div class="value">${totalTrades}</div></div>
+                    <div class="summary-card"><h3>Winrate Ponderado</h3><div class="value ${weightedWinrate > 50 ? 'positive' : 'negative'}">${weightedWinrate.toFixed(1)}%</div></div>
+                    <div class="summary-card"><h3>P&L Total (USD)</h3><div class="value ${totalPnlUsd >= 0 ? 'positive' : 'negative'}">$${totalPnlUsd.toFixed(2)}</div></div>
+                    <div class="summary-card"><h3>Retorno % (carteira)</h3><div class="value ${totalPnlUsd >= 0 ? 'positive' : 'negative'}">${totalPnlPct.toFixed(2)}%</div></div>
+                    <div style="grid-column:1/-1;font-size:0.8rem;color:var(--text-muted);">
+                        Detalhes por ativo:<br>
+                        ${allResults.map(r => 
+                            `${r.symbol}: ${r.summary?.totalTrades || 0} trades, ${(r.summary?.winrate || 0).toFixed(1)}% winrate, $${(r.summary?.totalPnlUsd || 0).toFixed(2)}`
+                        ).join(' | ')}
+                    </div>
+                `;
+                summaryDiv.innerHTML = html;
 
+                // Diagnóstico consolidado
+                const consolidatedBlockStats = {};
+                allResults.forEach(r => {
+                    if (r.summary?.blockStats) {
+                        for (const [key, count] of Object.entries(r.summary.blockStats)) {
+                            consolidatedBlockStats[key] = (consolidatedBlockStats[key] || 0) + count;
+                        }
+                    }
+                });
                 const diagDiv = document.getElementById('backtest-diagnostic');
                 const statsDiv = document.getElementById('backtest-blockstats');
-                if (summary.blockStats && diagDiv && statsDiv) {
+                if (consolidatedBlockStats && diagDiv && statsDiv) {
                     diagDiv.style.display = 'block';
-                    const totalCandles = Object.values(summary.blockStats).reduce((a, b) => a + b, 0) || 1;
-                    statsDiv.innerHTML = Object.entries(summary.blockStats)
+                    const totalCandles = Object.values(consolidatedBlockStats).reduce((a, b) => a + b, 0) || 1;
+                    statsDiv.innerHTML = Object.entries(consolidatedBlockStats)
                         .sort((a, b) => b[1] - a[1])
                         .map(([reason, count]) => {
                             const pct = ((count / totalCandles) * 100).toFixed(1);
@@ -2176,16 +2199,18 @@
                     diagDiv.style.display = 'none';
                 }
 
+                // Tabela consolidada de trades
+                const allTrades = allResults.flatMap(r => r.trades || []);
                 const tbody = document.getElementById('backtest-tbody');
                 if (!tbody) throw new Error('Elemento #backtest-tbody não encontrado');
-                if (!trades || trades.length === 0) {
+                if (!allTrades || allTrades.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum trade gerado no período.</td></tr>';
                 } else {
-                    let html = '';
-                    trades.forEach(t => {
+                    let htmlTable = '';
+                    allTrades.forEach(t => {
                         const pnl = t.pnlPct !== null ? parseFloat(t.pnlPct) : 0;
                         const pnlClass = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
-                        html += `<tr>
+                        htmlTable += `<tr>
                             <td>${t.entryTime}</td>
                             <td>${t.symbol}</td>
                             <td>${t.direction}</td>
@@ -2198,7 +2223,7 @@
                             <td>${t.durationHours ? t.durationHours + 'h' : '--'}</td>
                         </tr>`;
                     });
-                    tbody.innerHTML = html;
+                    tbody.innerHTML = htmlTable;
                 }
 
                 if (statusEl) statusEl.textContent = `✅ Concluído em ${new Date().toLocaleTimeString()}`;
