@@ -1,0 +1,36 @@
+{
+  "name": "BTC Sniper V2 – Institutional Dashboard",
+  "short_name": "BTC Sniper",
+  "description": "Dashboard institucional de trading com SMC, MTF, on-chain e indicadores em tempo real.",
+  "start_url": "https://felipeeduardoroo-oss.github.io/BTC-Sniper-V2/",
+  "scope": "/BTC-Sniper-V2/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#08090d",
+  "theme_color": "#7c3aed",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshots/mobile-screenshot-1.png",
+      "sizes": "320x640",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["finance", "productivity"],
+  "prefer_related_applications": false
+}
