@@ -102,6 +102,59 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
         }
     }
     return null;
+}// Divergência Otimizada: Reduz alocação de arrays e usa lookback fixo
+export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
+    if (candles.length < lookback + 14 || rsiValues.length < lookback) return null;
+    
+    const startIdx = candles.length - lookback;
+    
+    // Função auxiliar para encontrar picos (reutilizada)
+    const findPeaks = (arr, getValue) => {
+        const peaks = [];
+        for (let i = 2; i < arr.length - 2; i++) {
+            const val = getValue(arr[i]);
+            const v1 = getValue(arr[i-1]);
+            const v2 = getValue(arr[i-2]);
+            const v3 = getValue(arr[i+1]);
+            const v4 = getValue(arr[i+2]);
+            if (val > v1 && val > v2 && val > v3 && val > v4) {
+                peaks.push({ index: i, value: val });
+            }
+        }
+        return peaks;
+    };
+    
+    // Usa slice apenas uma vez por array
+    const priceSlice = candles.slice(startIdx);
+    const rsiSlice = rsiValues.slice(startIdx);
+    
+    const priceHighs = findPeaks(priceSlice, c => c.high);
+    const priceLows = findPeaks(priceSlice, c => c.low);
+    const rsiHighs = findPeaks(rsiSlice, v => v);
+    const rsiLows = findPeaks(rsiSlice, v => v);
+    
+    // Divergência de baixa (bearish)
+    if (priceHighs.length >= 2 && rsiHighs.length >= 2) {
+        const p1 = priceHighs[priceHighs.length - 2];
+        const p2 = priceHighs[priceHighs.length - 1];
+        const r1 = rsiHighs[rsiHighs.length - 2];
+        const r2 = rsiHighs[rsiHighs.length - 1];
+        if (p2.value > p1.value && r2.value < r1.value) {
+            return { type: 'BEARISH_REGULAR', strength: (r1.value - r2.value) / r1.value };
+        }
+    }
+    
+    // Divergência de alta (bullish)
+    if (priceLows.length >= 2 && rsiLows.length >= 2) {
+        const p1 = priceLows[priceLows.length - 2];
+        const p2 = priceLows[priceLows.length - 1];
+        const r1 = rsiLows[rsiLows.length - 2];
+        const r2 = rsiLows[rsiLows.length - 1];
+        if (p2.value < p1.value && r2.value > r1.value) {
+            return { type: 'BULLISH_REGULAR', strength: (r2.value - r1.value) / r1.value };
+        }
+    }
+    return null;
 }
 
 // ============================================================
@@ -194,7 +247,64 @@ export function calculateADX(candles, period = 14) {
     
     return { adx, plusDI: finalPlusDI, minusDI: finalMinusDI };
 }
-
+// ADX Otimizado: Usa janela limitada (lookback) para evitar O(N²) em backtests
+export function calculateADX(candles, period = 14, lookback = 50) {
+    // Pega apenas os últimos 'lookback' candles (mínimo period*2+1)
+    const data = candles.slice(-Math.max(lookback, period * 2 + 1));
+    if (data.length < period * 2 + 1) return { adx: 0, plusDI: 0, minusDI: 0 };
+    
+    const high = data.map(c => c.high);
+    const low = data.map(c => c.low);
+    const close = data.map(c => c.close);
+    
+    const tr = [];
+    const plusDM = [];
+    const minusDM = [];
+    
+    for (let i = 1; i < data.length; i++) {
+        const h = high[i], l = low[i], pc = close[i-1];
+        tr.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
+        const up = h - high[i-1];
+        const down = low[i-1] - l;
+        plusDM.push((up > down && up > 0) ? up : 0);
+        minusDM.push((down > up && down > 0) ? down : 0);
+    }
+    
+    let atr = tr.slice(0, period).reduce((a,b) => a+b, 0);
+    let plus = plusDM.slice(0, period).reduce((a,b) => a+b, 0);
+    let minus = minusDM.slice(0, period).reduce((a,b) => a+b, 0);
+    
+    const dxArr = [];
+    
+    for (let i = period; i < tr.length; i++) {
+        atr = (atr * (period - 1) + tr[i]) / period;
+        plus = (plus * (period - 1) + plusDM[i]) / period;
+        minus = (minus * (period - 1) + minusDM[i]) / period;
+        
+        const plusDI = atr > 0 ? (plus / atr) * 100 : 0;
+        const minusDI = atr > 0 ? (minus / atr) * 100 : 0;
+        const sum = plusDI + minusDI;
+        const dx = sum > 0 ? (Math.abs(plusDI - minusDI) / sum) * 100 : 0;
+        dxArr.push(dx);
+    }
+    
+    let adx = 0;
+    if (dxArr.length >= period) {
+        const startIdx = dxArr.length - period;
+        let sum = 0;
+        for (let i = startIdx; i < dxArr.length; i++) {
+            sum += dxArr[i];
+        }
+        adx = sum / period;
+    } else if (dxArr.length > 0) {
+        adx = dxArr.reduce((a,b) => a+b, 0) / dxArr.length;
+    }
+    
+    const finalPlusDI = atr > 0 ? (plus / atr) * 100 : 0;
+    const finalMinusDI = atr > 0 ? (minus / atr) * 100 : 0;
+    
+    return { adx, plusDI: finalPlusDI, minusDI: finalMinusDI };
+}
 // ============================================================
 // 5. GESTÃO DE SAÍDA COM TRAILING STOP E TP PARCIAL
 // ============================================================
