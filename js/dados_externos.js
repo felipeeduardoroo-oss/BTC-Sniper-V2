@@ -938,6 +938,45 @@ export async function getMTFConfluence(symbol) {
     setCachedData(cacheKey, result);
     return result;
 }
+// ===== MACRO BLACKOUT CACHE =====
+let macroBlackoutCache = { data: false, timestamp: 0 };
+
+export async function getMacroBlackoutStatus() {
+    // Cache de 15 minutos
+    if (Date.now() - macroBlackoutCache.timestamp < 900000) {
+        return macroBlackoutCache.data;
+    }
+    try {
+        const response = await fetch('https://nfs.faireconomy.media/cc/fred.json', { signal: AbortSignal.timeout(5000) });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const events = await response.json();
+        const now = new Date();
+        const today = now.toISOString().split('T')[0];
+        const currentHour = now.getHours();
+        
+        for (const ev of events) {
+            if (ev.country === 'US' && ev.date && ev.date.includes(today) && ev.impact === 'high') {
+                const eventHour = parseInt(ev.date.split('T')[1]?.split(':')[0] || '12');
+                const blackoutStart = (eventHour - 1 + 24) % 24;
+                const blackoutEnd = (eventHour + 1) % 24;
+                if (currentHour >= blackoutStart && currentHour <= blackoutEnd) {
+                    macroBlackoutCache = { data: true, timestamp: Date.now() };
+                    return true;
+                }
+            }
+        }
+        macroBlackoutCache = { data: false, timestamp: Date.now() };
+        return false;
+    } catch(e) {
+        // Fallback estático se a rede falhar
+        const now = new Date();
+        const day = now.getDay();
+        const hour = now.getHours();
+        if (day === 3 && hour >= 13 && hour <= 16) return true;
+        if (day === 5 && now.getDate() <= 7 && hour >= 8 && hour <= 10) return true;
+        return false;
+    }
+}
 
 // ============================================================
 // 13. STUBS (compatibilidade)
