@@ -1,4 +1,5 @@
 // js/backtest.js – Backtest com dados reais dos últimos 30 dias (SINCRONIZADO COM ROBOT_CONFIG)
+// CORREÇÃO: Lógica de BOS/Retest aprimorada (últimos 5 swings)
 import { CONFIG } from './config.js';
 import {
     fetchHistoricalCandles,
@@ -19,7 +20,6 @@ import {
     KellyPositionSize,
     detectVolumeAnomaly,
     calculateVWAP,
-    // isHighImpactEventNow removido – não usado no backtest
     detectRSIDivergence,
     checkPortfolioExposure
 } from './indicadores.js';
@@ -36,7 +36,7 @@ function findMostRecent(arr, cond) {
     return null;
 }
 
-// ===== FUNÇÃO UNIFICADA DE BOS E RETEST =====
+// ===== FUNÇÃO UNIFICADA DE BOS E RETEST (NÃO USADA DIRETAMENTE NA ENTRADA, MAS MANTIDA PARA OUTROS USOS) =====
 function checkBOSAndRetest(state, direction, retestDistPct) {
     const recentHighs = state.swingHighs.slice(-3);
     const recentLows = state.swingLows.slice(-3);
@@ -104,7 +104,6 @@ async function fetchHistoricalFunding(symbol, startTime, endTime) {
     } catch (e) { return []; }
 }
 
-// CORREÇÃO: Binance limita esse endpoint a 500 registros
 async function fetchHistoricalOI(symbol, startTime, endTime) {
     const adjustedStart = Math.max(startTime, endTime - 500 * 60 * 60 * 1000);
     const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=1h&startTime=${adjustedStart}&endTime=${endTime}&limit=500`;
@@ -153,7 +152,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
     const endDateStr = new Date(endTime).toISOString().slice(0, 10);
 
     try {
-        // 1. Buscar candles
         const candles1h = (await fetchHistoricalCandles(symbol, '1h', 800)) || [];
         const candles4h = (await fetchHistoricalCandles(symbol, '4h', 200)) || [];
         const filteredCandles = candles1h.filter(c => c.time >= startTime / 1000 && c.time <= endTime / 1000);
@@ -161,14 +159,11 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             return { trades: [], summary: { error: 'Nenhum candle encontrado.' } };
         }
 
-        // 2. Dados complementares
         const fundingHist = (await fetchHistoricalFunding(symbol, startTime, endTime)) || [];
         const oiHist = (await fetchHistoricalOI(symbol, startTime, endTime)) || [];
         const mvrvHist = (await fetchHistoricalMVRV(startDateStr, endDateStr)) || [];
-        const macroData = await fetchMacroStatic();
         const fgData = await fetchFearGreed();
 
-        // 3. Estado do ativo
         const state = {
             candles1H: [],
             candles4H: candles4h || [],
@@ -185,7 +180,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             adx: 0,
             divergence: null,
             volumeAnomaly: null,
-            macroBlackout: false,  // backtest não usa blackout em tempo real
+            macroBlackout: false,
             vwap: 0,
             price: 0,
             fundingRate: 0,
@@ -200,12 +195,9 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         let highWaterMark = equity;
         let winCount = 0,
             lossCount = 0;
-
-        // Diagnóstico
         const blockStats = {};
         let totalCandlesProcessed = 0;
 
-        // ===== FUNÇÃO UPDATE INDICADORES =====
         function updateIndicators(candles, currentTime) {
             if (candles.length < 14) return;
             const closes = candles.map(c => c.close);
@@ -214,8 +206,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             state.atrHistory.push(state.atr_1H);
             if (state.atrHistory.length > 100) state.atrHistory.shift();
 
-            let avgGain = 0,
-                avgLoss = 0;
+            let avgGain = 0, avgLoss = 0;
             for (let i = closes.length - 14; i < closes.length; i++) {
                 const diff = closes[i] - closes[i - 1];
                 if (diff > 0) avgGain += diff;
@@ -241,18 +232,15 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 state.htfStructure = detectHTFStructure(state, relevant4H);
             }
 
-            // Divergência RSI
             let rsiForDiv = [];
-            let g = 0,
-                l = 0;
+            let g = 0, l = 0;
             for (let i = 1; i < closes.length; i++) {
                 const d = closes[i] - closes[i - 1];
                 if (i <= 14) {
                     if (d >= 0) g += d;
                     else l -= d;
                     if (i === 14) {
-                        let ag = g / 14,
-                            al = l / 14;
+                        let ag = g / 14, al = l / 14;
                         rsiForDiv.push(al === 0 ? 100 : 100 - (100 / (1 + ag / al)));
                     }
                 } else {
@@ -270,14 +258,12 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             }
         }
 
-        // ===== LOOP PRINCIPAL =====
         for (let i = 0; i < filteredCandles.length; i++) {
             const candle = filteredCandles[i];
             state.price = candle.close;
             state.candles1H.push(candle);
             if (state.candles1H.length > 200) state.candles1H.shift();
 
-            // Dados históricos
             const fundingAtTime = findMostRecent(fundingHist, f => f.time <= candle.time * 1000) || fundingHist[0];
             state.fundingRate = fundingAtTime ? fundingAtTime.rate : 0;
 
@@ -289,11 +275,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
 
             const mvrvAtTime = findMostRecent(mvrvHist, m => m.time <= candle.time);
             state.mvrv = mvrvAtTime ? mvrvAtTime.value : null;
-
-            // No backtest, macroBlackout é sempre falso (não temos dados históricos)
             state.macroBlackout = false;
 
-            // MTF histórico
             state.mtfConfluence = getMTFAlignmentAtTime(state.candles1H, state.candles4H, candle.time);
 
             if (state.candles1H.length >= 50) {
@@ -302,7 +285,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 continue;
             }
 
-            // ===== CÁLCULO DO SCORE =====
             const simAssets = {
                 [symbol]: {
                     price: state.price,
@@ -335,7 +317,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             const bosConfirmed = scoreData.direction !== 'NEUTRAL' && findSMCSetup(state, scoreData.direction);
             state.currentBOS = bosConfirmed ? 'BOS' : 'NEUTRAL';
 
-            // Se mtfRequired for false, forçamos alinhado a true
             const mtfAligned = mtfRequired ? (simAssets[symbol].mtfConfluence?.alinhado || false) : true;
 
             const confidence = calculateConfidenceScore({
@@ -357,7 +338,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             if (adxValue < adxMin && !blockReason) blockReason = `ADX < ${adxMin} (lateral)`;
             if (state.macroBlackout && !blockReason) blockReason = 'Macro blackout';
 
-            // ===== USANDO scoreMaxShort =====
             const primaryDirection = (score >= scoreMin) ? 'LONG' : (score <= scoreMaxShort ? 'SHORT' : null);
 
             if (primaryDirection === 'LONG' && state.price < state.vwap && !blockReason)
@@ -375,14 +355,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 if (!derivCheck.allow) blockReason = derivCheck.reason;
             }
 
-            // ===== DIAGNÓSTICO (a cada 10 candles) =====
-            if (i % 10 === 0) {
-                console.log(`[Candle ${i}] score=${score}, primaryDirection=${primaryDirection}, blockReason=${blockReason}`);
-                console.log(`  adx=${adxValue}, vwap=${state.vwap}, price=${state.price}, htf=${state.htfStructure.bias}`);
-                console.log(`  swingHighs=${state.swingHighs.length}, swingLows=${state.swingLows.length}`);
-            }
-
-            // ===== GERENCIAR POSIÇÃO =====
+            // ----- GERENCIAMENTO DE POSIÇÃO -----
             if (position) {
                 const high = candle.high;
                 const low = candle.low;
@@ -432,7 +405,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     else lossCount++;
                     position = null;
                 } else {
-                    // Atualizar trailing
                     if (position.type === 'LONG') {
                         if (state.swingLows.length > 0) {
                             const newLow = Math.min(...state.swingLows);
@@ -449,34 +421,51 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 }
             }
 
-            // ===== ENTRADA =====
+            // ----- ENTRADA (NOVA LÓGICA DE BOS/RETEST) -----
             if (!position && !blockReason && primaryDirection) {
                 const atr = state.atr_1H || (state.price * 0.02);
 
-                // --- 1. Cálculo unificado de BOS e retest ---
-                const structure = checkBOSAndRetest(state, primaryDirection, retestDistPct);
-                const smcSetup = structure.bos;
-                const retestConfirmed = structure.retest;
-                const brokenLevel = structure.level;
+                // NOVA LÓGICA DE BOS E RETEST: analisa os últimos 5 swings
+                let smcSetup = false;
+                let retestConfirmed = false;
+                let brokenLevel = null;
 
-                // Fallback: EMA20 (controlado pelo checkbox)
-                let emaRetestConfirmed = false;
+                const recentHighs = state.swingHighs.slice(-5);
+                const recentLows = state.swingLows.slice(-5);
+
+                if (primaryDirection === 'LONG') {
+                    const brokenHighs = recentHighs.filter(h => h < state.price);
+                    if (brokenHighs.length > 0) {
+                        brokenLevel = Math.max(...brokenHighs);
+                        smcSetup = true;
+                        const distPct = Math.abs(state.price - brokenLevel) / brokenLevel;
+                        retestConfirmed = distPct < retestDistPct;
+                    }
+                } else if (primaryDirection === 'SHORT') {
+                    const brokenLows = recentLows.filter(l => l > state.price);
+                    if (brokenLows.length > 0) {
+                        brokenLevel = Math.min(...brokenLows);
+                        smcSetup = true;
+                        const distPct = Math.abs(state.price - brokenLevel) / brokenLevel;
+                        retestConfirmed = distPct < retestDistPct;
+                    }
+                }
+
+                // Fallback: EMA20 (se habilitado)
                 if (!retestConfirmed && emaRetest) {
                     const ema20 = calcEMA(state.candles1H.map(c => c.close), 20).slice(-1)[0] || state.price;
                     const emaDist = Math.abs(state.price - ema20) / ema20;
-                    emaRetestConfirmed = emaDist < 0.005;
+                    retestConfirmed = emaDist < 0.005;
+                    if (retestConfirmed) smcSetup = true;
                 }
-                const finalRetest = retestConfirmed || emaRetestConfirmed;
 
-                // --- 2. Verifica se os filtros estruturais são exigidos ---
+                // Aplica os checkboxes ignoreBOS e ignoreRetest
                 const bosRequired = !ignoreBOS;
                 const retestRequired = !ignoreRetest;
-
                 const bosPassed = bosRequired ? smcSetup : true;
-                const retestPassed = retestRequired ? finalRetest : true;
-                const structureOk = bosPassed && retestPassed;
+                const retestPassed = retestRequired ? retestConfirmed : true;
 
-                // --- 3. Contabiliza diagnóstico ---
+                // Diagnóstico
                 totalCandlesProcessed++;
                 let reasonKey = blockReason;
                 if (!blockReason && primaryDirection) {
@@ -489,8 +478,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 }
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
-                // --- 4. Abrir posição se estrutura OK e R:R suficiente ---
-                if (structureOk) {
+                // Abrir posição se estrutura OK e R:R suficiente
+                if (bosPassed && retestPassed) {
                     let stop, tp1, tp2;
                     if (primaryDirection === 'LONG') {
                         const recentLows = state.swingLows.slice(-3);
@@ -507,7 +496,6 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     }
                     const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
                     if (rr1 >= rrMin) {
-                        // Kelly sizing
                         const totalTrades = winCount + lossCount;
                         const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
                         const kellyPct = KellyPositionSize(winRate, rr1);
@@ -545,7 +533,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     }
                 }
             }
-        } // <-- FIM DO LOOP PRINCIPAL
+        }
 
         // Fechar posição remanescente
         if (position) {
@@ -599,7 +587,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             finalEquity: equity,
             blockStats: blockStats,
             totalCandlesProcessed: totalCandlesProcessed,
-            disclaimer: "MTF Confluence calculado com candles históricos (1h e 4h). BOS/retest unificados com os 3 últimos swings. Diagnóstico honesto. Parâmetros sincronizados com ROBOT_CONFIG."
+            disclaimer: "MTF Confluence calculado com candles históricos (1h e 4h). BOS/retest unificados com os 5 últimos swings. Diagnóstico honesto. Parâmetros sincronizados com ROBOT_CONFIG."
         };
 
         logDebug('Backtest REAL concluído!', summary);
