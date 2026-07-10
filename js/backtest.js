@@ -338,7 +338,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             if (adxValue < adxMin && !blockReason) blockReason = `ADX < ${adxMin} (lateral)`;
             if (state.macroBlackout && !blockReason) blockReason = 'Macro blackout';
 
-            const primaryDirection = (score >= scoreMin) ? 'LONG' : (score <= scoreMaxShort ? 'SHORT' : null);
+          const primaryDirection = (score >= scoreMin) ? 'LONG' : (score <= scoreMaxShort ? 'SHORT' : null);
 
             if (primaryDirection === 'LONG' && state.price < state.vwap && !blockReason)
                 blockReason = 'Preço abaixo do VWAP';
