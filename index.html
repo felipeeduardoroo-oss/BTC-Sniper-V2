@@ -756,15 +756,15 @@
         console.log('[ROBOT] Configuração ao vivo:', ROBOT_CONFIG);
 
         // ===== IMPORTS LIMPOS =====
-        const {
-            calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
-            generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
-            calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
-            detectHTFStructure, updateSwingPoints, findSMCSetup, checkLateralMarket,
-            checkDerivativesFilter,
-            checkPortfolioExposure, computeScore, isSafeToTrade,
-            KellyPositionSize, detectVolumeAnomaly, calculateConfidenceScore, calculateVWAP
-        } = indicadores;
+       const {
+    calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
+    generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
+    calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
+    detectHTFStructure, updateSwingPoints, findSMCSetup, checkLateralMarket,
+    checkDerivativesFilter,
+    checkPortfolioExposure, computeScore, isSafeToTrade,
+    KellyPositionSize, detectVolumeAnomaly, calculateConfidenceScore, calculateVWAP
+} = indicadores;
 
         // ===== STATE =====
         const assetsData = {};
