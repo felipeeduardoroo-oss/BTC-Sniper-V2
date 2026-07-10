@@ -383,29 +383,42 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
 }
 
 export function computeScore(symbol, assetsData, liqMap) {
-    // Essa função é usada pelo index.html para calcular o score de cada ativo
-    // Ela chama calculateConfidenceScore com os dados do estado.
     const data = assetsData[symbol];
-    if (!data) return { score: 50, direction: 'NEUTRO', blockReason: null, components: { mtf: '--', smc: '--', mom: '--', of: '--', macro: '--', oi: '--' } };
-
-    const mtfAligned = data.mtfConfluence?.alinhado || false;
-    const adxVal = typeof data.adx === 'object' ? data.adx.adx : data.adx;
-    const divergence = data.divergence;
-    const macroBlackout = data.macroBlackout || false;
-    const smcStructure = data.currentBOS || 'NEUTRAL';
-    const directionFromScore = (data.score || 50) >= 60 ? 'LONG' : ((data.score || 50) <= 40 ? 'SHORT' : 'NEUTRO');
-
-    const confidence = calculateConfidenceScore({
-        mtfAligned,
-        adx: adxVal,
-        volumeAnomaly: data.volumeAnomaly,
-        fundingRate: data.fundingRate || 0,
-        openInterestTrend: data.oiDelta > 0 ? 'INCREASING' : (data.oiDelta < 0 ? 'DECREASING' : 'NEUTRAL'),
-        divergence,
-        macroBlackout,
-        smcStructure,
-        direction: directionFromScore
-    });
+    if (!data) return { score: 50, direction: 'NEUTRAL', components: {}, blockReason: 'Sem dados' };
+    
+    const base = 50;
+    const mtfScore = data.mtfConfluence?.score || 0;
+    
+    const adxRaw = data.adx;
+    const adxValue = typeof adxRaw === 'object' ? (adxRaw?.adx || 0) : (adxRaw || 0);
+    
+    const rsi = data.rsi_1H || 50;
+    let score = base + mtfScore * 5;
+    
+    // ADX apenas confirma a tendência (não força direção)
+    if (adxValue > 25) {
+        score += (mtfScore > 0 ? 10 : (mtfScore < 0 ? -10 : 0));
+    }
+    
+    // CORREÇÃO: RSI alinhado com tendência (trend‑following)
+    if (rsi > 70) score += 15;   // Sobrecompra → força altista → favorece LONG
+    if (rsi < 30) score -= 15;   // Sobrevenda → força baixista → favorece SHORT
+    
+    const clamped = Math.max(0, Math.min(100, score));
+    return {
+        score: clamped,
+        direction: clamped >= 60 ? 'LONG' : clamped <= 40 ? 'SHORT' : 'NEUTRAL',
+        components: {
+            mtf: mtfScore > 0 ? 'ALINHADO' : 'NEUTRO',
+            smc: 'NEUTRO',
+            mom: adxValue > 25 ? 'FORTE' : 'FRACO',
+            of: 'NEUTRO',
+            macro: 'NEUTRO',
+            oi: data.oiDelta > 0 ? 'CRESCENDO' : 'DIMINUINDO'
+        },
+        blockReason: null
+    };
+}
 
     const blockReason = null; // pode ser preenchido com base em filtros externos
 
