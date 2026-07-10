@@ -1,12 +1,9 @@
 // ================================================================
-// js/indicadores.js – Motor de indicadores V2 (OTIMIZADO E CORRIGIDO)
+// js/indicadores.js – Motor de indicadores V2 (CORRIGIDO)
 // ================================================================
 
 // ===== FUNÇÕES AUXILIARES BÁSICAS =====
 
-/**
- * Cálculo de EMA (Exponential Moving Average)
- */
 export function calcEMA(data, period) {
     if (!data || data.length === 0) return [];
     const result = [];
@@ -20,9 +17,6 @@ export function calcEMA(data, period) {
     return result;
 }
 
-/**
- * Cálculo de ATR (Average True Range) com janela deslizante (lookback)
- */
 export function calculateATR(candles, period = 14, lookback = 100) {
     const data = candles.slice(-Math.max(lookback, period + 1));
     if (data.length < period + 1) return 0;
@@ -40,13 +34,9 @@ export function calculateATR(candles, period = 14, lookback = 100) {
     return atr;
 }
 
-/**
- * Cálculo de VWAP (Volume Weighted Average Price) – janela de 24h
- */
 export function calculateVWAP(candles) {
     if (!candles || candles.length === 0) return 0;
-    let sum = 0,
-        volume = 0;
+    let sum = 0, volume = 0;
     for (const c of candles) {
         const typical = (c.high + c.low + c.close) / 3;
         sum += typical * c.volume;
@@ -57,9 +47,6 @@ export function calculateVWAP(candles) {
 
 // ===== INDICADORES DE TENDÊNCIA E MOMENTUM =====
 
-/**
- * ADX otimizado com janela deslizante (lookback)
- */
 export function calculateADX(candles, period = 14, lookback = 50) {
     const data = candles.slice(-Math.max(lookback, period * 2 + 1));
     if (data.length < period * 2 + 1) return { adx: 0, plusDI: 0, minusDI: 0 };
@@ -73,9 +60,7 @@ export function calculateADX(candles, period = 14, lookback = 50) {
     const minusDM = [];
 
     for (let i = 1; i < data.length; i++) {
-        const h = high[i],
-            l = low[i],
-            pc = close[i - 1];
+        const h = high[i], l = low[i], pc = close[i - 1];
         tr.push(Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)));
         const up = h - high[i - 1];
         const down = low[i - 1] - l;
@@ -119,9 +104,8 @@ export function calculateADX(candles, period = 14, lookback = 50) {
     return { adx, plusDI: finalPlusDI, minusDI: finalMinusDI };
 }
 
-/**
- * Divergência RSI otimizada (menos alocações)
- */
+// ===== DIVERGÊNCIA RSI (CORRIGIDA) =====
+
 export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
     if (candles.length < lookback + 14 || rsiValues.length < lookback) return null;
 
@@ -131,10 +115,8 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
         const peaks = [];
         for (let i = 2; i < arr.length - 2; i++) {
             const val = getValue(arr[i]);
-            const v1 = getValue(arr[i - 1]);
-            const v2 = getValue(arr[i - 2]);
-            const v3 = getValue(arr[i + 1]);
-            const v4 = getValue(arr[i + 2]);
+            const v1 = getValue(arr[i-1]), v2 = getValue(arr[i-2]);
+            const v3 = getValue(arr[i+1]), v4 = getValue(arr[i+2]);
             if (val > v1 && val > v2 && val > v3 && val > v4) {
                 peaks.push({ index: i, value: val });
             }
@@ -142,15 +124,28 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
         return peaks;
     };
 
+    const findTroughs = (arr, getValue) => {
+        const troughs = [];
+        for (let i = 2; i < arr.length - 2; i++) {
+            const val = getValue(arr[i]);
+            const v1 = getValue(arr[i-1]), v2 = getValue(arr[i-2]);
+            const v3 = getValue(arr[i+1]), v4 = getValue(arr[i+2]);
+            if (val < v1 && val < v2 && val < v3 && val < v4) {
+                troughs.push({ index: i, value: val });
+            }
+        }
+        return troughs;
+    };
+
     const priceSlice = candles.slice(startIdx);
     const rsiSlice = rsiValues.slice(startIdx);
 
     const priceHighs = findPeaks(priceSlice, c => c.high);
-    const priceLows = findPeaks(priceSlice, c => c.low);
+    const priceLows = findTroughs(priceSlice, c => c.low);
     const rsiHighs = findPeaks(rsiSlice, v => v);
-    const rsiLows = findPeaks(rsiSlice, v => v);
+    const rsiLows = findTroughs(rsiSlice, v => v);
 
-    // Divergência de baixa (bearish)
+    // Bearish divergence
     if (priceHighs.length >= 2 && rsiHighs.length >= 2) {
         const p1 = priceHighs[priceHighs.length - 2];
         const p2 = priceHighs[priceHighs.length - 1];
@@ -161,7 +156,7 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
         }
     }
 
-    // Divergência de alta (bullish)
+    // Bullish divergence
     if (priceLows.length >= 2 && rsiLows.length >= 2) {
         const p1 = priceLows[priceLows.length - 2];
         const p2 = priceLows[priceLows.length - 1];
@@ -179,13 +174,9 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
 export function updateSwingPoints(state) {
     const candles = state.candles1H || [];
     if (candles.length < 5) return;
-    const last = candles[candles.length - 1];
-    const prev = candles[candles.length - 2];
-    if (!last || !prev) return;
-
     if (candles.length >= 5) {
-        const c3 = candles[candles.length - 3];
         const c2 = candles[candles.length - 4];
+        const c3 = candles[candles.length - 3];
         const c4 = candles[candles.length - 2];
         if (c3.high > c2.high && c3.high > c4.high) {
             state.swingHighs.push(c3.high);
@@ -228,13 +219,6 @@ export function checkLateralMarket(adxValue, threshold = 25) {
 
 // ===== FILTROS DE RISCO E CONDIÇÕES =====
 
-export function checkOnChainFilter(mvrv, direction) {
-    if (mvrv === null || mvrv === undefined) return { allow: true, reason: 'MVRV indisponível' };
-    if (direction === 'LONG' && mvrv < 1.0) return { allow: true, reason: 'MVRV baixo (favorável)' };
-    if (direction === 'SHORT' && mvrv > 1.5) return { allow: true, reason: 'MVRV alto (favorável)' };
-    return { allow: false, reason: 'MVRV desfavorável' };
-}
-
 export function checkDerivativesFilter(fundingRate, oiDelta) {
     if (fundingRate > 0.0005) return { allow: false, reason: 'Funding muito positivo (overbought em futuros)' };
     if (fundingRate < -0.0005) return { allow: false, reason: 'Funding muito negativo (oversold em futuros)' };
@@ -243,8 +227,10 @@ export function checkDerivativesFilter(fundingRate, oiDelta) {
 }
 
 export function checkPortfolioExposure(activePositions, direction) {
-    const count = Object.keys(activePositions).length;
-    if (count >= 1) return { blocked: true, reason: 'Já há posição aberta' };
+    const total = Object.keys(activePositions).length;
+    if (total >= 3) return { blocked: true, reason: 'Máximo de 3 posições' };
+    const sameDir = Object.values(activePositions).filter(p => p.type === direction).length;
+    if (sameDir >= 1) return { blocked: true, reason: `Já há posição ${direction} aberta (exposição correlacionada)` };
     return { blocked: false, reason: 'Portfólio disponível' };
 }
 
@@ -356,39 +342,26 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
     if (score >= 60) finalDirection = 'LONG';
     else if (score <= 40) finalDirection = 'SHORT';
 
-    return {
-        score,
-        level,
-        direction: finalDirection,
-        reasons
-    };
+    return { score, level, direction: finalDirection, reasons };
 }
 
-/**
- * COMPUTE SCORE – Função principal usada pelo index.html e backtest.js
- * Versão corrigida: RSI alinhado com tendência (trend‑following)
- */
 export function computeScore(symbol, assetsData, liqMap) {
     const data = assetsData[symbol];
     if (!data) return { score: 50, direction: 'NEUTRAL', components: {}, blockReason: 'Sem dados' };
     
     const base = 50;
     const mtfScore = data.mtfConfluence?.score || 0;
-    
     const adxRaw = data.adx;
     const adxValue = typeof adxRaw === 'object' ? (adxRaw?.adx || 0) : (adxRaw || 0);
-    
     const rsi = data.rsi_1H || 50;
     let score = base + mtfScore * 5;
     
-    // ADX apenas confirma a tendência (não força direção)
     if (adxValue > 25) {
         score += (mtfScore > 0 ? 10 : (mtfScore < 0 ? -10 : 0));
     }
     
-    // CORREÇÃO: RSI alinhado com tendência (trend‑following)
-    if (rsi > 70) score += 15;   // Sobrecompra → força altista → favorece LONG
-    if (rsi < 30) score -= 15;   // Sobrevenda → força baixista → favorece SHORT
+    if (rsi > 70) score += 15;
+    if (rsi < 30) score -= 15;
     
     const clamped = Math.max(0, Math.min(100, score));
     return {
@@ -416,7 +389,7 @@ export function adxFilter(candles, threshold = 25) {
 }
 
 export function fundingFilter(fundingData, direction) {
-    if (!fundingData || fundingData.rate === undefined) return { pass: true, reason: 'Fundind indisponível' };
+    if (!fundingData || fundingData.rate === undefined) return { pass: true, reason: 'Funding indisponível' };
     const rate = fundingData.rate;
     if (direction === 'LONG' && rate > 0.01) {
         return { pass: false, reason: `Funding ${(rate * 100).toFixed(2)}% muito positivo` };
@@ -479,25 +452,16 @@ export function generateTrailingStopParams(candles, currentPrice, direction) {
         tp2 = currentPrice - atr * 4;
         tp3 = currentPrice - atr * 6;
     }
-    return {
-        stopLoss,
-        tp1,
-        tp2,
-        tp3,
-        trailingActivation,
-        trailingDistance,
-        atr
-    };
+    return { stopLoss, tp1, tp2, tp3, trailingActivation, trailingDistance, atr };
 }
 
-// ===== SCORE DE SINAL PARA O COMITÊ (CORRIGIDO) =====
+// ===== SCORE DE SINAL PARA O COMITÊ =====
 
 export function calculateSignalScore(indicators) {
     let score = 50;
     const reasons = [];
     const { close, ema20, ema50, rsi, adx, divergence, mtfScore, fundingRate, volumeRatio } = indicators;
 
-    // EMA cross
     if (ema20 > ema50) {
         score += 10;
         reasons.push('EMA20 > EMA50 (alta)');
@@ -506,7 +470,6 @@ export function calculateSignalScore(indicators) {
         reasons.push('EMA20 < EMA50 (baixa)');
     }
 
-    // Preço vs EMA20
     if (close > ema20) {
         score += 5;
         reasons.push('Preço acima EMA20');
@@ -515,18 +478,16 @@ export function calculateSignalScore(indicators) {
         reasons.push('Preço abaixo EMA20');
     }
 
-    // CORREÇÃO: RSI trend‑following
     if (rsi > 70) {
-        score += 10;   // Sobrecompra → confirma força altista
-        reasons.push('RSI sobrecompra (forte)');
+        score -= 10;
+        reasons.push('RSI sobrecompra');
     } else if (rsi < 30) {
-        score -= 10;   // Sobrevenda → confirma força baixista
-        reasons.push('RSI sobrevenda (fraco)');
+        score += 10;
+        reasons.push('RSI sobrevenda');
     } else {
         reasons.push(`RSI ${rsi.toFixed(1)}`);
     }
 
-    // ADX
     if (adx > 25) {
         score += 10;
         reasons.push(`ADX ${adx.toFixed(1)} (tendência)`);
@@ -535,7 +496,6 @@ export function calculateSignalScore(indicators) {
         reasons.push(`ADX ${adx.toFixed(1)} (lateral)`);
     }
 
-    // Divergência
     if (divergence) {
         if (divergence.type === 'BULLISH_REGULAR') {
             score += 10;
@@ -546,7 +506,6 @@ export function calculateSignalScore(indicators) {
         }
     }
 
-    // MTF
     if (mtfScore > 0) {
         score += mtfScore * 5;
         reasons.push('MTF favorável');
@@ -555,7 +514,6 @@ export function calculateSignalScore(indicators) {
         reasons.push('MTF desfavorável');
     }
 
-    // Volume
     if (volumeRatio > 1.5) {
         score += 5;
         reasons.push('Volume acima da média');
@@ -564,7 +522,6 @@ export function calculateSignalScore(indicators) {
         reasons.push('Volume abaixo da média');
     }
 
-    // Funding
     if (fundingRate > 0.01) {
         score -= 5;
         reasons.push('Funding positivo');
@@ -601,8 +558,7 @@ export function updateStatefulEMA(state, candles, period) {
 export function updateStatefulRSI(state, candles, period = 14) {
     if (!candles || candles.length < period + 1) return;
     const closes = candles.map(c => c.close);
-    let gains = 0,
-        losses = 0;
+    let gains = 0, losses = 0;
     for (let i = 1; i < period + 1; i++) {
         const diff = closes[i] - closes[i - 1];
         if (diff > 0) gains += diff;
@@ -613,8 +569,6 @@ export function updateStatefulRSI(state, candles, period = 14) {
     const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
     state.rsi = rsi;
 }
-
-// ===== FUNÇÃO DE CLAMP =====
 
 export function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
