@@ -2122,20 +2122,18 @@
             const statusEl = document.getElementById('backtest-status');
             if (statusEl) statusEl.textContent = 'Buscando dados históricos...';
 
-            try {
-                const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
-                const allResults = [];
-                const options = {
-                    scoreMin: ROBOT_CONFIG.scoreMin,
-                    scoreMaxShort: ROBOT_CONFIG.scoreMaxShort,
-                    adxMin: ROBOT_CONFIG.adxMin,
-                    retestDistPct: ROBOT_CONFIG.retestDistPct,
-                    rrMin: ROBOT_CONFIG.rrMin,
-                    emaRetest: ROBOT_CONFIG.requireEMARetest || false,
-                    mtfRequired: ROBOT_CONFIG.requireMTF || false,
-                    ignoreBOS: !ROBOT_CONFIG.requireBOS,
-                    ignoreRetest: !ROBOT_CONFIG.requireRetest,
-                };
+              try {
+        const options = {
+            scoreMin: ROBOT_CONFIG.scoreMin,
+            scoreMaxShort: ROBOT_CONFIG.scoreMaxShort,
+            adxMin: ROBOT_CONFIG.adxMin,
+            retestDistPct: ROBOT_CONFIG.retestDistPct,
+            rrMin: ROBOT_CONFIG.rrMin,
+            emaRetest: ROBOT_CONFIG.requireEMARetest || false,
+            mtfRequired: ROBOT_CONFIG.requireMTF || false,
+            ignoreBOS: !ROBOT_CONFIG.requireBOS,
+            ignoreRetest: !ROBOT_CONFIG.requireRetest,
+        };
                 console.log('[Backtest UI] Parâmetros:', options);
 
                 for (const sym of symbols) {
