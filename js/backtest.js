@@ -19,7 +19,7 @@ import {
     KellyPositionSize,
     detectVolumeAnomaly,
     calculateVWAP,
-    isHighImpactEventNow,
+    // isHighImpactEventNow removido – não usado no backtest
     detectRSIDivergence,
     checkPortfolioExposure
 } from './indicadores.js';
@@ -130,13 +130,13 @@ async function fetchHistoricalMVRV(startDate, endDate) {
 
 // ===== FUNÇÃO PRINCIPAL com parâmetros (SINCRONIZADA COM ROBOT_CONFIG) =====
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
-    // Parâmetros com valores padrão alinhados ao ROBOT_CONFIG (caso não sejam fornecidos)
+    // Parâmetros com valores padrão alinhados ao ROBOT_CONFIG
     const {
-        scoreMin = 60,               // <- alterado para 60 (antes 70)
-        scoreMaxShort = 30,          // <- NOVO: limite para SHORT
-        adxMin = 10,                 // <- alterado para 10 (antes 25)
+        scoreMin = 60,
+        scoreMaxShort = 30,
+        adxMin = 10,
         retestDistPct = 0.008,
-        rrMin = 0.1,                 // <- alterado para 0.1 (antes 1.5)
+        rrMin = 0.1,
         emaRetest = true,
         mtfRequired = true,
         ignoreBOS = false,
@@ -185,7 +185,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             adx: 0,
             divergence: null,
             volumeAnomaly: null,
-            macroBlackout: false,
+            macroBlackout: false,  // backtest não usa blackout em tempo real
             vwap: 0,
             price: 0,
             fundingRate: 0,
@@ -290,6 +290,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             const mvrvAtTime = findMostRecent(mvrvHist, m => m.time <= candle.time);
             state.mvrv = mvrvAtTime ? mvrvAtTime.value : null;
 
+            // No backtest, macroBlackout é sempre falso (não temos dados históricos)
             state.macroBlackout = false;
 
             // MTF histórico
@@ -331,8 +332,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             const liqMap = { [symbol]: { longs: 0, shorts: 0 } };
 
             const scoreData = computeScore(symbol, simAssets, liqMap);
-            const structureForScore = checkBOSAndRetest(state, scoreData.direction, retestDistPct);
-state.currentBOS = structureForScore.bos ? 'BOS' : 'NEUTRAL';
+            const bosConfirmed = scoreData.direction !== 'NEUTRAL' && findSMCSetup(state, scoreData.direction);
+            state.currentBOS = bosConfirmed ? 'BOS' : 'NEUTRAL';
 
             // Se mtfRequired for false, forçamos alinhado a true
             const mtfAligned = mtfRequired ? (simAssets[symbol].mtfConfluence?.alinhado || false) : true;
@@ -489,23 +490,21 @@ state.currentBOS = structureForScore.bos ? 'BOS' : 'NEUTRAL';
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
                 // --- 4. Abrir posição se estrutura OK e R:R suficiente ---
-              if (structureOk) {
-    let stop, tp1, tp2;
-    if (primaryDirection === 'LONG') {
-        // Usar apenas os 3 últimos swings (mesma lógica do robô ao vivo)
-        const recentLows = state.swingLows.slice(-3);
-        const structLevel = (recentLows.length ? Math.min(...recentLows) : state.price * 0.98) - (atr * 0.3);
-        stop = Math.min(structLevel, state.price - atr * 1.5);
-        tp1 = state.price + (atr * 2);
-        tp2 = state.price + (atr * 4);
-    } else {
-        const recentHighs = state.swingHighs.slice(-3);
-        const structLevel = (recentHighs.length ? Math.max(...recentHighs) : state.price * 1.02) + (atr * 0.3);
-        stop = Math.max(structLevel, state.price + atr * 1.5);
-        tp1 = state.price - (atr * 2);
-        tp2 = state.price - (atr * 4);
-    }
-               
+                if (structureOk) {
+                    let stop, tp1, tp2;
+                    if (primaryDirection === 'LONG') {
+                        const recentLows = state.swingLows.slice(-3);
+                        const structLevel = (recentLows.length ? Math.min(...recentLows) : state.price * 0.98) - (atr * 0.3);
+                        stop = Math.min(structLevel, state.price - atr * 1.5);
+                        tp1 = state.price + (atr * 2);
+                        tp2 = state.price + (atr * 4);
+                    } else {
+                        const recentHighs = state.swingHighs.slice(-3);
+                        const structLevel = (recentHighs.length ? Math.max(...recentHighs) : state.price * 1.02) + (atr * 0.3);
+                        stop = Math.max(structLevel, state.price + atr * 1.5);
+                        tp1 = state.price - (atr * 2);
+                        tp2 = state.price - (atr * 4);
+                    }
                     const rr1 = primaryDirection === 'LONG' ? (tp1 - state.price) / (state.price - stop) : (state.price - tp1) / (stop - state.price);
                     if (rr1 >= rrMin) {
                         // Kelly sizing
