@@ -580,10 +580,14 @@ export function calculateSignalScore(indicators) {
 
     score = Math.min(100, Math.max(0, score));
 
+    
+///////////////////////////////////////////////////////////////////////////////
     let direction = 'NEUTRO';
-    if (score >= 62) direction = 'LONG';
-    else if (score <= 38) direction = 'SHORT';
+    if (score >= 60) direction = 'LONG';
+    else if (score <= 42) direction = 'SHORT'; 
+///////////////////////////////////////////////////////////////////////////////
 
+    
     let label = 'NEUTRO';
     if (score >= 78) label = 'MUITO FORTE';
     else if (score >= 62) label = 'FORTE';
