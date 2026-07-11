@@ -1,5 +1,5 @@
 // ================================================================
-// js/indicadores.js – Motor de indicadores V2 (CORRIGIDO)
+// js/indicadores.js – Motor de indicadores V2 (Otimizado e Ajustado)
 // ================================================================
 
 // ===== FUNÇÕES AUXILIARES BÁSICAS =====
@@ -104,7 +104,7 @@ export function calculateADX(candles, period = 14, lookback = 50) {
     return { adx, plusDI: finalPlusDI, minusDI: finalMinusDI };
 }
 
-// ===== DIVERGÊNCIA RSI (CORRIGIDA) =====
+// ===== DIVERGÊNCIA RSI (CORRIGIDA E OTIMIZADA) =====
 
 export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
     if (candles.length < lookback + 14 || rsiValues.length < lookback) return null;
@@ -145,24 +145,24 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
     const rsiHighs = findPeaks(rsiSlice, v => v);
     const rsiLows = findTroughs(rsiSlice, v => v);
 
-    // Bearish divergence
+    // Bearish divergence (com filtro de força mínima de 8%)
     if (priceHighs.length >= 2 && rsiHighs.length >= 2) {
         const p1 = priceHighs[priceHighs.length - 2];
         const p2 = priceHighs[priceHighs.length - 1];
         const r1 = rsiHighs[rsiHighs.length - 2];
         const r2 = rsiHighs[rsiHighs.length - 1];
-        if (p2.value > p1.value && r2.value < r1.value) {
+        if (p2.value > p1.value && r2.value < r1.value && (r1.value - r2.value)/r1.value > 0.08) {
             return { type: 'BEARISH_REGULAR', strength: (r1.value - r2.value) / r1.value };
         }
     }
 
-    // Bullish divergence
+    // Bullish divergence (com filtro de força mínima de 8%)
     if (priceLows.length >= 2 && rsiLows.length >= 2) {
         const p1 = priceLows[priceLows.length - 2];
         const p2 = priceLows[priceLows.length - 1];
         const r1 = rsiLows[rsiLows.length - 2];
         const r2 = rsiLows[rsiLows.length - 1];
-        if (p2.value < p1.value && r2.value > r1.value) {
+        if (p2.value < p1.value && r2.value > r1.value && (r2.value - r1.value)/r1.value > 0.08) {
             return { type: 'BULLISH_REGULAR', strength: (r2.value - r1.value) / r1.value };
         }
     }
@@ -174,46 +174,49 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
 export function updateSwingPoints(state) {
     const candles = state.candles1H || [];
     if (candles.length < 5) return;
-    if (candles.length >= 5) {
-        const c2 = candles[candles.length - 4];
-        const c3 = candles[candles.length - 3];
-        const c4 = candles[candles.length - 2];
-        if (c3.high > c2.high && c3.high > c4.high) {
-            state.swingHighs.push(c3.high);
-            if (state.swingHighs.length > 20) state.swingHighs.shift();
-        }
-        if (c3.low < c2.low && c3.low < c4.low) {
-            state.swingLows.push(c3.low);
-            if (state.swingLows.length > 20) state.swingLows.shift();
-        }
+    const c2 = candles[candles.length - 4];
+    const c3 = candles[candles.length - 3];
+    const c4 = candles[candles.length - 2];
+    
+    if (c3.high > c2.high && c3.high > c4.high) {
+        state.swingHighs.push(c3.high);
+        if (state.swingHighs.length > 20) state.swingHighs.shift();
+    }
+    if (c3.low < c2.low && c3.low < c4.low) {
+        state.swingLows.push(c3.low);
+        if (state.swingLows.length > 20) state.swingLows.shift();
     }
 }
 
 export function detectHTFStructure(state, candles4H) {
     if (!candles4H || candles4H.length < 20) return { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity };
     const closes = candles4H.map(c => c.close);
-    const ema200 = calcEMA(closes, 200).slice(-1)[0] || closes[closes.length - 1];
     const last = closes[closes.length - 1];
-    const bias = last > ema200 ? 'BULLISH' : (last < ema200 ? 'BEARISH' : 'NEUTRAL');
+    
+    const ema50 = calcEMA(closes, 50).slice(-1)[0] || last;
+    const ema200 = calcEMA(closes, 200).slice(-1)[0] || last;
+    
+    let bias = 'NEUTRAL';
+    if (last > ema50 && ema50 > ema200) bias = 'BULLISH';
+    else if (last < ema50 && ema50 < ema200) bias = 'BEARISH';
+    
     return { bias, lastSwingHigh: Math.max(...candles4H.map(c => c.high)), lastSwingLow: Math.min(...candles4H.map(c => c.low)) };
 }
 
 export function findSMCSetup(state, direction) {
     if (direction === 'LONG') {
-        const recentLows = state.swingLows.slice(-3);
-        if (recentLows.length === 0) return false;
-        const lastLow = Math.min(...recentLows);
-        return state.price > lastLow;
+        if (state.swingHighs.length === 0) return false;
+        const lastHigh = state.swingHighs[state.swingHighs.length - 1];
+        return state.price > lastHigh; 
     } else if (direction === 'SHORT') {
-        const recentHighs = state.swingHighs.slice(-3);
-        if (recentHighs.length === 0) return false;
-        const lastHigh = Math.max(...recentHighs);
-        return state.price < lastHigh;
+        if (state.swingLows.length === 0) return false;
+        const lastLow = state.swingLows[state.swingLows.length - 1];
+        return state.price < lastLow;
     }
     return false;
 }
 
-export function checkLateralMarket(adxValue, threshold = 25) {
+export function checkLateralMarket(adxValue, threshold = 20) {
     return adxValue < threshold;
 }
 
@@ -247,7 +250,7 @@ export function KellyPositionSize(winRate, rr) {
 
 // ===== ANOMALIAS DE VOLUME =====
 
-export function detectVolumeAnomaly(candles, period = 20, threshold = 2.0) {
+export function detectVolumeAnomaly(candles, period = 20, threshold = 1.5) {
     if (candles.length < period) return null;
     const volumes = candles.map(c => c.volume);
     const avg = volumes.slice(-period).reduce((a, b) => a + b, 0) / period;
@@ -277,40 +280,42 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
     const adxVal = typeof adx === 'object' ? adx.adx : adx;
     if (adxVal >= 25) {
         score += 15;
-        reasons.push(`ADX ${adxVal.toFixed(1)} (tendência)`);
+        reasons.push(`ADX ${adxVal.toFixed(1)} (tendência forte)`);
+    } else if (adxVal >= 20) {
+        score += 7;
+        reasons.push(`ADX ${adxVal.toFixed(1)} (tendência formando)`);
     } else {
         score -= 10;
         reasons.push(`ADX ${adxVal.toFixed(1)} (lateral)`);
     }
 
     if (volumeAnomaly) {
-        if (volumeAnomaly.type === 'HIGH' && direction === 'LONG') {
+        if (volumeAnomaly.type === 'HIGH') {
             score += 10;
-            reasons.push('Volume alto confirma alta');
+            reasons.push('Volume alto confirma movimento');
         } else if (volumeAnomaly.type === 'LOW') {
             score -= 5;
             reasons.push('Volume baixo');
         }
     }
 
- // Funding com distinção de direção
-if (direction === 'LONG') {
-    if (fundingRate > 0.01) {
-        score -= 10;
-        reasons.push('Funding muito positivo (desfavorável p/ LONG)');
-    } else if (fundingRate < -0.01) {
-        score += 10;
-        reasons.push('Funding negativo (favorável p/ LONG)');
+    if (direction === 'LONG') {
+        if (fundingRate > 0.01) {
+            score -= 10;
+            reasons.push('Funding muito positivo (desfavorável p/ LONG)');
+        } else if (fundingRate < -0.01) {
+            score += 10;
+            reasons.push('Funding negativo (favorável p/ LONG)');
+        }
+    } else if (direction === 'SHORT') {
+        if (fundingRate < -0.01) {
+            score -= 10;
+            reasons.push('Funding muito negativo (desfavorável p/ SHORT)');
+        } else if (fundingRate > 0.01) {
+            score += 10;
+            reasons.push('Funding positivo (favorável p/ SHORT)');
+        }
     }
-} else if (direction === 'SHORT') {
-    if (fundingRate < -0.01) {
-        score -= 10;
-        reasons.push('Funding muito negativo (desfavorável p/ SHORT)');
-    } else if (fundingRate > 0.01) {
-        score += 10;
-        reasons.push('Funding positivo (favorável p/ SHORT)');
-    }
-}
 
     if (divergence) {
         if (divergence.type === 'BULLISH_REGULAR' && direction === 'LONG') {
@@ -367,32 +372,41 @@ export function computeScore(symbol, assetsData, liqMap) {
     const rsi = data.rsi_1H || 50;
     let score = base + mtfScore * 5;
     
-    if (adxValue > 25) {
+    if (adxValue > 20) {
         score += (mtfScore > 0 ? 10 : (mtfScore < 0 ? -10 : 0));
     }
     
     if (rsi > 70) score += 15;
     if (rsi < 30) score -= 15;
     
-    const clamped = Math.max(0, Math.min(100, score));
+    let clamped = Math.max(0, Math.min(100, score));
+    
+    // NOVO: Unificação de Score + Lateral Filter
+    const isLateral = checkLateralMarket(adxValue, 20);
+    let blockReason = null;
+    if (isLateral) {
+        clamped = Math.max(40, Math.min(60, clamped)); // Força neutro em lateral
+        blockReason = blockReason || 'Lateralização detectada';
+    }
+    
     return {
         score: clamped,
         direction: clamped >= 60 ? 'LONG' : clamped <= 40 ? 'SHORT' : 'NEUTRAL',
         components: {
             mtf: mtfScore > 0 ? 'ALINHADO' : 'NEUTRO',
             smc: 'NEUTRO',
-            mom: adxValue > 25 ? 'FORTE' : 'FRACO',
+            mom: adxValue > 20 ? 'FORTE' : 'FRACO',
             of: 'NEUTRO',
             macro: 'NEUTRO',
             oi: data.oiDelta > 0 ? 'CRESCENDO' : 'DIMINUINDO'
         },
-        blockReason: null
+        blockReason: blockReason
     };
 }
 
 // ===== FILTROS PARA O COMITÊ E MOTOR DE ENTRADA =====
 
-export function adxFilter(candles, threshold = 25) {
+export function adxFilter(candles, threshold = 20) {
     const adxData = calculateADX(candles);
     const adx = adxData.adx;
     if (adx < threshold) return { pass: false, reason: `ADX ${adx.toFixed(1)} < ${threshold}` };
@@ -402,13 +416,13 @@ export function adxFilter(candles, threshold = 25) {
 export function fundingFilter(fundingData, direction) {
     if (!fundingData || fundingData.rate === undefined) return { pass: true, reason: 'Funding indisponível' };
     const rate = fundingData.rate;
-    if (direction === 'LONG' && rate > 0.01) {
-        return { pass: false, reason: `Funding ${(rate * 100).toFixed(2)}% muito positivo` };
+    
+    // NOVO: Lógica de filtro de funding mais realista (Threshold 0.08% absoluto)
+    const absRate = Math.abs(rate);
+    if (absRate > 0.0008) { 
+        return { pass: false, reason: `Funding extremo ${(rate * 100).toFixed(3)}%` };
     }
-    if (direction === 'SHORT' && rate < -0.01) {
-        return { pass: false, reason: `Funding ${(rate * 100).toFixed(2)}% muito negativo` };
-    }
-    return { pass: true, reason: `Funding ${(rate * 100).toFixed(2)}% OK` };
+    return { pass: true, reason: `Funding OK` };
 }
 
 export function orderBookFilter(obData, direction) {
@@ -446,7 +460,11 @@ export function fearGreedFilter(fgData, direction) {
 export function generateTrailingStopParams(candles, currentPrice, direction) {
     const atr = calculateATR(candles, 14);
     if (atr === 0) return null;
-    const multiplier = 2;
+    
+    // NOVO: Ajuste dinâmico do multiplier baseado em volatilidade
+    const volatility = atr / currentPrice;
+    const multiplier = volatility > 0.015 ? 1.2 : 1.8; 
+    
     const stopDistance = atr * multiplier;
     const trailingActivation = currentPrice + (direction === 'LONG' ? stopDistance * 1.5 : -stopDistance * 1.5);
     const trailingDistance = atr * 1.0;
@@ -490,16 +508,16 @@ export function calculateSignalScore(indicators) {
     }
 
     if (rsi > 70) {
-        score -= 10;
-        reasons.push('RSI sobrecompra');
-    } else if (rsi < 30) {
         score += 10;
-        reasons.push('RSI sobrevenda');
+        reasons.push('RSI sobrecompra (força altista)');
+    } else if (rsi < 30) {
+        score -= 10;
+        reasons.push('RSI sobrevenda (força baixista)');
     } else {
         reasons.push(`RSI ${rsi.toFixed(1)}`);
     }
 
-    if (adx > 25) {
+    if (adx > 20) {
         score += 10;
         reasons.push(`ADX ${adx.toFixed(1)} (tendência)`);
     } else {
