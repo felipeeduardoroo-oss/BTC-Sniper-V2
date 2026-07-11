@@ -620,15 +620,15 @@
 
         // ===== ROBOT_CONFIG =====
         const ROBOT_CONFIG = {
-            scoreMin: 58,
-            scoreMaxShort: 42,
+            scoreMin: 60,
+            scoreMaxShort: 50,
             adxMin: 18,
             rrMin: 1.42,
             requireBOS: false,
             requireRetest: false,
             requireMTF: false,
             requireEMARetest: false,
-            retestDistPct: 0.015,
+            retestDistPct: 0.02,
         };
         console.log('[ROBOT] Configuração:', ROBOT_CONFIG);
 
@@ -1383,7 +1383,7 @@ async function evaluateMarkets() {
             if (tempDirection === 'LONG') {
                 score = Math.max(25, score - 18);   // Penalidade forte
             } else if (tempDirection === 'SHORT') {
-                score = Math.min(100, score + 15);  // Bônus para SHORT //////////////////////////////////////////////////////////////////
+                score = Math.min(100, score + 20);  // Bônus para SHORT //////////////////////////////////////////////////////////////////
             }
         }
 
