@@ -278,16 +278,6 @@ if (mtfAligned) {
     reasons.push('MTF desalinhado');
 }
 
-// Novo: Penalidade forte em bear market macro
-if (mtf?.belowMA200) {
-    if (direction === 'LONG') {
-        score -= 22;                // Penalidade pesada para LONG abaixo da MA200
-        reasons.push('Preço abaixo MA200 diária - Bear Market');
-    } else {
-        score += 8;
-        reasons.push('Contexto bearish favorece SHORT');
-    }
-}
 
     const adxVal = typeof adx === 'object' ? adx.adx : adx;
     if (adxVal >= 25) {
