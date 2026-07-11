@@ -899,42 +899,88 @@ export const fetchETFData = async () => {
 // ============================================================
 // 12. MTF CONFLUENCE — paralelizado
 // ============================================================
+// ============================================================
+// MTF CONFLUENCE — Versão Otimizada (Recomendada)
+// ============================================================
 export async function getMTFConfluence(symbol) {
     const cacheKey = `mtf_${symbol}`;
     const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
-    const timeframes = ['15m','1h','4h'];
-    const candlesPromises = timeframes.map(tf => fetchHistoricalCandles(symbol, tf, 50));
+    const timeframes = [
+        { tf: '15m', weight: 1 },
+        { tf: '1h',  weight: 2 },
+        { tf: '4h',  weight: 3 },
+        { tf: '1d',  weight: 4 }   // ← Adicionado peso alto para contexto macro
+    ];
+
+    const candlesPromises = timeframes.map(item => fetchHistoricalCandles(symbol, item.tf, 80));
     const candlesResults = await Promise.all(candlesPromises);
     
+    let totalScore = 0;
+    let totalWeight = 0;
     const directions = [];
+    let bullishWeight = 0;
+    let bearishWeight = 0;
+
     for (let i = 0; i < timeframes.length; i++) {
         const candles = candlesResults[i];
-        if (!candles || !candles.length) continue;
-        
+        const { tf, weight } = timeframes[i];
+        if (!candles || candles.length < 40) continue;
+
         const closes = candles.map(c => c.close);
         const ema20 = calcEMA(closes, 20);
         const ema50 = calcEMA(closes, 50);
         const last = candles.length - 1;
-        
-        if (ema20[last] > ema50[last] && candles[last].close > ema20[last]) {
-            directions.push({ tf: timeframes[i], dir: 'BULL' });
-        } else if (ema20[last] < ema50[last] && candles[last].close < ema20[last]) {
-            directions.push({ tf: timeframes[i], dir: 'BEAR' });
-        } else {
-            directions.push({ tf: timeframes[i], dir: 'NEUTRO' });
+        const lastClose = closes[last];
+
+        let tfScore = 0;
+        let dir = 'NEUTRO';
+
+        // Tendência principal
+        if (ema20[last] > ema50[last] && lastClose > ema20[last]) {
+            tfScore = 1;
+            dir = 'BULL';
+            bullishWeight += weight;
+        } else if (ema20[last] < ema50[last] && lastClose < ema20[last]) {
+            tfScore = -1;
+            dir = 'BEAR';
+            bearishWeight += weight;
         }
+
+        // === FILTRO MACRO IMPORTANTE ===
+        if (tf === '1d') {
+            const ma200 = calcEMA(closes, 200);
+            const isBelowMA200 = lastClose < ma200[ma200.length - 1];
+            
+            if (isBelowMA200) {
+                tfScore -= 1.5;           // Penaliza fortemente LONGS
+                bearishWeight += weight * 0.8;
+                directions.push({ tf, dir: 'BEAR (Below MA200)', score: tfScore });
+            } else {
+                directions.push({ tf, dir, score: tfScore });
+            }
+        } else {
+            directions.push({ tf, dir, score: tfScore });
+        }
+
+        totalScore += tfScore * weight;
+        totalWeight += weight;
     }
-    
-    const bulls = directions.filter(d => d.dir === 'BULL').length;
-    const bears = directions.filter(d => d.dir === 'BEAR').length;
+
+    const normalizedScore = totalWeight > 0 ? totalScore / (totalWeight * 1.2) : 0; // leve penalidade macro
+
     const result = {
         directions,
-        score: bulls - bears,
-        confluencia: Math.max(bulls, bears) === 3 ? 'FORTE' : Math.max(bulls, bears) === 2 ? 'MODERADA' : 'FRACA',
-        alinhado: Math.max(bulls, bears) >= 2
+        score: Math.round(normalizedScore * 10) / 10,
+        confluencia: Math.max(bullishWeight, bearishWeight) >= 6 ? 'FORTE' : 
+                     Math.max(bullishWeight, bearishWeight) >= 4 ? 'MODERADA' : 'FRACA',
+        alinhado: Math.max(bullishWeight, bearishWeight) >= 4.5,
+        bias: bullishWeight > bearishWeight + 2 ? 'BULLISH' : 
+              bearishWeight > bullishWeight + 1 ? 'BEARISH' : 'NEUTRAL',
+        belowMA200: directions.some(d => d.tf === '1d' && d.dir.includes('Below MA200'))
     };
+    
     setCachedData(cacheKey, result);
     return result;
 }
