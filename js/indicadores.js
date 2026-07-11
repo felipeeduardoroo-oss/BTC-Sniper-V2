@@ -290,7 +290,7 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
     const reasons = [];
 
     if (mtfAligned) {
-        score += 18;                    
+        score += 25;                    
         reasons.push('MTF alinhado');
     } else {
         score -= 12;
@@ -516,7 +516,7 @@ export function generateTrailingStopParams(candles, currentPrice, direction) {
     let stopLoss, tp1, tp2, tp3;
     if (direction === 'LONG') {
         stopLoss = currentPrice - stopDistance;
-        tp1 = currentPrice + atr * 1.5; // TP1 rápido para breakeven
+        tp1 = currentPrice + atr * 1; // TP1 rápido para breakeven
         tp2 = currentPrice + atr * 3;
         tp3 = currentPrice + atr * 5.5;
     } else {
@@ -561,10 +561,10 @@ export function calculateSignalScore(indicators) {
     }
 
     if (rsi > 70) {
-        score += 9;
+        score += 12;
         reasons.push('RSI sobrecompra (força altista)');
     } else if (rsi < 32) {
-        score -= 9;
+        score -= 12;
         reasons.push('RSI sobrevenda (força baixista)');
     } else {
         reasons.push(`RSI ${rsi.toFixed(1)}`);
@@ -585,7 +585,7 @@ export function calculateSignalScore(indicators) {
     // Filtro Macro em Divergências (Melhoria 6)
     if (divergence) {
         if (divergence.type === 'BULLISH_REGULAR' && close > ema200) {
-            score += 15;
+            score += 20;
             reasons.push('Divergência de alta alinhada com macro');
         } else if (divergence.type === 'BEARISH_REGULAR' && close < ema200) {
             score -= 15;
