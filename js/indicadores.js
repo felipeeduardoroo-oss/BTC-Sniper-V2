@@ -270,12 +270,24 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
     let score = 50;
     const reasons = [];
 
-    if (mtfAligned) {
-        score += 20;
-        reasons.push('MTF alinhado');
+if (mtfAligned) {
+    score += 18;                    // Bônus maior
+    reasons.push('MTF alinhado');
+} else {
+    score -= 12;
+    reasons.push('MTF desalinhado');
+}
+
+// Novo: Penalidade forte em bear market macro
+if (mtf?.belowMA200) {
+    if (direction === 'LONG') {
+        score -= 22;                // Penalidade pesada para LONG abaixo da MA200
+        reasons.push('Preço abaixo MA200 diária - Bear Market');
     } else {
-        reasons.push('MTF desalinhado');
+        score += 8;
+        reasons.push('Contexto bearish favorece SHORT');
     }
+}
 
     const adxVal = typeof adx === 'object' ? adx.adx : adx;
     if (adxVal >= 25) {
