@@ -584,7 +584,7 @@ export function calculateSignalScore(indicators) {
 ///////////////////////////////////////////////////////////////////////////////
     let direction = 'NEUTRO';
     if (score >= 60) direction = 'LONG';
-    else if (score <= 42) direction = 'SHORT'; 
+    else if (score <= 50) direction = 'SHORT'; 
 ///////////////////////////////////////////////////////////////////////////////
 
     
