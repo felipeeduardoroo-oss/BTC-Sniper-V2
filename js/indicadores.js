@@ -310,7 +310,7 @@ if (mtfAligned) {
     }
 } else if (direction === 'SHORT') {
     if (fundingRate < -0.0008) {
-        score -= 15;
+        score -= 20;
         reasons.push('Funding muito negativo - risco de squeeze altista');
     } else if (fundingRate > 0) {
         score += 8;
@@ -566,7 +566,7 @@ export function calculateSignalScore(indicators) {
     }
 
     if (mtfScore > 0) {
-        score += mtfScore * 6;   // Aumentado um pouco
+        score += mtfScore * 7;   // Aumentado um pouco
     } else {
         score -= 6;
     }
@@ -575,8 +575,8 @@ export function calculateSignalScore(indicators) {
     else if (volumeRatio < 0.55) score -= 6;
 
     // Funding (usar a versão realista que você já tem)
-    if (fundingRate > 0.001) score -= 7;
-    else if (fundingRate < -0.0008) score += 7;
+    if (fundingRate > 0.001) score -= 10;
+    else if (fundingRate < -0.0008) score += 10;
 
     score = Math.min(100, Math.max(0, score));
 
