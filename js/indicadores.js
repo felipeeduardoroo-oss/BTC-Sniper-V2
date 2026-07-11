@@ -1,5 +1,6 @@
 // ================================================================
-// js/indicadores.js – Motor de indicadores V2 (Otimizado e Ajustado)
+// js/indicadores.js – Motor de indicadores V3 (Otimizado pelo Comitê)
+// Foco: Winrate, PNL, Redução de Stops e Multi-Timeframe real.
 // ================================================================
 
 // ===== FUNÇÕES AUXILIARES BÁSICAS =====
@@ -104,7 +105,7 @@ export function calculateADX(candles, period = 14, lookback = 50) {
     return { adx, plusDI: finalPlusDI, minusDI: finalMinusDI };
 }
 
-// ===== DIVERGÊNCIA RSI (CORRIGIDA E OTIMIZADA) =====
+// ===== DIVERGÊNCIA RSI =====
 
 export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
     if (candles.length < lookback + 14 || rsiValues.length < lookback) return null;
@@ -145,7 +146,6 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
     const rsiHighs = findPeaks(rsiSlice, v => v);
     const rsiLows = findTroughs(rsiSlice, v => v);
 
-    // Bearish divergence (com filtro de força mínima de 8%)
     if (priceHighs.length >= 2 && rsiHighs.length >= 2) {
         const p1 = priceHighs[priceHighs.length - 2];
         const p2 = priceHighs[priceHighs.length - 1];
@@ -156,7 +156,6 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
         }
     }
 
-    // Bullish divergence (com filtro de força mínima de 8%)
     if (priceLows.length >= 2 && rsiLows.length >= 2) {
         const p1 = priceLows[priceLows.length - 2];
         const p2 = priceLows[priceLows.length - 1];
@@ -169,7 +168,7 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
     return null;
 }
 
-// ===== ESTRUTURA DE MERCADO (SMC) =====
+// ===== ESTRUTURA DE MERCADO (SMC OTIMIZADO) =====
 
 export function updateSwingPoints(state) {
     const candles = state.candles1H || [];
@@ -189,29 +188,43 @@ export function updateSwingPoints(state) {
 }
 
 export function detectHTFStructure(state, candles4H) {
-    if (!candles4H || candles4H.length < 20) return { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity };
+    if (!candles4H || candles4H.length < 50) return { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity };
     const closes = candles4H.map(c => c.close);
     const last = closes[closes.length - 1];
     
     const ema50 = calcEMA(closes, 50).slice(-1)[0] || last;
-    const ema200 = calcEMA(closes, 200).slice(-1)[0] || last;
+    const htfAdx = calculateADX(candles4H, 14).adx; // Validação MTF ADX 4H
     
     let bias = 'NEUTRAL';
-    if (last > ema50 && ema50 > ema200) bias = 'BULLISH';
-    else if (last < ema50 && ema50 < ema200) bias = 'BEARISH';
+    // Exige EMA alinhada E ADX forte no 4H para evitar lateralização macro
+    if (last > ema50 && htfAdx > 20) bias = 'BULLISH';
+    else if (last < ema50 && htfAdx > 20) bias = 'BEARISH';
     
-    return { bias, lastSwingHigh: Math.max(...candles4H.map(c => c.high)), lastSwingLow: Math.min(...candles4H.map(c => c.low)) };
+    return { 
+        bias, 
+        lastSwingHigh: Math.max(...candles4H.slice(-20).map(c => c.high)), 
+        lastSwingLow: Math.min(...candles4H.slice(-20).map(c => c.low)) 
+    };
 }
 
 export function findSMCSetup(state, direction) {
+    const candles = state.candles1H || [];
+    if (candles.length < 3 || state.swingHighs.length === 0 || state.swingLows.length === 0) return false;
+    
+    const lastCandle = candles[candles.length - 1];
+    const prevCandle = candles[candles.length - 2];
+    const lastHigh = state.swingHighs[state.swingHighs.length - 1];
+    const lastLow = state.swingLows[state.swingLows.length - 1];
+
+    // SMC Real: Liquidity Sweep (Caça a Stops) + Rejeição
     if (direction === 'LONG') {
-        if (state.swingHighs.length === 0) return false;
-        const lastHigh = state.swingHighs[state.swingHighs.length - 1];
-        return state.price > lastHigh; 
+        if (prevCandle.low < lastLow && lastCandle.close > lastLow && lastCandle.close > prevCandle.open) {
+            return true; 
+        }
     } else if (direction === 'SHORT') {
-        if (state.swingLows.length === 0) return false;
-        const lastLow = state.swingLows[state.swingLows.length - 1];
-        return state.price < lastLow;
+        if (prevCandle.high > lastHigh && lastCandle.close < lastHigh && lastCandle.close < prevCandle.open) {
+            return true;
+        }
     }
     return false;
 }
@@ -248,18 +261,24 @@ export function KellyPositionSize(winRate, rr) {
     return Math.min(Math.max(k, 0.01), 0.1);
 }
 
-// ===== ANOMALIAS DE VOLUME =====
+// ===== ANOMALIAS DE VOLUME (WYCKOFF) =====
 
-export function detectVolumeAnomaly(candles, period = 20, threshold = 1.5) {
+export function detectVolumeAnomaly(candles, period = 20, threshold = 1.8) {
     if (candles.length < period) return null;
     const volumes = candles.map(c => c.volume);
     const avg = volumes.slice(-period).reduce((a, b) => a + b, 0) / period;
-    const last = volumes[volumes.length - 1];
-    const ratio = avg > 0 ? last / avg : 1;
+    const lastCandle = candles[candles.length - 1];
+    const lastVol = lastCandle.volume;
+    
+    const ratio = avg > 0 ? lastVol / avg : 1;
     if (ratio > threshold) {
+        const range = lastCandle.high - lastCandle.low;
+        const body = Math.abs(lastCandle.close - lastCandle.open);
+        // Esforço x Resultado: Volume alto, mas corpo pequeno (< 40% do range) = Exaustão
+        if (body < range * 0.4) {
+            return { type: 'EXHAUSTION', ratio };
+        }
         return { type: 'HIGH', ratio };
-    } else if (ratio < 1 / threshold) {
-        return { type: 'LOW', ratio };
     }
     return null;
 }
@@ -270,14 +289,13 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
     let score = 50;
     const reasons = [];
 
-if (mtfAligned) {
-    score += 18;                    // Bônus maior
-    reasons.push('MTF alinhado');
-} else {
-    score -= 12;
-    reasons.push('MTF desalinhado');
-}
-
+    if (mtfAligned) {
+        score += 18;                    
+        reasons.push('MTF alinhado');
+    } else {
+        score -= 12;
+        reasons.push('MTF desalinhado');
+    }
 
     const adxVal = typeof adx === 'object' ? adx.adx : adx;
     if (adxVal >= 23) {
@@ -295,27 +313,30 @@ if (mtfAligned) {
         if (volumeAnomaly.type === 'HIGH') {
             score += 10;
             reasons.push('Volume alto confirma movimento');
+        } else if (volumeAnomaly.type === 'EXHAUSTION') {
+            score -= 15; // Penalização forte para exaustão
+            reasons.push('Exaustão de Volume (Wyckoff)');
         } else if (volumeAnomaly.type === 'LOW') {
             score -= 5;
             reasons.push('Volume baixo');
         }
     }
 
-  if (direction === 'LONG') {
-    if (fundingRate > 0.0008) {      // > 0.08%
-        score -= 15;
-        reasons.push('Funding alto - risco de squeeze baixista');
-    } else if (fundingRate < 0) {
-        score += 8;
+    if (direction === 'LONG') {
+        if (fundingRate > 0.0008) {      
+            score -= 15;
+            reasons.push('Funding alto - risco de squeeze baixista');
+        } else if (fundingRate < 0) {
+            score += 8;
+        }
+    } else if (direction === 'SHORT') {
+        if (fundingRate < -0.0008) {
+            score -= 20;
+            reasons.push('Funding muito negativo - risco de squeeze altista');
+        } else if (fundingRate > 0) {
+            score += 8;
+        }
     }
-} else if (direction === 'SHORT') {
-    if (fundingRate < -0.0008) {
-        score -= 20;
-        reasons.push('Funding muito negativo - risco de squeeze altista');
-    } else if (fundingRate > 0) {
-        score += 8;
-    }
-}
 
     if (divergence) {
         if (divergence.type === 'BULLISH_REGULAR' && direction === 'LONG') {
@@ -332,9 +353,9 @@ if (mtfAligned) {
         reasons.push('Macro blackout');
     }
 
-    if (smcStructure === 'BOS') {
-        score += 5;
-        reasons.push('BOS confirmado');
+    if (smcStructure === 'BOS' || smcStructure === 'SWEEP') {
+        score += 8;
+        reasons.push('Estrutura SMC confirmada');
     }
 
     if (openInterestTrend === 'INCREASING' && direction === 'LONG') {
@@ -381,11 +402,10 @@ export function computeScore(symbol, assetsData, liqMap) {
     
     let clamped = Math.max(0, Math.min(100, score));
     
-    // NOVO: Unificação de Score + Lateral Filter
     const isLateral = checkLateralMarket(adxValue, 20);
     let blockReason = null;
     if (isLateral) {
-        clamped = Math.max(40, Math.min(60, clamped)); // Força neutro em lateral
+        clamped = Math.max(40, Math.min(60, clamped)); 
         blockReason = blockReason || 'Lateralização detectada';
     }
     
@@ -406,13 +426,22 @@ export function computeScore(symbol, assetsData, liqMap) {
 
 // ===== FILTROS PARA O COMITÊ E MOTOR DE ENTRADA =====
 
-export function adxFilter(candles, threshold = 20) {
+export function adxFilter(candles, direction, threshold = 22) {
     const adxData = calculateADX(candles);
     const adx = adxData.adx;
     if (adx < threshold) {
         return { pass: false, reason: `ADX ${adx.toFixed(1)} < ${threshold} (lateral)` };
     }
-    return { pass: true, reason: `ADX ${adx.toFixed(1)} (tendência)` };
+    
+    // Filtro DI Alinhado (Melhoria 3)
+    if (direction === 'LONG' && adxData.plusDI < adxData.minusDI) {
+        return { pass: false, reason: 'Tendência de baixa no ADX (DI- > DI+)' };
+    }
+    if (direction === 'SHORT' && adxData.minusDI < adxData.plusDI) {
+        return { pass: false, reason: 'Tendência de alta no ADX (DI+ > DI-)' };
+    }
+    
+    return { pass: true, reason: `ADX ${adx.toFixed(1)} e DI alinhado` };
 }
 
 export function fundingFilter(fundingData, direction) {
@@ -422,14 +451,13 @@ export function fundingFilter(fundingData, direction) {
     const rate = fundingData.rate;
     const absRate = Math.abs(rate);
 
-    if (absRate > 0.0010) {                    // 0.10% = extremo
+    if (absRate > 0.0010) {                    
         return { 
             pass: false, 
             reason: `Funding extremo ${(rate * 100).toFixed(3)}%` 
         };
     }
 
-    // Bônus leve para direção favorável
     if ((direction === 'LONG' && rate < 0.0002) || 
         (direction === 'SHORT' && rate > 0.0005)) {
         return { pass: true, reason: `Funding favorável para ${direction}` };
@@ -478,28 +506,24 @@ export function fearGreedFilter(fgData, direction) {
     return { pass: true, reason: `Fear & Greed neutro (${value})`, multiplier: 1 };
 }
 
-// ===== TRAILING STOP E GERAÇÃO DE PARÂMETROS =====
+// ===== TRAILING STOP E GESTÃO DE RISCO (BREAKEVEN RÁPIDO) =====
 export function generateTrailingStopParams(candles, currentPrice, direction) {
     const atr = calculateATR(candles, 14);
     if (atr === 0) return null;
 
-    const volatility = atr / currentPrice;
-    // Multiplier mais conservador em alta volatilidade
-    const multiplier = volatility > 0.018 ? 1.1 : (volatility > 0.012 ? 1.5 : 1.9);
-
-    const stopDistance = atr * multiplier;
+    const stopDistance = atr * 1.5; // Stop inicial fixo baseado em ATR
 
     let stopLoss, tp1, tp2, tp3;
     if (direction === 'LONG') {
         stopLoss = currentPrice - stopDistance;
-        tp1 = currentPrice + atr * 2.2;
-        tp2 = currentPrice + atr * 4.5;
-        tp3 = currentPrice + atr * 7;
+        tp1 = currentPrice + atr * 1.5; // TP1 rápido para breakeven
+        tp2 = currentPrice + atr * 3;
+        tp3 = currentPrice + atr * 5.5;
     } else {
         stopLoss = currentPrice + stopDistance;
-        tp1 = currentPrice - atr * 2.2;
-        tp2 = currentPrice - atr * 4.5;
-        tp3 = currentPrice - atr * 7;
+        tp1 = currentPrice - atr * 1.5;
+        tp2 = currentPrice - atr * 3;
+        tp3 = currentPrice - atr * 5.5;
     }
 
     return { 
@@ -507,8 +531,9 @@ export function generateTrailingStopParams(candles, currentPrice, direction) {
         tp1, 
         tp2, 
         tp3, 
-        trailingActivation: currentPrice + (direction === 'LONG' ? stopDistance * 1.6 : -stopDistance * 1.6),
-        trailingDistance: atr * 1.1,
+        breakevenTrigger: currentPrice + (direction === 'LONG' ? atr : -atr),
+        trailingActivation: currentPrice + (direction === 'LONG' ? atr * 2 : -atr * 2),
+        trailingDistance: atr * 0.8, // Trailing mais apertado
         atr 
     };
 }
@@ -517,9 +542,8 @@ export function generateTrailingStopParams(candles, currentPrice, direction) {
 export function calculateSignalScore(indicators) {
     let score = 50;
     const reasons = [];
-    const { close, ema20, ema50, rsi, adx, divergence, mtfScore, fundingRate, volumeRatio } = indicators;
+    const { close, ema20, ema50, ema200 = ema50, rsi, adx, divergence, mtfScore, fundingRate, volumeRatio } = indicators;
 
-    // EMA Trend
     if (ema20 > ema50) {
         score += 12;
         reasons.push('EMA20 > EMA50 (alta)');
@@ -536,7 +560,6 @@ export function calculateSignalScore(indicators) {
         reasons.push('Preço abaixo EMA20');
     }
 
-    // RSI Trend Following
     if (rsi > 70) {
         score += 9;
         reasons.push('RSI sobrecompra (força altista)');
@@ -547,26 +570,33 @@ export function calculateSignalScore(indicators) {
         reasons.push(`RSI ${rsi.toFixed(1)}`);
     }
 
-    // ADX
-    if (adx > 22) {
+    const adxVal = typeof adx === 'object' ? adx.adx : adx;
+    if (adxVal > 22) {
         score += 11;
-        reasons.push(`ADX ${adx.toFixed(1)} (tendência forte)`);
-    } else if (adx > 15) {
+        reasons.push(`ADX ${adxVal.toFixed(1)} (tendência forte)`);
+    } else if (adxVal > 15) {
         score += 4;
-        reasons.push(`ADX ${adx.toFixed(1)} (tendência fraca)`);
+        reasons.push(`ADX ${adxVal.toFixed(1)} (tendência fraca)`);
     } else {
         score -= 8;
-        reasons.push(`ADX ${adx.toFixed(1)} (lateral)`);
+        reasons.push(`ADX ${adxVal.toFixed(1)} (lateral)`);
     }
 
-    // Divergência, MTF, Volume, Funding (mantidos semelhantes, com pequenos ajustes)
+    // Filtro Macro em Divergências (Melhoria 6)
     if (divergence) {
-        if (divergence.type === 'BULLISH_REGULAR') score += 10;
-        else if (divergence.type === 'BEARISH_REGULAR') score -= 10;
+        if (divergence.type === 'BULLISH_REGULAR' && close > ema200) {
+            score += 15;
+            reasons.push('Divergência de alta alinhada com macro');
+        } else if (divergence.type === 'BEARISH_REGULAR' && close < ema200) {
+            score -= 15;
+            reasons.push('Divergência de baixa alinhada com macro');
+        } else {
+            reasons.push('Divergência contra tendência macro (ignorada)');
+        }
     }
 
     if (mtfScore > 0) {
-        score += mtfScore * 7;   // Aumentado um pouco
+        score += mtfScore * 7;   
     } else {
         score -= 6;
     }
@@ -574,20 +604,16 @@ export function calculateSignalScore(indicators) {
     if (volumeRatio > 1.6) score += 6;
     else if (volumeRatio < 0.55) score -= 6;
 
-    // Funding (usar a versão realista que você já tem)
     if (fundingRate > 0.001) score -= 10;
     else if (fundingRate < -0.0008) score += 10;
 
     score = Math.min(100, Math.max(0, score));
 
-    
-///////////////////////////////////////////////////////////////////////////////
+    // Expansão da Zona Morta (Melhoria 1)
     let direction = 'NEUTRO';
-    if (score >= 60) direction = 'LONG';
-    else if (score <= 50) direction = 'SHORT'; 
-///////////////////////////////////////////////////////////////////////////////
+    if (score >= 62) direction = 'LONG';
+    else if (score <= 38) direction = 'SHORT'; 
 
-    
     let label = 'NEUTRO';
     if (score >= 78) label = 'MUITO FORTE';
     else if (score >= 62) label = 'FORTE';
@@ -624,4 +650,29 @@ export function updateStatefulRSI(state, candles, period = 14) {
 
 export function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
+}
+
+// ===== INTEGRAÇÃO ON-CHAIN / FLUXO VIA API GRATUITA (MELHORIA 5) =====
+
+export async function fetchLiveDerivativesData(symbol) {
+    try {
+        // Binance Public API (Gratuita, sem chave)
+        const fundingRes = await fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`);
+        const fundingData = await fundingRes.json();
+        
+        const oiRes = await fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=1h&limit=2`);
+        const oiData = await oiRes.json();
+        
+        const currentOI = parseFloat(oiData[0].sumOpenInterest);
+        const prevOI = parseFloat(oiData[1].sumOpenInterest);
+        const oiDelta = ((currentOI - prevOI) / prevOI) * 100;
+        
+        return {
+            fundingRate: parseFloat(fundingData.lastFundingRate),
+            oiDelta: oiDelta
+        };
+    } catch (error) {
+        console.error("Erro ao buscar derivativos:", error);
+        return { fundingRate: 0, oiDelta: 0 };
+    }
 }
