@@ -280,10 +280,10 @@ if (mtfAligned) {
 
 
     const adxVal = typeof adx === 'object' ? adx.adx : adx;
-    if (adxVal >= 25) {
+    if (adxVal >= 23) {
         score += 15;
         reasons.push(`ADX ${adxVal.toFixed(1)} (tendência forte)`);
-    } else if (adxVal >= 20) {
+    } else if (adxVal >= 18) {
         score += 7;
         reasons.push(`ADX ${adxVal.toFixed(1)} (tendência formando)`);
     } else {
@@ -301,23 +301,21 @@ if (mtfAligned) {
         }
     }
 
-    if (direction === 'LONG') {
-        if (fundingRate > 0.01) {
-            score -= 10;
-            reasons.push('Funding muito positivo (desfavorável p/ LONG)');
-        } else if (fundingRate < -0.01) {
-            score += 10;
-            reasons.push('Funding negativo (favorável p/ LONG)');
-        }
-    } else if (direction === 'SHORT') {
-        if (fundingRate < -0.01) {
-            score -= 10;
-            reasons.push('Funding muito negativo (desfavorável p/ SHORT)');
-        } else if (fundingRate > 0.01) {
-            score += 10;
-            reasons.push('Funding positivo (favorável p/ SHORT)');
-        }
+  if (direction === 'LONG') {
+    if (fundingRate > 0.0008) {      // > 0.08%
+        score -= 15;
+        reasons.push('Funding alto - risco de squeeze baixista');
+    } else if (fundingRate < 0) {
+        score += 8;
     }
+} else if (direction === 'SHORT') {
+    if (fundingRate < -0.0008) {
+        score -= 15;
+        reasons.push('Funding muito negativo - risco de squeeze altista');
+    } else if (fundingRate > 0) {
+        score += 8;
+    }
+}
 
     if (divergence) {
         if (divergence.type === 'BULLISH_REGULAR' && direction === 'LONG') {
