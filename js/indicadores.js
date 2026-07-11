@@ -409,167 +409,186 @@ export function computeScore(symbol, assetsData, liqMap) {
 export function adxFilter(candles, threshold = 20) {
     const adxData = calculateADX(candles);
     const adx = adxData.adx;
-    if (adx < threshold) return { pass: false, reason: `ADX ${adx.toFixed(1)} < ${threshold}` };
-    return { pass: true, reason: `ADX ${adx.toFixed(1)}` };
+    if (adx < threshold) {
+        return { pass: false, reason: `ADX ${adx.toFixed(1)} < ${threshold} (lateral)` };
+    }
+    return { pass: true, reason: `ADX ${adx.toFixed(1)} (tendência)` };
 }
 
 export function fundingFilter(fundingData, direction) {
-    if (!fundingData || fundingData.rate === undefined) return { pass: true, reason: 'Funding indisponível' };
+    if (!fundingData || fundingData.rate === undefined) 
+        return { pass: true, reason: 'Funding indisponível' };
+
     const rate = fundingData.rate;
-    
-    // NOVO: Lógica de filtro de funding mais realista (Threshold 0.08% absoluto)
     const absRate = Math.abs(rate);
-    if (absRate > 0.0008) { 
-        return { pass: false, reason: `Funding extremo ${(rate * 100).toFixed(3)}%` };
+
+    if (absRate > 0.0010) {                    // 0.10% = extremo
+        return { 
+            pass: false, 
+            reason: `Funding extremo ${(rate * 100).toFixed(3)}%` 
+        };
     }
-    return { pass: true, reason: `Funding OK` };
+
+    // Bônus leve para direção favorável
+    if ((direction === 'LONG' && rate < 0.0002) || 
+        (direction === 'SHORT' && rate > 0.0005)) {
+        return { pass: true, reason: `Funding favorável para ${direction}` };
+    }
+
+    return { pass: true, reason: `Funding OK (${(rate*100).toFixed(3)}%)` };
 }
 
 export function orderBookFilter(obData, direction) {
-    if (!obData || !obData.bids || !obData.asks) return { pass: true, reason: 'Order Book indisponível' };
+    if (!obData || !obData.bids || !obData.asks) 
+        return { pass: true, reason: 'Order Book indisponível' };
+
     const totalBid = obData.bids.reduce((s, b) => s + b.qty, 0);
     const totalAsk = obData.asks.reduce((s, a) => s + a.qty, 0);
     const ratio = totalAsk > 0 ? totalBid / totalAsk : 1;
-    if (direction === 'LONG' && ratio < 0.8) {
-        return { pass: false, reason: 'Order book com mais vendedores' };
+
+    if (direction === 'LONG' && ratio < 0.75) {
+        return { pass: false, reason: 'Order book dominado por vendedores' };
     }
-    if (direction === 'SHORT' && ratio > 1.2) {
-        return { pass: false, reason: 'Order book com mais compradores' };
+    if (direction === 'SHORT' && ratio > 1.35) {
+        return { pass: false, reason: 'Order book dominado por compradores' };
     }
-    return { pass: true, reason: 'Order book OK' };
+    return { pass: true, reason: 'Order book equilibrado' };
 }
 
 export function fearGreedFilter(fgData, direction) {
-    if (!fgData || fgData.value === undefined) return { pass: true, reason: 'Fear & Greed indisponível', multiplier: 1 };
+    if (!fgData || fgData.value === undefined) 
+        return { pass: true, reason: 'Fear & Greed indisponível', multiplier: 1 };
+
     const value = fgData.value;
     let multiplier = 1;
-    if (direction === 'LONG' && value < 25) {
-        return { pass: true, reason: `Fear & Greed ${value} (medo extremo)`, multiplier: 1.2 };
-    } else if (direction === 'SHORT' && value > 75) {
-        return { pass: true, reason: `Fear & Greed ${value} (ganância extrema)`, multiplier: 1.2 };
-    } else if (direction === 'LONG' && value > 75) {
-        return { pass: false, reason: `Fear & Greed ${value} (ganância extrema)`, multiplier: 0.8 };
-    } else if (direction === 'SHORT' && value < 25) {
-        return { pass: false, reason: `Fear & Greed ${value} (medo extremo)`, multiplier: 0.8 };
+
+    if (direction === 'LONG' && value < 28) {
+        return { pass: true, reason: `Fear extremo (${value})`, multiplier: 1.25 };
+    } 
+    else if (direction === 'SHORT' && value > 72) {
+        return { pass: true, reason: `Ganância extrema (${value})`, multiplier: 1.25 };
+    } 
+    else if (direction === 'LONG' && value > 75) {
+        return { pass: false, reason: `Ganância extrema - evitar LONG`, multiplier: 0.75 };
+    } 
+    else if (direction === 'SHORT' && value < 25) {
+        return { pass: false, reason: `Medo extremo - evitar SHORT`, multiplier: 0.75 };
     }
-    return { pass: true, reason: `Fear & Greed ${value} (neutro)`, multiplier: 1 };
+
+    return { pass: true, reason: `Fear & Greed neutro (${value})`, multiplier: 1 };
 }
 
 // ===== TRAILING STOP E GERAÇÃO DE PARÂMETROS =====
-
 export function generateTrailingStopParams(candles, currentPrice, direction) {
     const atr = calculateATR(candles, 14);
     if (atr === 0) return null;
-    
-    // NOVO: Ajuste dinâmico do multiplier baseado em volatilidade
+
     const volatility = atr / currentPrice;
-    const multiplier = volatility > 0.015 ? 1.2 : 1.8; 
-    
+    // Multiplier mais conservador em alta volatilidade
+    const multiplier = volatility > 0.018 ? 1.1 : (volatility > 0.012 ? 1.5 : 1.9);
+
     const stopDistance = atr * multiplier;
-    const trailingActivation = currentPrice + (direction === 'LONG' ? stopDistance * 1.5 : -stopDistance * 1.5);
-    const trailingDistance = atr * 1.0;
 
     let stopLoss, tp1, tp2, tp3;
     if (direction === 'LONG') {
         stopLoss = currentPrice - stopDistance;
-        tp1 = currentPrice + atr * 2;
-        tp2 = currentPrice + atr * 4;
-        tp3 = currentPrice + atr * 6;
+        tp1 = currentPrice + atr * 2.2;
+        tp2 = currentPrice + atr * 4.5;
+        tp3 = currentPrice + atr * 7;
     } else {
         stopLoss = currentPrice + stopDistance;
-        tp1 = currentPrice - atr * 2;
-        tp2 = currentPrice - atr * 4;
-        tp3 = currentPrice - atr * 6;
+        tp1 = currentPrice - atr * 2.2;
+        tp2 = currentPrice - atr * 4.5;
+        tp3 = currentPrice - atr * 7;
     }
-    return { stopLoss, tp1, tp2, tp3, trailingActivation, trailingDistance, atr };
+
+    return { 
+        stopLoss, 
+        tp1, 
+        tp2, 
+        tp3, 
+        trailingActivation: currentPrice + (direction === 'LONG' ? stopDistance * 1.6 : -stopDistance * 1.6),
+        trailingDistance: atr * 1.1,
+        atr 
+    };
 }
 
 // ===== SCORE DE SINAL PARA O COMITÊ =====
-
 export function calculateSignalScore(indicators) {
     let score = 50;
     const reasons = [];
     const { close, ema20, ema50, rsi, adx, divergence, mtfScore, fundingRate, volumeRatio } = indicators;
 
+    // EMA Trend
     if (ema20 > ema50) {
-        score += 10;
+        score += 12;
         reasons.push('EMA20 > EMA50 (alta)');
     } else {
-        score -= 10;
+        score -= 12;
         reasons.push('EMA20 < EMA50 (baixa)');
     }
 
     if (close > ema20) {
-        score += 5;
+        score += 6;
         reasons.push('Preço acima EMA20');
     } else {
-        score -= 5;
+        score -= 6;
         reasons.push('Preço abaixo EMA20');
     }
 
+    // RSI Trend Following
     if (rsi > 70) {
-        score += 10;
+        score += 9;
         reasons.push('RSI sobrecompra (força altista)');
-    } else if (rsi < 30) {
-        score -= 10;
+    } else if (rsi < 32) {
+        score -= 9;
         reasons.push('RSI sobrevenda (força baixista)');
     } else {
         reasons.push(`RSI ${rsi.toFixed(1)}`);
     }
 
-    if (adx > 20) {
-        score += 10;
-        reasons.push(`ADX ${adx.toFixed(1)} (tendência)`);
+    // ADX
+    if (adx > 22) {
+        score += 11;
+        reasons.push(`ADX ${adx.toFixed(1)} (tendência forte)`);
+    } else if (adx > 15) {
+        score += 4;
+        reasons.push(`ADX ${adx.toFixed(1)} (tendência fraca)`);
     } else {
-        score -= 5;
+        score -= 8;
         reasons.push(`ADX ${adx.toFixed(1)} (lateral)`);
     }
 
+    // Divergência, MTF, Volume, Funding (mantidos semelhantes, com pequenos ajustes)
     if (divergence) {
-        if (divergence.type === 'BULLISH_REGULAR') {
-            score += 10;
-            reasons.push('Divergência de alta');
-        } else if (divergence.type === 'BEARISH_REGULAR') {
-            score -= 10;
-            reasons.push('Divergência de baixa');
-        }
+        if (divergence.type === 'BULLISH_REGULAR') score += 10;
+        else if (divergence.type === 'BEARISH_REGULAR') score -= 10;
     }
 
     if (mtfScore > 0) {
-        score += mtfScore * 5;
-        reasons.push('MTF favorável');
+        score += mtfScore * 6;   // Aumentado um pouco
     } else {
-        score -= 5;
-        reasons.push('MTF desfavorável');
+        score -= 6;
     }
 
-    if (volumeRatio > 1.5) {
-        score += 5;
-        reasons.push('Volume acima da média');
-    } else if (volumeRatio < 0.5) {
-        score -= 5;
-        reasons.push('Volume abaixo da média');
-    }
+    if (volumeRatio > 1.6) score += 6;
+    else if (volumeRatio < 0.55) score -= 6;
 
-    if (fundingRate > 0.01) {
-        score -= 5;
-        reasons.push('Funding positivo');
-    } else if (fundingRate < -0.01) {
-        score += 5;
-        reasons.push('Funding negativo');
-    }
+    // Funding (usar a versão realista que você já tem)
+    if (fundingRate > 0.001) score -= 7;
+    else if (fundingRate < -0.0008) score += 7;
 
     score = Math.min(100, Math.max(0, score));
 
     let direction = 'NEUTRO';
-    if (score >= 60) direction = 'LONG';
-    else if (score <= 40) direction = 'SHORT';
+    if (score >= 62) direction = 'LONG';
+    else if (score <= 38) direction = 'SHORT';
 
     let label = 'NEUTRO';
-    if (score >= 75) label = 'MUITO FORTE';
-    else if (score >= 60) label = 'FORTE';
-    else if (score >= 45) label = 'MODERADO';
-    else if (score >= 30) label = 'MODERADO CONTRA';
+    if (score >= 78) label = 'MUITO FORTE';
+    else if (score >= 62) label = 'FORTE';
+    else if (score >= 48) label = 'MODERADO';
+    else if (score >= 32) label = 'MODERADO CONTRA';
     else label = 'FORTE CONTRA';
 
     return { score, direction, label, reasons };
