@@ -136,9 +136,9 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         scoreMaxShort = 32,
         adxMin = 22,
         retestDistPct = 0.02,
-        rrMin = 1.8,
+        rrMin = 1.42,
         emaRetest = false,
-        mtfRequired = true,
+        mtfRequired = false,
         ignoreBOS = false,
         ignoreRetest = false
     } = options;
