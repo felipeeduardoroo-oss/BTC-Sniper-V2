@@ -248,9 +248,9 @@
             </div>
             <div class="param-group">
                 <label for="live-adx-min">ADX mínimo:
-                    <input type="number" id="live-adx-min" value="18" min="0" max="100" step="1">
+                    <input type="number" id="live-adx-min" value="20" min="0" max="100" step="1">
                 </label>
-                <span class="badge-param" id="live-adx-badge">Atual: 18</span>
+                <span class="badge-param" id="live-adx-badge">Atual: 20</span>
             </div>
             <div class="param-group">
                 <label for="live-score-max-short">Score máximo SHORT:
@@ -544,7 +544,7 @@
             <div class="footer-content">
                 <div class="footer-section">
                     <h4>📋 Metodologia V2 + Comitê</h4>
-                    <p>Motor Institucional SMC + MTF + Orderflow + Macro + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados atualizados</strong> via CoinMetrics, Binance, Bybit, Deribit, mempool.space, DefiLlama, Alpha Vantage.</p>
+                    <p>Motor Institucional SMC + MTF + Liquidações + Macro + ADX + Divergência RSI + Order Book Imbalance + Fear & Greed. Gestão de Risco por ATR e Trailing Stop Estrutural. Kelly Criterion para sizing. <strong>Dados atualizados</strong> via CoinMetrics, Binance, Bybit, Deribit, mempool.space, DefiLlama, Alpha Vantage.</p>
                     <p><strong>Última atualização:</strong> <span id="live-update-time">--</span></p>
                 </div>
             </div>
@@ -618,15 +618,15 @@
             return { bos: false, retest: false, level: null };
         }
 
-        // ===== ROBOT_CONFIG (otimizado) =====
+        // ===== ROBOT_CONFIG =====
         const ROBOT_CONFIG = {
             scoreMin: 60,
-            scoreMaxShort: 40,              // simétrico ao scoreMin
-            adxMin: 18,
+            scoreMaxShort: 40,
+            adxMin: 20,
             rrMin: 1.42,
-            requireBOS: true,                // ativado por padrão
+            requireBOS: true,
             requireRetest: false,
-            requireMTF: true,                // ativado por padrão
+            requireMTF: true,
             requireEMARetest: true,
             retestDistPct: 0.02,
         };
@@ -1214,7 +1214,6 @@
             const data = assetsData[symbol];
             const MAX_HOLD_HOURS = 12;
             if (pos.entryTime && (Date.now() - pos.entryTime) / (1000 * 60 * 60) >= MAX_HOLD_HOURS && !pos.movedToBE) {
-                // Melhoria #3: time exit considera se está em lucro
                 const isProfitable = pos.type === 'LONG' ? currentPrice > pos.entryPrice : currentPrice < pos.entryPrice;
                 closePosition(symbol, `TIME EXIT (${MAX_HOLD_HOURS}h)`, isProfitable);
                 return;
@@ -1287,7 +1286,7 @@
             }));
         }
 
-        // ===== AVALIAÇÃO DE MERCADO (COM MELHORIAS #1-#8) =====
+        // ===== AVALIAÇÃO DE MERCADO (COM MELHORIAS) =====
         async function evaluateMarkets() {
             const macroBlackout = await getMacroBlackoutStatus();
 
@@ -1376,19 +1375,11 @@
 
                 let score = confidence.score;
 
-                // ===== FILTRO MACRO: belowMA200 =====
+                // ===== FILTRO MACRO: belowMA200 (penalidade proporcional) =====
                 const tempDirection = (score >= ROBOT_CONFIG.scoreMin) ? 'LONG' : (score <= ROBOT_CONFIG.scoreMaxShort ? 'SHORT' : null);
 
-                if (belowMA200 && tempDirection === 'LONG' && !blockReason) {
-                    blockReason = 'BTC abaixo da MA200 diária (risco de continuação bearish)';
-                }
-
-                if (belowMA200) {
-                    if (tempDirection === 'LONG') {
-                        score = Math.max(25, score - 18);
-                    } else if (tempDirection === 'SHORT') {
-                        score = Math.min(100, score + 20);
-                    }
+                if (belowMA200 && tempDirection === 'LONG') {
+                    score = Math.max(25, score - 12);
                 }
 
                 // ===== FILTROS ADICIONAIS =====
@@ -1423,17 +1414,17 @@
                     if (!derivCheck.allow) blockReason = derivCheck.reason;
                 }
 
-                // ===== BÔNUS ON-CHAIN ESTENDIDO A TODOS OS ATIVOS (melhoria #8) =====
+                // ===== BÔNUS ON-CHAIN ESTENDIDO A TODOS OS ATIVOS =====
                 let onChainMultiplier = 1.0;
                 if (btcMvrv !== null && btcMvrv !== undefined) {
                     const fgVal = data.fearGreedData?.value ?? assetsData['BTCUSDT']?.fearGreedData?.value;
                     if (primaryDirection === 'LONG' && btcMvrv < 0.8 && fgVal !== null && fgVal < 25) {
                         onChainMultiplier = 1.2;
-                        console.log('[On-Chain Bônus] Capitulação estendido a', symbol);
+                        console.log(`[On-Chain Bônus] ${symbol} LONG em capitulação (MVRV BTC baixo + medo extremo)`);
                     }
                     if (primaryDirection === 'SHORT' && btcMvrv > 1.5 && fgVal !== null && fgVal > 75) {
                         onChainMultiplier = 1.2;
-                        console.log('[On-Chain Bônus] Euforia estendido a', symbol);
+                        console.log(`[On-Chain Bônus] ${symbol} SHORT em euforia (MVRV BTC alto + ganância extrema)`);
                     }
                 }
 
@@ -1481,27 +1472,26 @@
                                     }
                                 }
 
-                                // ===== STOP LOSS OTIMIZADO (melhoria #7) =====
+                                // ===== STOP LOSS OTIMIZADO =====
                                 if (primaryDirection === 'LONG') {
                                     const recentLows = data.swingLows.slice(-3);
                                     structLevel = (recentLows.length ? Math.min(...recentLows) : data.price * 0.98) - (atr * 0.3);
                                     const atrStop = data.price - atr * 1.5;
-                                    // Escolhe o stop mais próximo se a distância da estrutura for pequena
                                     stop = (recentLows.length && (data.price - structLevel) <= atr * 2.5) ? structLevel : atrStop;
-                                    tp1 = data.price + (atr * 2.2);
-                                    tp2 = liqTarget1 || (data.price + (atr * 4.5));
-                                    tp3 = liqTarget2 || (data.price + (atr * 7));
+                                    tp1 = data.price + (atr * 2);
+                                    tp2 = liqTarget1 || (data.price + (atr * 4));
+                                    tp3 = liqTarget2 || (data.price + (atr * 6));
                                 } else {
                                     const recentHighs = data.swingHighs.slice(-3);
                                     structLevel = (recentHighs.length ? Math.max(...recentHighs) : data.price * 1.02) + (atr * 0.3);
                                     const atrStopShort = data.price + atr * 1.5;
                                     stop = (recentHighs.length && (structLevel - data.price) <= atr * 2.5) ? structLevel : atrStopShort;
-                                    tp1 = data.price - (atr * 2.2);
-                                    tp2 = liqTarget1 || (data.price - (atr * 4.5));
-                                    tp3 = liqTarget2 || (data.price - (atr * 7));
+                                    tp1 = data.price - (atr * 2);
+                                    tp2 = liqTarget1 || (data.price - (atr * 4));
+                                    tp3 = liqTarget2 || (data.price - (atr * 6));
                                 }
 
-                                // RR Ponderado (com pesos 50/30/20)
+                                // RR Ponderado
                                 let rrPonderado;
                                 if (primaryDirection === 'LONG') {
                                     const ganhoPonderado = (tp1 - data.price) * 0.5 + (tp2 - data.price) * 0.3 + (tp3 - data.price) * 0.2;
@@ -1617,7 +1607,7 @@
         function applyLiveParams() {
             const scoreMin = parseInt(document.getElementById('live-score-min').value) || 60;
             const scoreMaxShort = parseInt(document.getElementById('live-score-max-short').value) || 40;
-            const adxMin = parseInt(document.getElementById('live-adx-min').value) || 18;
+            const adxMin = parseInt(document.getElementById('live-adx-min').value) || 20;
             const rrMin = parseFloat(document.getElementById('live-rr-min').value) || 1.42;
             const requireBOS = document.getElementById('live-require-bos').checked;
             const requireRetest = document.getElementById('live-require-retest').checked;
@@ -1865,14 +1855,5 @@
 
         init();
     </script>
-
-<script src="https://cdn.jsdelivr.net/npm/vconsole"></script>
-<script>
-    // Inicializa o vConsole apenas se estiver em dispositivo móvel
-    if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
-        var vConsole = new VConsole();
-    }
-</script>
-    
 </body>
 </html>
