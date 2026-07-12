@@ -104,7 +104,7 @@ export function calculateADX(candles, period = 14, lookback = 50) {
     return { adx, plusDI: finalPlusDI, minusDI: finalMinusDI };
 }
 
-// ===== DIVERGÊNCIA RSI (CORRIGIDA: thresholds absolutos e zonas) =====
+// ===== DIVERGÊNCIA RSI (CORRIGIDA) =====
 
 export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
     if (candles.length < lookback + 14 || rsiValues.length < lookback) return null;
@@ -268,7 +268,7 @@ export function detectVolumeAnomaly(candles, period = 20, threshold = 1.5) {
 
 // ===== SCORE E CONFIANÇA =====
 
-export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundingRate, openInterestTrend, divergence, macroBlackout, smcStructure, direction }) {
+export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundingRate, openInterestTrend, divergence, macroBlackout, smcStructure, direction, scoreMinLong = 60, scoreMaxShort = 40 }) {
     let score = 50;
     const reasons = [];
 
@@ -357,9 +357,10 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
     else if (score >= 20) level = 'LOW';
     else level = 'VERY_LOW';
 
+    // Direção agora usa os thresholds recebidos
     let finalDirection = 'NEUTRO';
-    if (score >= 60) finalDirection = 'LONG';
-    else if (score <= 40) finalDirection = 'SHORT';
+    if (score >= scoreMinLong) finalDirection = 'LONG';
+    else if (score <= scoreMaxShort) finalDirection = 'SHORT';
 
     return { score, level, direction: finalDirection, reasons };
 }
