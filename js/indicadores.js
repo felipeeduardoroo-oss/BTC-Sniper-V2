@@ -151,9 +151,9 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
         const p2 = priceHighs[priceHighs.length - 1];
         const r1 = rsiHighs[rsiHighs.length - 2];
         const r2 = rsiHighs[rsiHighs.length - 1];
-        const drop = r1.value - r2.value;
-        if (p2.value > p1.value && r2.value < r1.value && drop >= 5 && r1.value > 55) {
-            return { type: 'BEARISH_REGULAR', strength: drop / r1.value };
+        const bearDrop = r1.value - r2.value;
+        if (p2.value > p1.value && r2.value < r1.value && bearDrop >= 5 && r1.value > 55) {
+            return { type: 'BEARISH_REGULAR', strength: bearDrop / r1.value };
         }
     }
 
@@ -163,9 +163,9 @@ export function detectRSIDivergence(candles, rsiValues, lookback = 50) {
         const p2 = priceLows[priceLows.length - 1];
         const r1 = rsiLows[rsiLows.length - 2];
         const r2 = rsiLows[rsiLows.length - 1];
-        const rise = r2.value - r1.value;
-        if (p2.value < p1.value && r2.value > r1.value && rise >= 5 && r1.value < 45) {
-            return { type: 'BULLISH_REGULAR', strength: rise / r1.value };
+        const bullRise = r2.value - r1.value;
+        if (p2.value < p1.value && r2.value > r1.value && bullRise >= 5 && r1.value < 45) {
+            return { type: 'BULLISH_REGULAR', strength: bullRise / r1.value };
         }
     }
     return null;
@@ -224,7 +224,6 @@ export function checkLateralMarket(adxValue, threshold = 20) {
 
 // ===== FILTROS DE RISCO E CONDIÇÕES =====
 
-// Melhoria #4: threshold unificado em 0.10% (0.0010)
 export function checkDerivativesFilter(fundingRate, oiDelta) {
     if (fundingRate > 0.0010) return { allow: false, reason: 'Funding muito positivo (overbought em futuros)' };
     if (fundingRate < -0.0010) return { allow: false, reason: 'Funding muito negativo (oversold em futuros)' };
@@ -303,7 +302,6 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
         }
     }
 
-    // Melhoria #4: funding com penalidade suave (0.06%) e bônus
     if (direction === 'LONG') {
         if (fundingRate > 0.0006) {
             score -= 15;
@@ -366,7 +364,6 @@ export function calculateConfidenceScore({ mtfAligned, adx, volumeAnomaly, fundi
     return { score, level, direction: finalDirection, reasons };
 }
 
-// Melhoria #5: adiciona parâmetro adxThreshold
 export function computeScore(symbol, assetsData, liqMap, adxThreshold = 20) {
     const data = assetsData[symbol];
     if (!data) return { score: 50, direction: 'NEUTRAL', components: {}, blockReason: 'Sem dados' };
@@ -378,7 +375,7 @@ export function computeScore(symbol, assetsData, liqMap, adxThreshold = 20) {
     const rsi = data.rsi_1H || 50;
     let score = base + mtfScore * 5;
     
-    if (adxValue > 20) {
+    if (adxValue > adxThreshold) {
         score += (mtfScore > 0 ? 10 : (mtfScore < 0 ? -10 : 0));
     }
     
@@ -401,7 +398,7 @@ export function computeScore(symbol, assetsData, liqMap, adxThreshold = 20) {
         components: {
             mtf: mtfScore > 0 ? 'ALINHADO' : 'NEUTRO',
             smc: 'NEUTRO',
-            mom: adxValue > 20 ? 'FORTE' : 'FRACO',
+            mom: adxValue > adxThreshold ? 'FORTE' : 'FRACO',
             of: 'NEUTRO',
             macro: 'NEUTRO',
             oi: data.oiDelta > 0 ? 'CRESCENDO' : 'DIMINUINDO'
@@ -428,14 +425,13 @@ export function fundingFilter(fundingData, direction) {
     const rate = fundingData.rate;
     const absRate = Math.abs(rate);
 
-    if (absRate > 0.0010) {                    // 0.10% = extremo
+    if (absRate > 0.0010) {
         return { 
             pass: false, 
             reason: `Funding extremo ${(rate * 100).toFixed(3)}%` 
         };
     }
 
-    // Bônus leve para direção favorável
     if ((direction === 'LONG' && rate < 0.0002) || 
         (direction === 'SHORT' && rate > 0.0005)) {
         return { pass: true, reason: `Funding favorável para ${direction}` };
@@ -564,7 +560,7 @@ export function calculateSignalScore(indicators) {
         reasons.push(`ADX ${adx.toFixed(1)} (lateral)`);
     }
 
-    // Divergência, MTF, Volume, Funding (mantidos semelhantes, com pequenos ajustes)
+    // Divergência, MTF, Volume, Funding
     if (divergence) {
         if (divergence.type === 'BULLISH_REGULAR') score += 10;
         else if (divergence.type === 'BEARISH_REGULAR') score -= 10;
@@ -579,7 +575,6 @@ export function calculateSignalScore(indicators) {
     if (volumeRatio > 1.6) score += 6;
     else if (volumeRatio < 0.55) score -= 6;
 
-    // Funding (usar a versão realista)
     if (fundingRate > 0.001) score -= 10;
     else if (fundingRate < -0.0008) score += 10;
 
@@ -622,7 +617,6 @@ export function updateStatefulRSI(state, candles, period = 14) {
     const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
     state.rsi = rsi;
 }
-
 
 export function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
