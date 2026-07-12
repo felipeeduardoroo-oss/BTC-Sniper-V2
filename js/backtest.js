@@ -133,12 +133,12 @@ async function fetchHistoricalMVRV(startDate, endDate) {
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
     const {
         scoreMin = 60,
-        scoreMaxShort = 30,
+        scoreMaxShort = 40,
         adxMin = 10,
-        retestDistPct = 0.008,
-        rrMin = 0.1,
-        emaRetest = true,
-        mtfRequired = true,
+        retestDistPct = 0.020,
+        rrMin = 1.42,
+        emaRetest = false,
+        mtfRequired = false,
         ignoreBOS = false,
         ignoreRetest = false
     } = options;
