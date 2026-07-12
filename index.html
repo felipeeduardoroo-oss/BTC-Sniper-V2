@@ -1865,5 +1865,14 @@
 
         init();
     </script>
+
+<script src="https://cdn.jsdelivr.net/npm/vconsole"></script>
+<script>
+    // Inicializa o vConsole apenas se estiver em dispositivo móvel
+    if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+        var vConsole = new VConsole();
+    }
+</script>
+    
 </body>
 </html>
