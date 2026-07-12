@@ -1,5 +1,5 @@
 // ================================================================
-// js/backtest.js – Backtest com dados reais (SINCRONIZADO)
+// js/backtest.js – Backtest com dados reais (SINCRONIZADO + LOGS)
 // ================================================================
 
 import { CONFIG } from './config.js';
@@ -131,11 +131,12 @@ async function fetchHistoricalMVRV(startDate, endDate) {
 
 // ===== FUNÇÃO PRINCIPAL =====
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
+    // Parâmetros padrão alinhados com o live (index.html)
     const {
         scoreMin = 60,
-        scoreMaxShort = 50,
-        adxMin = 10,
-        retestDistPct = 0.020,
+        scoreMaxShort = 40,          // <-- ajustado para 40 (simétrico ao scoreMin)
+        adxMin = 18,                 // <-- ajustado para 18
+        retestDistPct = 0.02,
         rrMin = 1.42,
         emaRetest = false,
         mtfRequired = false,
@@ -143,8 +144,10 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         ignoreRetest = false
     } = options;
 
+    // Log dos parâmetros recebidos (diagnóstico)
+    console.log(`[Backtest] Parâmetros para ${symbol}:`, { scoreMin, scoreMaxShort, adxMin, rrMin, retestDistPct, emaRetest, mtfRequired, ignoreBOS, ignoreRetest });
+
     logDebug(`Iniciando backtest para ${symbol} (${days} dias)`);
-    logDebug('Parâmetros:', options);
     const now = Date.now();
     const startTime = now - days * 24 * 60 * 60 * 1000;
     const endTime = now;
@@ -355,6 +358,17 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 if (!derivCheck.allow) blockReason = derivCheck.reason;
             }
 
+            // ===== LOG DE DIAGNÓSTICO (a cada 10 candles e quando score ≤ scoreMaxShort + 5) =====
+            if (i % 10 === 0 || score <= scoreMaxShort + 5) {
+                console.log(`[Backtest ${symbol}] Candle ${i}:`);
+                console.log(`  score=${score.toFixed(1)}, scoreMin=${scoreMin}, scoreMaxShort=${scoreMaxShort}`);
+                console.log(`  primaryDirection=${primaryDirection}, blockReason=${blockReason || 'nenhum'}`);
+                console.log(`  price=${state.price.toFixed(2)}, vwap=${state.vwap.toFixed(2)}, adx=${adxValue.toFixed(1)}`);
+                console.log(`  swingHighs=${state.swingHighs.length}, swingLows=${state.swingLows.length}`);
+                console.log(`  mtfAligned=${mtfAligned}, htfBias=${state.htfStructure.bias}`);
+                console.log(`  funding=${state.fundingRate.toFixed(6)}, oiDelta=${state.oiDelta.toFixed(2)}`);
+            }
+
             // ===== GERENCIAR POSIÇÃO =====
             if (position) {
                 const high = candle.high;
@@ -477,29 +491,34 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 blockStats[reasonKey] = (blockStats[reasonKey] || 0) + 1;
 
                 if (structureOk) {
-                    let stop, tp1, tp2;
+                    let stop, tp1, tp2, tp3;  // <-- adicionado tp3 para RR ponderado 50/30/20
                     if (primaryDirection === 'LONG') {
                         const recentLows = state.swingLows.slice(-SWING_LOOKBACK);
                         const structLevel = (recentLows.length ? Math.min(...recentLows) : state.price * 0.98) - (atr * 0.3);
-                        stop = Math.min(structLevel, state.price - atr * 1.5);
-                        tp1 = state.price + (atr * 2);
-                        tp2 = state.price + (atr * 4);
+                        // Melhoria: escolhe o stop mais próximo se a estrutura estiver perto
+                        const atrStop = state.price - atr * 1.5;
+                        stop = (recentLows.length && (state.price - structLevel) <= atr * 2.5) ? structLevel : atrStop;
+                        tp1 = state.price + (atr * 2.2);
+                        tp2 = state.price + (atr * 4.5);
+                        tp3 = state.price + (atr * 7);    // <-- tp3 igual ao live
                     } else {
                         const recentHighs = state.swingHighs.slice(-SWING_LOOKBACK);
                         const structLevel = (recentHighs.length ? Math.max(...recentHighs) : state.price * 1.02) + (atr * 0.3);
-                        stop = Math.max(structLevel, state.price + atr * 1.5);
-                        tp1 = state.price - (atr * 2);
-                        tp2 = state.price - (atr * 4);
+                        const atrStopShort = state.price + atr * 1.5;
+                        stop = (recentHighs.length && (structLevel - state.price) <= atr * 2.5) ? structLevel : atrStopShort;
+                        tp1 = state.price - (atr * 2.2);
+                        tp2 = state.price - (atr * 4.5);
+                        tp3 = state.price - (atr * 7);
                     }
 
-                    // ==== RR PONDERADO (sincronizado com o live) ====
+                    // ==== RR PONDERADO 50/30/20 (igual ao live) ====
                     let rrPonderado;
                     if (primaryDirection === 'LONG') {
-                        const ganhoPonderado = (tp1 - state.price) * 0.6 + (tp2 - state.price) * 0.4;
+                        const ganhoPonderado = (tp1 - state.price) * 0.5 + (tp2 - state.price) * 0.3 + (tp3 - state.price) * 0.2;
                         const risco = state.price - stop;
                         rrPonderado = risco > 0 ? ganhoPonderado / risco : 0;
                     } else {
-                        const ganhoPonderado = (state.price - tp1) * 0.6 + (state.price - tp2) * 0.4;
+                        const ganhoPonderado = (state.price - tp1) * 0.5 + (state.price - tp2) * 0.3 + (state.price - tp3) * 0.2;
                         const risco = stop - state.price;
                         rrPonderado = risco > 0 ? ganhoPonderado / risco : 0;
                     }
@@ -596,7 +615,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             finalEquity: equity,
             blockStats: blockStats,
             totalCandlesProcessed: totalCandlesProcessed,
-            disclaimer: "MTF histórico, BOS/retest com os 3 últimos swings (sincronizado com live). RR ponderado (60/40)."
+            disclaimer: "MTF histórico, BOS/retest com os 3 últimos swings (sincronizado com live). RR ponderado 50/30/20."
         };
 
         logDebug('Backtest concluído!', summary);
