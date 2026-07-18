@@ -242,27 +242,27 @@
         <div class="live-params">
             <div class="param-group">
                 <label for="live-score-min">Score mínimo LONG:
-                    <input type="number" id="live-score-min" value="68" min="0" max="100" step="1">
+                    <input type="number" id="live-score-min" value="50" min="0" max="100" step="1">
                 </label>
-                <span class="badge-param" id="live-score-badge">Atual: 68</span>
+                <span class="badge-param" id="live-score-badge">Atual: 50</span>
             </div>
             <div class="param-group">
                 <label for="live-adx-min">ADX mínimo:
-                    <input type="number" id="live-adx-min" value="22" min="0" max="100" step="1">
+                    <input type="number" id="live-adx-min" value="17" min="0" max="100" step="1">
                 </label>
-                <span class="badge-param" id="live-adx-badge">Atual: 22</span>
+                <span class="badge-param" id="live-adx-badge">Atual: 17</span>
             </div>
             <div class="param-group">
                 <label for="live-score-max-short">Score máximo SHORT:
-                    <input type="number" id="live-score-max-short" value="32" min="0" max="100" step="1">
+                    <input type="number" id="live-score-max-short" value="49" min="0" max="100" step="1">
                 </label>
-                <span class="badge-param" id="live-score-short-badge">Atual: 32</span>
+                <span class="badge-param" id="live-score-short-badge">Atual: 49</span>
             </div>
             <div class="param-group">
                 <label for="live-rr-min">R:R mínimo:
-                    <input type="number" id="live-rr-min" value="1.8" min="0.1" max="10" step="0.1">
+                    <input type="number" id="live-rr-min" value="1.5" min="0.1" max="10" step="0.1">
                 </label>
-                <span class="badge-param" id="live-rr-badge">Atual: 1.8</span>
+                <span class="badge-param" id="live-rr-badge">Atual: 1.5</span>
             </div>
             <div class="param-group">
                 <label><input type="checkbox" id="live-require-bos" checked> Exigir BOS</label>
@@ -553,6 +553,9 @@
 
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
+    <!-- ============================================================ -->
+    <!-- INÍCIO DO SCRIPT PRINCIPAL                                   -->
+    <!-- ============================================================ -->
     <script type="module">
         // ===== IMPORTAÇÕES =====
         import {
@@ -585,7 +588,8 @@
         import * as banco from './js/banco_de_dados.js';
         import * as historico from './js/historicos_sinais.js';
         import { CONFIG } from './js/config.js';
-        import { runBacktest } from './js/backtest.js';
+        // Importa o motor unificado e a função de backtest
+        import { processCandle, runBacktest } from './js/backtest.js';
 
         // ===== INTERCEPTAÇÃO YAHOO =====
         const originalFetch = window.fetch;
@@ -597,42 +601,39 @@
             return originalFetch(url, options);
         };
 
-        // ===== BOS E RETEST (SWING_LOOKBACK = 3) =====
-        function checkBOSAndRetest(state, direction, retestDistPct) {
-            const SWING_LOOKBACK = 3;
-            const recentHighs = state.swingHighs.slice(-SWING_LOOKBACK);
-            const recentLows = state.swingLows.slice(-SWING_LOOKBACK);
-            if (direction === 'LONG') {
-                const brokenLevel = recentHighs.length ? Math.max(...recentHighs) : null;
-                if (!brokenLevel) return { bos: false, retest: false, level: null };
-                const bos = state.price > brokenLevel;
-                const retest = bos && Math.abs(state.price - brokenLevel) / brokenLevel < retestDistPct;
-                return { bos, retest, level: brokenLevel };
-            } else if (direction === 'SHORT') {
-                const brokenLevel = recentLows.length ? Math.min(...recentLows) : null;
-                if (!brokenLevel) return { bos: false, retest: false, level: null };
-                const bos = state.price < brokenLevel;
-                const retest = bos && Math.abs(state.price - brokenLevel) / brokenLevel < retestDistPct;
-                return { bos, retest, level: brokenLevel };
-            }
-            return { bos: false, retest: false, level: null };
-        }
-
-        // ===== ROBOT_CONFIG =====
+        // ===== ROBOT_CONFIG – Parâmetros do Relatório de Performance =====
         const ROBOT_CONFIG = {
-            scoreMin: 68,
-            scoreMaxShort: 32,
-            adxMin: 22,
-            rrMin: 1.42,
+            scoreMin: 50,
+            scoreMaxShort: 49,
+            adxMin: 17,
+            rrMin: 1.5,
             requireBOS: false,
             requireRetest: false,
             requireMTF: false,
             requireEMARetest: false,
-            retestDistPct: 0.02,
+            retestDistPct: 0.04,           // 4%
+            htfBullishVelas: 3,
+            diDiffMinLong: 0,
+            mvrvDropPercent: 0.15,
+            htfBearishVelas: 4,
+            diDiffMinShort: 10,
+            stopLong: 2.0,
+            stopShort: 2.0,
+            tp1Long: 0.5,
+            tp1Short: 0.5,
+            tp2Dist: 4.0,
+            trailLong: 0,
+            trailShort: 0,
+            tp1Pct: 0,
+            tp2Pct: 0,
+            runnerPct: 1.0,                 // 100%
+            maxHoldHours: 72,
+            zFundingMax: 1.5,
+            zOiMax: 1.5
         };
-        console.log('[ROBOT] Configuração:', ROBOT_CONFIG);
+        console.log('[ROBOT] Configuração carregada:', ROBOT_CONFIG);
 
-        // ===== IMPORTS LIMPOS =====
+        // ===== IMPORTS DAS FUNÇÕES DOS INDICADORES =====
         const {
             calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
             generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
@@ -643,7 +644,7 @@
             KellyPositionSize, detectVolumeAnomaly, calculateConfidenceScore, calculateVWAP
         } = indicadores;
 
-        // ===== STATE =====
+        // ===== STATE GLOBAL (para cada ativo) =====
         const assetsData = {};
         CONFIG.ASSETS.forEach(symbol => {
             assetsData[symbol] = {
@@ -657,6 +658,47 @@
                 mtfConfluence: null, adx: 0, plusDI: 0, minusDI: 0, divergence: null,
                 volumeAnomaly: null, macroBlackout: false, vwap: 0,
                 mvrv: null, sopr: null, realizedPrice: null, fearGreedData: null
+            };
+        });
+
+        // ===== ESTADOS PERSISTENTES PARA O processCandle (LIVE) =====
+        const liveStates = {};
+        CONFIG.ASSETS.forEach(symbol => {
+            liveStates[symbol] = {
+                candles1H: [],
+                candles4H: [],
+                equity: 10000,
+                highWaterMark: 10000,
+                winCount: 0,
+                lossCount: 0,
+                blockStats: {},
+                position: null,
+                fundingHistory: [],
+                oiDeltaHistory: [],
+                bandwidthHistory: [],
+                adxRolling: [],
+                mvrvHistory: [],
+                swingHighs: [],
+                swingLows: [],
+                atrHistory: [],
+                price: 0,
+                atr_1H: 0,
+                rsi_1H: 50,
+                ema50_1H: 0,
+                vwap: 0,
+                fundingRate: 0,
+                oiDelta: 0,
+                mvrv: null,
+                macroBlackout: false,
+                volatilityFactor: 1.0,
+                mtfConfluence: null,
+                adx: 0,
+                plusDI: 0,
+                minusDI: 0,
+                divergence: null,
+                volumeAnomaly: null,
+                currentBOS: 'NEUTRAL',
+                htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity }
             };
         });
 
@@ -703,8 +745,7 @@
             document.getElementById('entry-fill').style.width = entry + '%';
             document.getElementById('exit-fill').style.width = exit + '%';
         }
-
-        // ===== HISTÓRICO DE SINAIS =====
+                // ===== HISTÓRICO DE SINAIS =====
         let signalHistory = [];
 
         function loadSignalHistory() {
@@ -833,7 +874,7 @@
             return html;
         }
 
-        // ===== COMITÊ (RUN COMMITTEE) =====
+        // ===== COMITÊ (RUN COMMITTEE) – versão adaptada =====
         let committeeRunning = false;
         async function runCommittee() {
             if (committeeRunning) return;
@@ -881,7 +922,7 @@
                 if (!fundFilt.pass) blocked.push(fundFilt.reason);
                 const canTrade = blocked.length === 0 && scoreData.score >= 55;
                 let trailingParams = canTrade ? generateTrailingStopParams(candles, indicators.close, scoreData.direction) : null;
-                // Atualiza UI do comitê (código encurtado, mas funcional)
+                // Atualiza UI do comitê
                 const bar = document.getElementById('committee-bar'); if (bar) bar.style.width = scoreData.score + '%';
                 document.getElementById('committee-score').textContent = scoreData.score;
                 const label = document.getElementById('committee-label');
@@ -985,8 +1026,6 @@
                 adxEl.style.color = aColor;
                 adxEl.textContent = `${adxData.adx.toFixed(1)} ${adxData.adx < 20 ? '(Sem tendência)' : adxData.trend || '(Tendência)'}`;
             }
-            const obContainer = document.getElementById('orderbookMini');
-            if (obContainer) obContainer.innerHTML = renderMiniOrderBook(obData);
             const mainSignalEl = document.getElementById('mainSignal');
             if (mainSignalEl) {
                 const dir = scoreData.direction || 'NEUTRO';
@@ -1065,16 +1104,16 @@
             }
         }
 
-        // ===== WEBSOCKET =====
+        // ===== WEBSOCKET (LIVE) com integração processCandle =====
         let wsRetryCount = 0, wsInstance = null, wsLiqInstance = null;
         function initWebSockets() {
             const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
             const tradeStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
-            const klineStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@kline_15m').join('/');
+            const klineStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@kline_1h').join('/');
             const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${tradeStreams}/${klineStreams}`);
             wsInstance = ws;
             ws.onopen = () => { wsRetryCount = 0; if (wsStatusEl) { wsStatusEl.textContent = '🔄 WS LIVE (Binance)'; wsStatusEl.style.color = 'var(--accent-green)'; wsStatusEl.style.animation = 'pulse-dot 1.5s infinite'; } };
-            ws.onmessage = (event) => {
+            ws.onmessage = async (event) => {
                 try {
                     const msg = JSON.parse(event.data);
                     const stream = msg.stream;
@@ -1094,14 +1133,113 @@
                         if (assetsData[symbol]) {
                             assetsData[symbol].price = price;
                             updateLivePriceUI(symbol, price);
-                            if (activePositions[symbol]) checkPositionManagement(symbol, price);
                         }
                     } else if (stream.includes('@kline')) {
                         const k = data.k;
                         const symbol = data.s;
-                        if (assetsData[symbol] && k.x) setTimeout(() => evaluateMarkets(), 1000);
+                        if (k.x) { // candle fechado
+                            const candle = {
+                                time: k.t / 1000,
+                                open: parseFloat(k.o),
+                                high: parseFloat(k.h),
+                                low: parseFloat(k.l),
+                                close: parseFloat(k.c),
+                                volume: parseFloat(k.v)
+                            };
+                            // Atualiza dados externos (funding, OI, MVRV) de forma assíncrona
+                            try {
+                                const funding = await fetchFundingRate(symbol);
+                                if (funding) liveStates[symbol].fundingRate = funding.rate;
+                                const oi = await fetchOpenInterest(symbol);
+                                if (oi) liveStates[symbol].oiDelta = oi.delta;
+                                const mvrv = await fetchMVRV();
+                                if (mvrv !== null) liveStates[symbol].mvrv = mvrv;
+                            } catch(e) { /* ignora */ }
+
+                            // Chama o processCandle para o símbolo
+                            const options = {
+                                scoreMin: ROBOT_CONFIG.scoreMin,
+                                scoreMaxShort: ROBOT_CONFIG.scoreMaxShort,
+                                adxMin: ROBOT_CONFIG.adxMin,
+                                rrMin: ROBOT_CONFIG.rrMin,
+                                retestDistPct: ROBOT_CONFIG.retestDistPct,
+                                emaRetest: ROBOT_CONFIG.requireEMARetest,
+                                mtfRequired: ROBOT_CONFIG.requireMTF,
+                                ignoreBOS: !ROBOT_CONFIG.requireBOS,
+                                ignoreRetest: !ROBOT_CONFIG.requireRetest,
+                                requireSweep: false,
+                                maxHoldHours: ROBOT_CONFIG.maxHoldHours,
+                                htfBullishVelas: ROBOT_CONFIG.htfBullishVelas,
+                                diDiffMinLong: ROBOT_CONFIG.diDiffMinLong,
+                                mvrvDropPercent: ROBOT_CONFIG.mvrvDropPercent,
+                                htfBearishVelas: ROBOT_CONFIG.htfBearishVelas,
+                                diDiffMinShort: ROBOT_CONFIG.diDiffMinShort,
+                                stopLong: ROBOT_CONFIG.stopLong,
+                                stopShort: ROBOT_CONFIG.stopShort,
+                                tp1Long: ROBOT_CONFIG.tp1Long,
+                                tp1Short: ROBOT_CONFIG.tp1Short,
+                                tp2Dist: ROBOT_CONFIG.tp2Dist,
+                                trailLong: ROBOT_CONFIG.trailLong,
+                                trailShort: ROBOT_CONFIG.trailShort,
+                                tp1Pct: ROBOT_CONFIG.tp1Pct,
+                                tp2Pct: ROBOT_CONFIG.tp2Pct,
+                                runnerPct: ROBOT_CONFIG.runnerPct,
+                                zFundingMax: ROBOT_CONFIG.zFundingMax,
+                                zOiMax: ROBOT_CONFIG.zOiMax
+                            };
+
+                            const result = await processCandle(liveStates[symbol], candle, symbol, options);
+                            
+                            // Atualiza UI se houve mudança de posição
+                            if (result.action === 'opened' && result.newPosition) {
+                                const pos = result.newPosition;
+                                // Registra sinal no histórico e envia Telegram
+                                addSignal(symbol, pos.type, pos.entryPrice, pos.stop, pos.tp1);
+                                telegram.sendTradeAlert(
+                                    symbol,
+                                    pos.type.toLowerCase(),
+                                    result.score,
+                                    pos.entryPrice,
+                                    pos.stop,
+                                    [{price: pos.tp1, rr: (pos.tp1 - pos.entryPrice) / (pos.entryPrice - pos.stop)},
+                                     {price: pos.tp2, rr: (pos.tp2 - pos.entryPrice) / (pos.entryPrice - pos.stop)}],
+                                    `SMC+MTF v3.5.2`,
+                                    0.05,
+                                    result.blockReason || 'Nenhum'
+                                );
+                                // Atualiza posição ativa
+                                activePositions[symbol] = {
+                                    type: pos.type,
+                                    entryPrice: pos.entryPrice,
+                                    stop: pos.stop,
+                                    tp1: pos.tp1,
+                                    tp2: pos.tp2,
+                                    entryTime: Date.now()
+                                };
+                                updateActiveTradesUI();
+                            } else if (result.action === 'closed' && result.tradeClosed) {
+                                const t = result.tradeClosed;
+                                updateSignalStatus(symbol, t.exitPrice, parseFloat(t.pnlUsd));
+                                delete activePositions[symbol];
+                                updateActiveTradesUI();
+                                // Atualiza P&L real
+                                updateRealPnL();
+                            }
+
+                            // Atualiza score bars e score principal (BTC)
+                            if (symbol === 'BTCUSDT') {
+                                const score = result.score || 50;
+                                const dir = result.direction || 'NEUTRO';
+                                updateMainScoreUI({ score, components: { mtf: '--', smc: '--', mom: '--', of: '--', macro: '--', oi: '--' } }, result.blockReason);
+                                updateAnalysisScores(score);
+                            }
+                            // Atualiza score bars para todos
+                            assetsData[symbol].score = result.score || 50;
+                            assetsData[symbol].direction = result.direction || 'NEUTRO';
+                            updateScoreBars();
+                        }
                     }
-                } catch(e) { /* ignora */ }
+                } catch(e) { console.warn('WS process error:', e); }
             };
             ws.onerror = (e) => { console.warn('WS Error', e); if (wsStatusEl) { wsStatusEl.textContent = '❌ WS OFFLINE'; wsStatusEl.style.color = 'var(--accent-red)'; } tryFallbackWS(); };
             ws.onclose = () => { if (wsStatusEl) { wsStatusEl.textContent = '🔄 RECONNECTING...'; wsStatusEl.style.color = 'var(--accent-yellow)'; } wsRetryCount++; const delay = Math.min(3000 * Math.pow(1.5, wsRetryCount), 30000); if (wsRetryCount <= 5) setTimeout(initWebSockets, delay); else tryFallbackWS(); };
@@ -1133,13 +1271,13 @@
                             if (assetsData[symbol]) {
                                 assetsData[symbol].price = price;
                                 updateLivePriceUI(symbol, price);
-                                if (activePositions[symbol]) checkPositionManagement(symbol, price);
                             }
                         }
                     } catch(e) { /* ignora */ }
                 };
                 bybitWs.onclose = () => { if (wsStatusEl) { wsStatusEl.textContent = '⛔ WS FALHOU'; wsStatusEl.style.color = 'var(--accent-red)'; } };
             }
+            // WS de liquidações
             const wsLiq = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
             wsLiqInstance = wsLiq;
             wsLiq.onmessage = (event) => {
@@ -1206,353 +1344,35 @@
             updateAnalysisScores(s);
         }
 
-        function updateActiveTradesUI() {}
-
-        function checkPositionManagement(symbol, currentPrice) {
-            const pos = activePositions[symbol];
-            if (!pos) return;
-            const data = assetsData[symbol];
-            const MAX_HOLD_HOURS = 12;
-            if (pos.entryTime && (Date.now() - pos.entryTime) / (1000 * 60 * 60) >= MAX_HOLD_HOURS && !pos.movedToBE) {
-                const isProfitable = pos.type === 'LONG' ? currentPrice > pos.entryPrice : currentPrice < pos.entryPrice;
-                closePosition(symbol, `TIME EXIT (${MAX_HOLD_HOURS}h)`, isProfitable);
+        function updateActiveTradesUI() {
+            // Atualiza painel de trades ativos (se houver)
+            const panel = document.querySelector('.active-trades-panel');
+            if (!panel) return;
+            const symbols = Object.keys(activePositions);
+            if (symbols.length === 0) {
+                panel.innerHTML = '<div style="color:var(--text-muted);padding:8px;">Nenhuma posição ativa.</div>';
                 return;
             }
-            let updateUI = false;
-            if (pos.type === 'LONG') {
-                if (data.swingLows.length > 0) {
-                    const lastSwingLow = Math.min(...data.swingLows);
-                    let newTrail = lastSwingLow - (data.atr_1H * 0.2);
-                    if (data.atrHistory && data.atrHistory.length > 20) {
-                        const avgATR = data.atrHistory.slice(-20).reduce((a, b) => a + b, 0) / 20;
-                        if (data.atr_1H > avgATR * 1.5) newTrail -= data.atr_1H * 0.1;
-                        else if (data.atr_1H < avgATR * 0.7) newTrail += data.atr_1H * 0.1;
-                    }
-                    if (newTrail > pos.trailingStop) { pos.trailingStop = newTrail; telegram.sendTelegramAlert(`📈 TRAILING STOP AJUSTADO (${symbol}) - $${newTrail.toFixed(2)}`); }
-                }
-                if (currentPrice >= pos.tp1 && !pos.partialTaken) {
-                    pos.partialTaken = true; pos.sizeRemaining = 0.5; pos.realizedPNL = (pos.tp1 - pos.entryPrice) * 0.5;
-                    pos.trailingStop = pos.entryPrice + (data.atr_1H * 0.1); pos.movedToBE = true;
-                    telegram.sendTelegramAlert(`🎯 TP1 PARCIAL (${symbol}) - 50% em $${pos.tp1.toFixed(2)}`);
-                    updateUI = true;
-                }
-                if (currentPrice >= pos.tp2) { closePosition(symbol, 'TP2 ATINGIDO', true); updateUI = true; }
-                else if (currentPrice <= pos.trailingStop) { closePosition(symbol, pos.movedToBE ? 'Trailing Stop/BE' : 'Stop Loss', pos.movedToBE); updateUI = true; }
-            } else {
-                if (data.swingHighs.length > 0) {
-                    const lastSwingHigh = Math.max(...data.swingHighs);
-                    let newTrail = lastSwingHigh + (data.atr_1H * 0.2);
-                    if (data.atrHistory && data.atrHistory.length > 20) {
-                        const avgATR = data.atrHistory.slice(-20).reduce((a, b) => a + b, 0) / 20;
-                        if (data.atr_1H > avgATR * 1.5) newTrail += data.atr_1H * 0.1;
-                        else if (data.atr_1H < avgATR * 0.7) newTrail -= data.atr_1H * 0.1;
-                    }
-                    if (newTrail < pos.trailingStop || pos.trailingStop === 0) { pos.trailingStop = newTrail; telegram.sendTelegramAlert(`📉 TRAILING STOP AJUSTADO (${symbol}) - $${newTrail.toFixed(2)}`); }
-                }
-                if (currentPrice <= pos.tp1 && !pos.partialTaken) {
-                    pos.partialTaken = true; pos.sizeRemaining = 0.5; pos.realizedPNL = (pos.entryPrice - pos.tp1) * 0.5;
-                    pos.trailingStop = pos.entryPrice - (data.atr_1H * 0.1); pos.movedToBE = true;
-                    telegram.sendTelegramAlert(`🎯 TP1 PARCIAL (${symbol}) - 50% em $${pos.tp1.toFixed(2)}`);
-                    updateUI = true;
-                }
-                if (currentPrice <= pos.tp2) { closePosition(symbol, 'TP2 ATINGIDO', true); updateUI = true; }
-                else if (currentPrice >= pos.trailingStop) { closePosition(symbol, pos.movedToBE ? 'Trailing Stop/BE' : 'Stop Loss', pos.movedToBE); updateUI = true; }
+            let html = '';
+            for (const sym of symbols) {
+                const pos = activePositions[sym];
+                const price = assetsData[sym]?.price || pos.entryPrice;
+                const pnlPct = pos.type === 'LONG' ? ((price - pos.entryPrice) / pos.entryPrice * 100) : ((pos.entryPrice - price) / pos.entryPrice * 100);
+                const color = pnlPct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+                html += `<div class="trade-item ${pos.type.toLowerCase()}">
+                    <div class="trade-title">${sym} <span style="color:${color};">${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%</span></div>
+                    <div class="trade-details">Entrada: $${pos.entryPrice.toFixed(2)} | Stop: $${pos.stop.toFixed(2)} | TP1: $${pos.tp1.toFixed(2)}</div>
+                </div>`;
             }
-            if (updateUI) updateActiveTradesUI();
+            panel.innerHTML = html;
         }
 
-        function closePosition(symbol, reason, isWin) {
-            const pos = activePositions[symbol];
-            if (!pos) return;
-            const stats = banco.getTradeStats();
-            if (isWin) stats.wins++; else stats.losses++;
-            banco.setTradeStats(stats);
-            const currentPrice = assetsData[symbol].price;
-            const pnlPct = pos.type === 'LONG' ? ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100 : ((pos.entryPrice - currentPrice) / pos.entryPrice) * 100;
-            const pnlUsd = (pnlPct / 100) * 10000;
-            telegram.sendTelegramAlert(`${isWin ? '✅' : '❌'} POSIÇÃO FECHADA (${symbol}) - ${reason} - P&L: ${pnlPct.toFixed(2)}%`);
-            updateSignalStatus(symbol, currentPrice, pnlUsd);
-            delete activePositions[symbol];
-            updateActiveTradesUI();
-        }
-
-        async function updateMTFAndOI() {
-            await Promise.all(CONFIG.ASSETS.map(async (symbol) => {
-                try {
-                    const [mtf, oi] = await Promise.all([getMTFConfluence(symbol), fetchOpenInterest(symbol)]);
-                    assetsData[symbol].mtfConfluence = mtf;
-                    if (oi && typeof oi.delta === 'number') assetsData[symbol].oiDelta = oi.delta;
-                } catch(e) { console.warn(`[MTF/OI] ${symbol}:`, e); }
-            }));
-        }
-
-        // ===== AVALIAÇÃO DE MERCADO (COM MELHORIAS) =====
-        async function evaluateMarkets() {
-            const macroBlackout = await getMacroBlackoutStatus();
-
-            // Busca dados diários para calcular MA200 (caso o mtfData não forneça belowMA200)
-            let btcDailyCandles = [];
-            try {
-                const btcDaily = await fetchHistoricalCandles('BTCUSDT', '1d', 210);
-                if (btcDaily && btcDaily.length >= 200) btcDailyCandles = btcDaily;
-            } catch(e) { /* ignora */ }
-
-            // Obtém MVRV do BTC para usar como bônus em todos os ativos
-            const btcMvrv = assetsData['BTCUSDT']?.mvrv;
-
-            for (const symbol of CONFIG.ASSETS) {
-                const data = assetsData[symbol];
-                updateSwingPoints(data);
-
-                const adxData = calculateADX(data.candles1H);
-                data.adx = adxData.adx;
-                data.plusDI = adxData.plusDI;
-                data.minusDI = adxData.minusDI;
-
-                // Calcula RSI
-                let rsiValues = [];
-                let avgGain = 0, avgLoss = 0;
-                const closes1H = data.candles1H.map(c => c.close);
-                if (closes1H.length > 14) {
-                    for (let i = 1; i < closes1H.length; i++) {
-                        const diff = closes1H[i] - closes1H[i - 1];
-                        const gain = diff > 0 ? diff : 0;
-                        const loss = diff < 0 ? Math.abs(diff) : 0;
-                        if (i === 1) { avgGain = gain; avgLoss = loss; }
-                        else {
-                            avgGain = (avgGain * 13 + gain) / 14;
-                            avgLoss = (avgLoss * 13 + loss) / 14;
-                        }
-                        const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
-                        rsiValues.push(rsi);
-                    }
-                }
-                data.divergence = detectRSIDivergence(data.candles1H, rsiValues);
-
-                // Volatilidade e Volume
-                const currentATR = data.atr_1H || 0;
-                const avgPrice = data.candles1H.slice(-20).reduce((s,c) => s+c.close,0)/20;
-                const volatilityPct = avgPrice > 0 ? (currentATR / avgPrice) * 100 : 1.5;
-                const volThreshold = volatilityPct > 2 ? 2.5 : 1.8;
-                data.volumeAnomaly = detectVolumeAnomaly(data.candles1H, 20, volThreshold);
-
-                // VWAP
-                const last24Candles = data.candles1H.slice(-24);
-                data.vwap = calculateVWAP(last24Candles);
-                data.macroBlackout = macroBlackout;
-
-                // ===== MTF CONFLUENCE COM belowMA200 =====
-                const mtfData = await getMTFConfluence(symbol);
-                data.mtfConfluence = mtfData;
-                const mtf = mtfData || {};
-
-                // Se o mtfData não tiver belowMA200, calculamos aqui com os candles diários
-                let belowMA200 = mtf.belowMA200 ?? false;
-                if (!belowMA200 && btcDailyCandles.length >= 200) {
-                    const closesDaily = btcDailyCandles.map(c => c.close);
-                    const ma200 = calcEMA(closesDaily, 200).slice(-1)[0];
-                    const lastPrice = closesDaily[closesDaily.length - 1];
-                    belowMA200 = lastPrice < ma200;
-                }
-
-                const mtfAligned = ROBOT_CONFIG.requireMTF ? (mtf?.alinhado || false) : true;
-
-                // ===== SCORE INICIAL (CONFIANÇA) usando adxThreshold =====
-                const scoreData = computeScore(symbol, assetsData, liqMap, ROBOT_CONFIG.adxMin);
-                let blockReason = scoreData.blockReason;
-
-                const confidence = calculateConfidenceScore({
-                    mtfAligned: mtfAligned,
-                    adx: data.adx,
-                    volumeAnomaly: data.volumeAnomaly,
-                    fundingRate: data.fundingRate,
-                    openInterestTrend: data.oiDelta > 0 ? 'INCREASING' : (data.oiDelta < 0 ? 'DECREASING' : 'NEUTRAL'),
-                    divergence: data.divergence,
-                    macroBlackout: data.macroBlackout,
-                    smcStructure: data.currentBOS || 'NEUTRAL',
-                    direction: scoreData.direction,
-                    scoreMinLong: ROBOT_CONFIG.scoreMin,
-                    scoreMaxShort: ROBOT_CONFIG.scoreMaxShort
-                });
-
-                let score = confidence.score;
-
-                // ===== FILTRO MACRO: belowMA200 (penalidade proporcional) =====
-                const tempDirection = (score >= ROBOT_CONFIG.scoreMin) ? 'LONG' : (score <= ROBOT_CONFIG.scoreMaxShort ? 'SHORT' : null);
-
-                if (belowMA200 && tempDirection === 'LONG') {
-                    score = Math.max(25, score - 12);
-                }
-
-                // ===== FILTROS ADICIONAIS =====
-                const adxValue = typeof data.adx === 'object' ? data.adx.adx : data.adx;
-                if (adxValue < ROBOT_CONFIG.adxMin && !blockReason) {
-                    blockReason = blockReason ? blockReason + `; ADX < ${ROBOT_CONFIG.adxMin} (lateral)` : `ADX < ${ROBOT_CONFIG.adxMin} (lateral)`;
-                }
-                if (data.macroBlackout && !blockReason) {
-                    blockReason = blockReason ? blockReason + '; Macro blackout' : 'Macro blackout';
-                }
-
-                // ===== DIREÇÃO PRIMÁRIA (usa score ajustado) =====
-                const primaryDirection = (score >= ROBOT_CONFIG.scoreMin) ? 'LONG' : (score <= ROBOT_CONFIG.scoreMaxShort ? 'SHORT' : null);
-
-                if (primaryDirection === 'LONG' && data.price < data.vwap && !blockReason) {
-                    blockReason = blockReason ? blockReason + '; Preço abaixo do VWAP' : 'Preço abaixo do VWAP';
-                } else if (primaryDirection === 'SHORT' && data.price > data.vwap && !blockReason) {
-                    blockReason = blockReason ? blockReason + '; Preço acima do VWAP' : 'Preço acima do VWAP';
-                }
-
-                if (ROBOT_CONFIG.requireMTF) {
-                    if (primaryDirection === 'LONG' && data.htfStructure.bias === 'BEARISH' && !blockReason) {
-                        blockReason = blockReason ? blockReason + '; HTF 4H Bearish' : 'HTF 4H Bearish';
-                    }
-                    if (primaryDirection === 'SHORT' && data.htfStructure.bias === 'BULLISH' && !blockReason) {
-                        blockReason = blockReason ? blockReason + '; HTF 4H Bullish' : 'HTF 4H Bullish';
-                    }
-                }
-
-                if (!blockReason) {
-                    const derivCheck = checkDerivativesFilter(data.fundingRate, data.oiDelta);
-                    if (!derivCheck.allow) blockReason = derivCheck.reason;
-                }
-
-                // ===== BÔNUS ON-CHAIN ESTENDIDO A TODOS OS ATIVOS =====
-                let onChainMultiplier = 1.0;
-                if (btcMvrv !== null && btcMvrv !== undefined) {
-                    const fgVal = data.fearGreedData?.value ?? assetsData['BTCUSDT']?.fearGreedData?.value;
-                    if (primaryDirection === 'LONG' && btcMvrv < 0.8 && fgVal !== null && fgVal < 25) {
-                        onChainMultiplier = 1.2;
-                        console.log(`[On-Chain Bônus] ${symbol} LONG em capitulação (MVRV BTC baixo + medo extremo)`);
-                    }
-                    if (primaryDirection === 'SHORT' && btcMvrv > 1.5 && fgVal !== null && fgVal > 75) {
-                        onChainMultiplier = 1.2;
-                        console.log(`[On-Chain Bônus] ${symbol} SHORT em euforia (MVRV BTC alto + ganância extrema)`);
-                    }
-                }
-
-                // ===== ATUALIZA UI DO SCORE PRINCIPAL (BTC) =====
-                if (symbol === 'BTCUSDT') {
-                    updateMainScoreUI({ ...scoreData, score: confidence.score }, blockReason);
-                    const confEl = document.getElementById('confidence-score');
-                    if (confEl) {
-                        confEl.textContent = confidence.level;
-                        confEl.className = `confidence-level confidence-${confidence.level}`;
-                    }
-                }
-
-                // ===== ARMAZENA SCORE E DIREÇÃO PARA BARRAS =====
-                assetsData[symbol].score = confidence.score;
-                assetsData[symbol].direction = confidence.direction || 'NEUTRO';
-
-                const prevScore = previousScores[symbol] || 50;
-                if (!activePositions[symbol] && !blockReason && isSafeToTrade()) {
-                    const now = Date.now();
-                    if (now - (alertCooldowns[symbol] || 0) > 1800000 && primaryDirection) {
-                        const atr = data.atr_1H || (data.price * 0.02);
-                        const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
-                        if (!expCheck.blocked) {
-                            const structure = checkBOSAndRetest(data, primaryDirection, ROBOT_CONFIG.retestDistPct);
-                            const smcSetup = structure.bos;
-                            let retestConfirmed = structure.retest;
-                            if (!retestConfirmed && ROBOT_CONFIG.requireEMARetest) {
-                                const ema20 = calcEMA(data.candles1H.map(c => c.close), 20).slice(-1)[0] || data.price;
-                                retestConfirmed = Math.abs(data.price - ema20) / ema20 < 0.005;
-                            }
-                            const bosPassed = ROBOT_CONFIG.requireBOS ? smcSetup : true;
-                            const retestPassed = ROBOT_CONFIG.requireRetest ? retestConfirmed : true;
-                            if (bosPassed && retestPassed) {
-                                let stop, tp1, tp2, tp3, structLevel;
-                                let liqTarget1 = null, liqTarget2 = null;
-                                const liqs = liquidationLevels[symbol] || [];
-                                if (liqs.length > 0) {
-                                    if (primaryDirection === 'LONG') {
-                                        liqTarget1 = Math.max(...liqs.filter(l => l > data.price));
-                                        liqTarget2 = liqTarget1 ? liqTarget1 * 1.02 : null;
-                                    } else {
-                                        liqTarget1 = Math.min(...liqs.filter(l => l < data.price));
-                                        liqTarget2 = liqTarget1 ? liqTarget1 * 0.98 : null;
-                                    }
-                                }
-
-                                // ===== STOP LOSS OTIMIZADO =====
-                                if (primaryDirection === 'LONG') {
-                                    const recentLows = data.swingLows.slice(-3);
-                                    structLevel = (recentLows.length ? Math.min(...recentLows) : data.price * 0.98) - (atr * 0.3);
-                                    const atrStop = data.price - atr * 1.5;
-                                    stop = (recentLows.length && (data.price - structLevel) <= atr * 2.5) ? structLevel : atrStop;
-                                    tp1 = data.price + (atr * 2.2);
-                                    tp2 = liqTarget1 || (data.price + (atr * 4.5));
-                                    tp3 = liqTarget2 || (data.price + (atr * 7));
-                                } else {
-                                    const recentHighs = data.swingHighs.slice(-3);
-                                    structLevel = (recentHighs.length ? Math.max(...recentHighs) : data.price * 1.02) + (atr * 0.3);
-                                    const atrStopShort = data.price + atr * 1.5;
-                                    stop = (recentHighs.length && (structLevel - data.price) <= atr * 2.5) ? structLevel : atrStopShort;
-                                    tp1 = data.price - (atr * 2.2);
-                                    tp2 = liqTarget1 || (data.price - (atr * 4.5));
-                                    tp3 = liqTarget2 || (data.price - (atr * 7));
-                                }
-
-                                // RR Ponderado
-                                let rrPonderado;
-                                if (primaryDirection === 'LONG') {
-                                    const ganhoPonderado = (tp1 - data.price) * 0.5 + (tp2 - data.price) * 0.3 + (tp3 - data.price) * 0.2;
-                                    rrPonderado = (data.price - stop) > 0 ? ganhoPonderado / (data.price - stop) : 0;
-                                } else {
-                                    const ganhoPonderado = (data.price - tp1) * 0.5 + (data.price - tp2) * 0.3 + (data.price - tp3) * 0.2;
-                                    rrPonderado = (stop - data.price) > 0 ? ganhoPonderado / (stop - data.price) : 0;
-                                }
-
-                                if (rrPonderado >= ROBOT_CONFIG.rrMin) {
-                                    const stats = banco.getTradeStats();
-                                    const totalTrades = stats.wins + stats.losses;
-                                    const winRate = totalTrades > 0 ? stats.wins / totalTrades : 0.5;
-                                    const fgFilt = fearGreedFilter(data.fearGreedData, primaryDirection);
-                                    if (!fgFilt.pass && !blockReason) blockReason = fgFilt.reason;
-                                    const riskPct = KellyPositionSize(winRate, rrPonderado) * (fgFilt.multiplier || 1) * onChainMultiplier;
-                                    if (!blockReason) {
-                                        telegram.sendTradeAlert(symbol, primaryDirection.toLowerCase(), score, data.price, stop, [{price: tp1, rr: rrPonderado}, {price: tp2, rr: rrPonderado * 2}, {price: tp3, rr: rrPonderado * 3}], `MTF ${primaryDirection} + BOS + Re-teste + VWAP`, riskPct, null);
-                                        activePositions[symbol] = {
-                                            type: primaryDirection,
-                                            entryPrice: data.price,
-                                            stop: stop,
-                                            tp1: tp1,
-                                            tp2: tp2,
-                                            movedToBE: false,
-                                            trailingStop: stop,
-                                            partialTaken: false,
-                                            sizeRemaining: 1,
-                                            realizedPNL: 0,
-                                            entryTime: Date.now()
-                                        };
-                                        alertCooldowns[symbol] = Date.now();
-                                        addSignal(symbol, primaryDirection, data.price, stop, tp1);
-                                        updateActiveTradesUI();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ===== ALERTAS DE MUDANÇA DE TENDÊNCIA =====
-                if (prevScore < 50 && score >= 50) {
-                    telegram.sendTelegramAlert(`🔄 TENDÊNCIA MUDOU (${symbol}) - Score subiu para ${score}. Possível reversão Long.`);
-                }
-                if (prevScore > 50 && score <= 50) {
-                    telegram.sendTelegramAlert(`🔄 TENDÊNCIA MUDOU (${symbol}) - Score caiu para ${score}. Possível reversão Short.`);
-                }
-                previousScores[symbol] = score;
-            }
-            updateScoreBars();
-        }
-
+        // ===== ATUALIZAÇÃO DE DADOS EXTERNOS =====
         let externalUpdating = false;
         async function updateExternalData() {
             if (externalUpdating) return;
             externalUpdating = true;
             try {
-                // Funding para TODOS os ativos
                 for (const symbol of CONFIG.ASSETS) {
                     const funding = await fetchFundingRate(symbol);
                     if (funding && assetsData[symbol]) {
@@ -1607,10 +1427,10 @@
         }
 
         function applyLiveParams() {
-            const scoreMin = parseInt(document.getElementById('live-score-min').value) || 68;
-            const scoreMaxShort = parseInt(document.getElementById('live-score-max-short').value) || 32;
-            const adxMin = parseInt(document.getElementById('live-adx-min').value) || 22;
-            const rrMin = parseFloat(document.getElementById('live-rr-min').value) || 1.8;
+            const scoreMin = parseInt(document.getElementById('live-score-min').value) || 50;
+            const scoreMaxShort = parseInt(document.getElementById('live-score-max-short').value) || 49;
+            const adxMin = parseInt(document.getElementById('live-adx-min').value) || 17;
+            const rrMin = parseFloat(document.getElementById('live-rr-min').value) || 1.5;
             const requireBOS = document.getElementById('live-require-bos').checked;
             const requireRetest = document.getElementById('live-require-retest').checked;
             const requireMTF = document.getElementById('live-require-mtf').checked;
@@ -1629,6 +1449,7 @@
             console.log('[ROBOT] Parâmetros salvos:', ROBOT_CONFIG);
         }
 
+        // ===== INICIALIZAÇÃO =====
         async function init() {
             cacheDOM();
             const saved = localStorage.getItem('robot_config');
@@ -1687,8 +1508,6 @@
             }
             initWebSockets();
             await updateExternalData();
-            await updateMTFAndOI();
-            await evaluateMarkets();
             await updateTimeframeStats();
             updateRealPnL();
 
@@ -1745,8 +1564,6 @@
                         assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
                     }
                 }
-                await updateMTFAndOI();
-                await evaluateMarkets();
                 await updateTimeframeStats();
                 renderSignalTable(); // atualiza P&L ao vivo
             }, 300000);
