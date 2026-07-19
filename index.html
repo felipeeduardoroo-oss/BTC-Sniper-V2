@@ -535,13 +535,13 @@
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
     <!-- ========================================================== -->
-    <!-- INÍCIO DO SCRIPT PRINCIPAL (continua na Parte 2)           -->
+    <!-- INÍCIO DO SCRIPT PRINCIPAL (PARTE 1)                       -->
     <!-- ========================================================== -->
     <script type="module">
 
+                // ================================================================
+        // SCRIPT PRINCIPAL – PARTE 2 (continuação)
         // ================================================================
-// SCRIPT PRINCIPAL – Parte 2 (continuação)
-// ================================================================
 
         import {
             fetchHistoricalCandles,
@@ -578,7 +578,7 @@
         import { CONFIG } from './js/config.js';
         import { runBacktest } from './js/backtest.js';
 
-        // ===== NOVAS IMPORTAÇÕES DO RISK MANAGEMENT =====
+        // ===== IMPORTAÇÕES DO RISK MANAGEMENT =====
         import {
             checkBOSAndRetest,
             calculateStopAndTargets,
@@ -596,7 +596,7 @@
             return originalFetch(url, options);
         };
 
-        // ===== ROBOT_CONFIG (com todos os novos parâmetros) =====
+        // ===== ROBOT_CONFIG (com todos os parâmetros) =====
         const ROBOT_CONFIG = {
             scoreMin: 68,
             scoreMaxShort: 32,
@@ -655,7 +655,8 @@
                 mtfConfluence: null, adx: 0, plusDI: 0, minusDI: 0, divergence: null,
                 volumeAnomaly: null, macroBlackout: false, vwap: 0,
                 mvrv: null, sopr: null, realizedPrice: null, fearGreedData: null,
-                score: 50, direction: 'NEUTRO'
+                score: 50, direction: 'NEUTRO', volatilityFactor: 1.0,
+                mvrvHistory: [] // para MVRV drop
             };
         });
 
@@ -671,6 +672,7 @@
         };
         let alertCooldowns = {};
         let lastMainScore = 50;
+        let currentEquity = 10000; // equity simulada
 
         const DOM = {};
         function cacheDOM() {
@@ -1212,15 +1214,16 @@
             const data = assetsData[symbol];
             if (!data) return;
 
-            // Construir candle simplificado para a função de gestão
+            // Obtém o último candle real para high/low precisos
+            const lastCandle = data.candles1H.length ? data.candles1H[data.candles1H.length - 1] : null;
             const candle = {
                 time: Date.now() / 1000,
-                high: currentPrice * 1.001, // aproximação, mas a função usa high/low para verificar TP/stop
-                low: currentPrice * 0.999,
+                high: lastCandle ? lastCandle.high : currentPrice * 1.001,
+                low: lastCandle ? lastCandle.low : currentPrice * 0.999,
                 close: currentPrice,
-                open: currentPrice // não usado
+                open: lastCandle ? lastCandle.open : currentPrice
             };
-            // Precisamos de um state com os dados necessários
+
             const state = {
                 atr_1H: data.atr_1H || (currentPrice * 0.02),
                 atrHistory: data.atrHistory || [],
@@ -1230,7 +1233,6 @@
                 price: currentPrice
             };
 
-            // Parâmetros para gestão
             const params = {
                 tp1Pct: ROBOT_CONFIG.tp1Pct,
                 tp2Pct: ROBOT_CONFIG.tp2Pct,
@@ -1240,17 +1242,12 @@
                 maxHoldHours: ROBOT_CONFIG.maxHoldHours
             };
 
-            // Atualiza trailing stop a cada chamada (para manter sincronizado)
-            // A função checkPositionManagement já faz isso internamente.
-
             const result = checkPositionManagement(pos, state, candle, params);
             if (result.closed) {
-                // Fechou a posição
                 const pnlUsd = result.totalPnlUsd || 0;
                 const pnlPct = result.totalPnlPct || 0;
-                // Atualiza histórico
+                currentEquity += pnlUsd;
                 updateSignalStatus(symbol, result.exitPrice, pnlUsd);
-                // Envia alerta
                 telegram.sendTelegramAlert(
                     `${pnlUsd >= 0 ? '✅' : '❌'} POSIÇÃO FECHADA (${symbol}) - ${result.reason} - P&L: ${pnlPct.toFixed(2)}%`
                 );
@@ -1258,19 +1255,15 @@
                 renderSignalTable();
                 updateActiveTradesUI();
             } else {
-                // Atualiza a posição no estado
                 activePositions[symbol] = result.position;
-                // Se o trailing stop mudou, podemos notificar (opcional)
-                // Podemos enviar uma mensagem de ajuste se desejar
-                // Para não sobrecarregar, vamos silencioso
             }
         }
 
         function updateActiveTradesUI() {
-            // Atualiza o painel de trades ativos (pode ser implementado depois)
+            // Pode ser implementado para mostrar posições abertas
         }
 
-        // ===== AVALIAÇÃO DE MERCADO (COM NOVA LÓGICA DE ENTRADA) =====
+        // ===== AVALIAÇÃO DE MERCADO =====
         async function evaluateMarkets() {
             const macroBlackout = await getMacroBlackoutStatus();
 
@@ -1303,17 +1296,26 @@
                 }
                 data.divergence = detectRSIDivergence(data.candles1H, rsiValues);
 
+                // Volatilidade
                 const currentATR = data.atr_1H || 0;
                 const avgPrice = data.candles1H.slice(-20).reduce((s,c) => s+c.close,0)/20;
                 const volatilityPct = avgPrice > 0 ? (currentATR / avgPrice) * 100 : 1.5;
                 const volThreshold = volatilityPct > 2 ? 2.5 : 1.8;
                 data.volumeAnomaly = detectVolumeAnomaly(data.candles1H, 20, volThreshold);
 
+                // VWAP
                 const last24Candles = data.candles1H.slice(-24);
                 data.vwap = calculateVWAP(last24Candles);
                 data.macroBlackout = macroBlackout;
 
-                // MTF usando getMTFAlignmentLocal (mais rápido e local)
+                // Volatility factor
+                if (data.candles1H.length >= 30) {
+                    const rets = data.candles1H.slice(-30).map(c => (c.close - c.open) / c.open);
+                    const std = Math.sqrt(rets.reduce((s, r) => s + r * r, 0) / rets.length);
+                    data.volatilityFactor = Math.min(Math.max(std * 2, 0.5), 2.0);
+                }
+
+                // MTF local
                 const mtf = getMTFAlignmentLocal(data.candles1H, data.candles4H, Date.now()/1000, {
                     htfBullishVelas: ROBOT_CONFIG.htfBullishVelas,
                     htfBearishVelas: ROBOT_CONFIG.htfBearishVelas
@@ -1367,10 +1369,10 @@
 
                 // HTF
                 if (primaryDirection === 'LONG' && !blockReason && mtf.bias === 'BEARISH') {
-                    blockReason = `HTF 4H Bearish (${ROBOT_CONFIG.htfBullishVelas} velas bullish necessárias)`;
+                    blockReason = `HTF 4H Bearish (${ROBOT_CONFIG.htfBullishVelas} velas)`;
                 }
                 if (primaryDirection === 'SHORT' && !blockReason && mtf.bias === 'BULLISH') {
-                    blockReason = `HTF 4H Bullish (${ROBOT_CONFIG.htfBearishVelas} velas bearish necessárias)`;
+                    blockReason = `HTF 4H Bullish (${ROBOT_CONFIG.htfBearishVelas} velas)`;
                 }
 
                 // MVRV drop para SHORT
@@ -1404,11 +1406,10 @@
                 // Verifica se já tem posição aberta
                 if (activePositions[symbol]) continue;
 
-                // Verifica cooldown
+                // Cooldown
                 const now = Date.now();
                 if (now - (alertCooldowns[symbol] || 0) < 1800000) continue; // 30 min
 
-                // Se não houver posição e não houver block, tenta entrada
                 if (!blockReason && primaryDirection && isSafeToTrade()) {
                     const structure = checkBOSAndRetest(data, primaryDirection, ROBOT_CONFIG.retestDistPct);
                     const smcSetup = structure.bos;
@@ -1423,7 +1424,6 @@
                     if (bosPassed && retestPassed) {
                         const levels = calculateStopAndTargets(data, primaryDirection, ROBOT_CONFIG);
                         if (levels.rrPonderado >= ROBOT_CONFIG.rrMin) {
-                            // Verifica exposição
                             const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
                             if (!expCheck.blocked) {
                                 // Calcula tamanho da posição (Kelly)
@@ -1432,34 +1432,42 @@
                                 const winRate = totalTrades > 0 ? stats.wins / totalTrades : 0.5;
                                 const riskPct = KellyPositionSize(winRate, levels.rrPonderado);
                                 const stopDist = primaryDirection === 'LONG' ? (data.price - levels.stop) / data.price : (levels.stop - data.price) / data.price;
-                                const sizeUSD = (riskPct * 10000) / stopDist; // usando equity fixa de 10k para simplicidade
-                                const sizeMult = Math.min(sizeUSD / 10000, 1.0);
+                                const sizeUSD = (riskPct * currentEquity) / stopDist;
+                                const sizeMult = Math.min(sizeUSD / currentEquity, 1.0);
 
-                                // Envia alerta via Telegram (usando a nova função V2)
+                                // Envia alerta (usa sendTradeAlert com adaptação)
                                 const rationale = `MTF ${primaryDirection} + BOS/Retest + VWAP`;
-                                const levelsForTelegram = {
-                                    stop: levels.stop,
-                                    tp1: levels.tp1,
-                                    tp2: levels.tp2,
-                                    tp3: levels.tp3,
-                                    rr1: (levels.tp1 - data.price) / (data.price - levels.stop),
-                                    rr2: (levels.tp2 - data.price) / (data.price - levels.stop),
-                                    rr3: (levels.tp3 - data.price) / (data.price - levels.stop),
-                                    tp1Pct: ROBOT_CONFIG.tp1Pct,
-                                    tp2Pct: ROBOT_CONFIG.tp2Pct,
-                                    runnerPct: ROBOT_CONFIG.runnerPct,
-                                    trailMultiplier: primaryDirection === 'LONG' ? ROBOT_CONFIG.trailLong : ROBOT_CONFIG.trailShort
-                                };
-                                await telegram.sendTradeAlertV2(
-                                    symbol,
-                                    primaryDirection.toLowerCase(),
-                                    score,
-                                    data.price,
-                                    levelsForTelegram,
-                                    rationale,
-                                    riskPct,
-                                    null
-                                );
+                                const targets = [
+                                    { price: levels.tp1, rr: (levels.tp1 - data.price) / (data.price - levels.stop) },
+                                    { price: levels.tp2, rr: (levels.tp2 - data.price) / (data.price - levels.stop) },
+                                    { price: levels.tp3, rr: (levels.tp3 - data.price) / (data.price - levels.stop) }
+                                ];
+                                // Se existir sendTradeAlertV2, usa, senão usa a versão antiga
+                                if (typeof telegram.sendTradeAlertV2 === 'function') {
+                                    await telegram.sendTradeAlertV2(
+                                        symbol, primaryDirection.toLowerCase(), score, data.price,
+                                        {
+                                            stop: levels.stop,
+                                            tp1: levels.tp1,
+                                            tp2: levels.tp2,
+                                            tp3: levels.tp3,
+                                            rr1: targets[0].rr,
+                                            rr2: targets[1].rr,
+                                            rr3: targets[2].rr,
+                                            tp1Pct: ROBOT_CONFIG.tp1Pct,
+                                            tp2Pct: ROBOT_CONFIG.tp2Pct,
+                                            runnerPct: ROBOT_CONFIG.runnerPct,
+                                            trailMultiplier: primaryDirection === 'LONG' ? ROBOT_CONFIG.trailLong : ROBOT_CONFIG.trailShort
+                                        },
+                                        rationale, riskPct, null
+                                    );
+                                } else {
+                                    // Fallback
+                                    await telegram.sendTradeAlert(
+                                        symbol, primaryDirection.toLowerCase(), score, data.price,
+                                        levels.stop, targets, rationale, riskPct, null
+                                    );
+                                }
 
                                 // Abre posição
                                 activePositions[symbol] = {
@@ -1468,6 +1476,7 @@
                                     stop: levels.stop,
                                     tp1: levels.tp1,
                                     tp2: levels.tp2,
+                                    tp3: levels.tp3, // armazena para referência
                                     trailingStop: levels.stop,
                                     partialTaken: false,
                                     tp2Taken: false,
@@ -1477,7 +1486,7 @@
                                     maxProfitPrice: data.price,
                                     entryTime: Date.now(),
                                     movedToBE: false,
-                                    initialEquity: 10000,
+                                    initialEquity: currentEquity,
                                     symbol: symbol
                                 };
                                 alertCooldowns[symbol] = Date.now();
@@ -1497,7 +1506,6 @@
             if (externalUpdating) return;
             externalUpdating = true;
             try {
-                // Funding para todos
                 for (const symbol of CONFIG.ASSETS) {
                     const funding = await fetchFundingRate(symbol);
                     if (funding && assetsData[symbol]) {
@@ -1512,7 +1520,12 @@
                 setTextOrNA('mvrv', mvrv);
                 if (mvrv !== null && !isNaN(mvrv)) {
                     document.getElementById('mvrv-interp').textContent = mvrv > 1.0 ? '⚠️ Acima de 1.0' : 'ℹ️ Abaixo de 1.0';
-                    if (assetsData['BTCUSDT']) assetsData['BTCUSDT'].mvrv = mvrv;
+                    if (assetsData['BTCUSDT']) {
+                        assetsData['BTCUSDT'].mvrv = mvrv;
+                        if (!assetsData['BTCUSDT'].mvrvHistory) assetsData['BTCUSDT'].mvrvHistory = [];
+                        assetsData['BTCUSDT'].mvrvHistory.push(mvrv);
+                        if (assetsData['BTCUSDT'].mvrvHistory.length > 90) assetsData['BTCUSDT'].mvrvHistory.shift();
+                    }
                 }
                 const cqActive = await fetchCQActiveAddresses();
                 setTextOrNA('active-addresses', cqActive);
@@ -1598,7 +1611,6 @@
                 try {
                     const parsed = JSON.parse(saved);
                     Object.assign(ROBOT_CONFIG, parsed);
-                    // Atualiza campos da UI
                     const map = {
                         'live-score-min': 'scoreMin',
                         'live-score-max-short': 'scoreMaxShort',
@@ -1643,13 +1655,11 @@
             renderSignalTable();
             graficos.initCharts();
 
-            // Inicializa gráficos de candle
             const candleBTC = graficos.initCandleChart('candle-btc', '#00e896');
             const candleETH = graficos.initCandleChart('candle-eth', '#00b4d8');
             const candleSOL = graficos.initCandleChart('candle-sol', '#ffd60a');
             const candleCharts = { 'BTCUSDT': candleBTC, 'ETHUSDT': candleETH, 'SOLUSDT': candleSOL };
 
-            // Carrega dados históricos iniciais
             for (const symbol of CONFIG.ASSETS) {
                 const [c1H, c4H, c1D] = await Promise.all([
                     fetchHistoricalCandles(symbol, '1h', 200),
@@ -1685,7 +1695,6 @@
             await updateTimeframeStats();
             updateRealPnL();
 
-            // Atualiza força do sinal a cada 10 segundos
             setInterval(async () => {
                 const symbol = 'BTCUSDT';
                 try {
@@ -1699,7 +1708,6 @@
                 } catch(e) { console.warn('Força do Sinal:', e); }
             }, 10000);
 
-            // Atualiza Fear & Greed a cada 10 min
             setInterval(async () => {
                 const fg = await fetchFearGreed();
                 if (fg) {
@@ -1714,7 +1722,6 @@
                 }
             }, 600000);
 
-            // Atualiza candles e avalia mercado a cada 5 min
             setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
                     const c1H = await fetchHistoricalCandles(symbol, '1h', 10);
@@ -1743,13 +1750,11 @@
                 }
                 await evaluateMarkets();
                 await updateTimeframeStats();
-                renderSignalTable(); // atualiza P&L ao vivo
+                renderSignalTable();
             }, 300000);
 
-            // Botão de aplicar parâmetros
             document.getElementById('live-apply-btn').addEventListener('click', applyLiveParams);
 
-            // Botão de teste Telegram
             document.getElementById('test-telegram-btn').addEventListener('click', async function() {
                 this.disabled = true;
                 document.getElementById('test-btn-label').innerHTML = '<span class="spinner"></span> Enviando...';
@@ -1758,7 +1763,6 @@
                 setTimeout(() => { document.getElementById('test-btn-label').textContent = '📨 Testar Alerta'; this.disabled = false; }, 3000);
             });
 
-            // Botão de backtest
             document.getElementById('run-backtest-btn').addEventListener('click', async function() {
                 this.disabled = true;
                 this.textContent = '⏳ Processando...';
@@ -1846,7 +1850,6 @@
                 } catch(e) { console.error(e); if (statusEl) statusEl.textContent = '❌ Erro: ' + e.message; } finally { this.disabled = false; this.textContent = '▶️ Executar Backtest'; }
             });
 
-            // Atualiza timestamp a cada segundo
             setInterval(() => {
                 const ts = getCurrentTimestamp();
                 const headerEl = DOM['header-timestamp'] || document.getElementById('header-timestamp');
@@ -1865,7 +1868,6 @@
                 }
             }, 1000);
 
-            // Atualiza P&L ao vivo a cada 2 segundos
             setInterval(() => {
                 renderSignalTable();
             }, 2000);
