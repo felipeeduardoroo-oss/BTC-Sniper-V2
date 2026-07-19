@@ -12,7 +12,6 @@ const PROXY_LIST = [
 ];
 
 async function fetchViaProxy(url, options = {}, retries = 2) {
-    // Tenta diretamente primeiro (se CORS permitir)
     try {
         const resp = await fetchWithTimeout(url, options, 10000);
         if (resp.ok) {
@@ -21,7 +20,6 @@ async function fetchViaProxy(url, options = {}, retries = 2) {
         }
     } catch (e) { /* continua para proxies */ }
 
-    // Tenta cada proxy em sequência com jitter
     for (let attempt = 0; attempt < retries; attempt++) {
         for (const proxy of PROXY_LIST) {
             const proxyUrl = proxy + encodeURIComponent(url);
@@ -32,7 +30,6 @@ async function fetchViaProxy(url, options = {}, retries = 2) {
                     try { return JSON.parse(text); } catch(e) { return text; }
                 }
             } catch (e) { 
-                // Jitter antes de tentar próximo proxy
                 await sleep(200 + Math.random() * 300);
             }
         }
@@ -40,7 +37,6 @@ async function fetchViaProxy(url, options = {}, retries = 2) {
     throw new Error(`Falha ao buscar ${url} após tentar todos os proxies`);
 }
 
-// ===== BUSCA DADOS DO FRED (Federal Reserve) =====
 async function fetchFRED(id) {
     const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=2025-01-01`;
     try {
@@ -102,11 +98,9 @@ export async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RET
     throw lastError || new Error(`Falha ao buscar ${url}`);
 }
 
-// ===== CACHE COM STALE-WHILE-REVALIDATE + localStorage =====
 const CACHE = new Map();
 
 function getCachedData(key, maxAge = CONFIG.CACHE_TTL_MS) {
-    // Primeiro tenta cache em memória
     const memEntry = CACHE.get(key);
     if (memEntry) {
         const age = Date.now() - memEntry.timestamp;
@@ -116,7 +110,6 @@ function getCachedData(key, maxAge = CONFIG.CACHE_TTL_MS) {
         }
         return { data: memEntry.data, stale: true };
     }
-    // Fallback para localStorage
     try {
         const raw = localStorage.getItem(`cache_${key}`);
         if (!raw) return null;
@@ -187,19 +180,12 @@ export const fetchEthGasPrice = async () => {
 };
 
 // ============================================================
-// 2. MACRO — stale-while-revalidate (mantém dados antigos)
+// 2. MACRO — stale-while-revalidate
 // ============================================================
-
 let macroFetching = false;
 
 async function fetchMacroDataFresh() {
-    let macro = {
-        dxy: null,
-        us10y: null,
-        vix: null,
-        spChange: null,
-        nasdaqChange: null
-    };
+    let macro = { dxy: null, us10y: null, vix: null, spChange: null, nasdaqChange: null };
 
     if (CONFIG.ALPHAVANTAGE_API_KEY) {
         try {
@@ -290,7 +276,6 @@ async function fetchMacroDataFresh() {
     if (macro.dxy !== null || macro.vix !== null) {
         return macro;
     }
-
     return null;
 }
 
@@ -428,7 +413,7 @@ export const fetchHashrate = async () => {
 };
 
 // ============================================================
-// 5. BLOCKCHAIR via proxy + fallback mempool
+// 5. BLOCKCHAIR
 // ============================================================
 export const fetchBlockchairStats = async () => {
     const cacheKey = 'blockchair';
@@ -467,7 +452,7 @@ export const fetchBlockchairStats = async () => {
 };
 
 // ============================================================
-// 6. OI Delta — Binance + Bybit fallback
+// 6. OI Delta
 // ============================================================
 export const fetchOIDelta = async (symbol = 'BTCUSDT') => {
     const cacheKey = `oi_delta_${symbol}`;
@@ -516,7 +501,7 @@ export const fetchOIDelta = async (symbol = 'BTCUSDT') => {
 };
 
 // ============================================================
-// 7. Put/Call Ratio — Deribit via proxy
+// 7. Put/Call Ratio
 // ============================================================
 export const fetchPutCallRatio = async () => {
     const cacheKey = 'pcr';
@@ -541,7 +526,7 @@ export const fetchPutCallRatio = async () => {
 };
 
 // ============================================================
-// 8. Basis (perp vs spot) — Binance + Bybit fallback
+// 8. Basis
 // ============================================================
 export const fetchBasis = async (symbol = 'BTCUSDT') => {
     const cacheKey = `basis_${symbol}`;
@@ -770,7 +755,7 @@ export const fetchOrderBook = async (symbol = 'BTCUSDT', limit = 10) => {
 };
 
 // ============================================================
-// 10. DEFI LLAMA — TVL 24h preciso
+// 10. DEFI LLAMA
 // ============================================================
 export const fetchDeFiData = async () => {
     const cacheKey = 'defiData';
@@ -850,7 +835,7 @@ export const fetchFearGreed = async () => {
 };
 
 // ============================================================
-// 11. ETF FLOWS — Farside scraping
+// 11. ETF FLOWS
 // ============================================================
 export const fetchETFData = async () => {
     const cacheKey = 'etfData';
@@ -897,14 +882,13 @@ export const fetchETFData = async () => {
 };
 
 // ============================================================
-// 12. MTF CONFLUENCE — com suporte a cache e cálculo local
+// 12. MTF CONFLUENCE — ÚNICA DEFINIÇÃO (corrigido)
 // ============================================================
 export async function getMTFConfluence(symbol, candlesMap = null) {
     const cacheKey = `mtf_${symbol}`;
     const cached = getCachedData(cacheKey, 300000);
     if (cached && !cached.stale) return cached;
 
-    // Se receber candlesMap, faz cálculo local (mais rápido para backtest)
     if (candlesMap && candlesMap.candles1H && candlesMap.candles4H) {
         const now = Date.now() / 1000;
         const relevant1H = candlesMap.candles1H.filter(c => c.time <= now).slice(-50);
@@ -937,7 +921,6 @@ export async function getMTFConfluence(symbol, candlesMap = null) {
         return result;
     }
 
-    // Comportamento original (via API)
     const timeframes = [
         { tf: '15m', weight: 1 },
         { tf: '1h',  weight: 2 },
@@ -1012,11 +995,12 @@ export async function getMTFConfluence(symbol, candlesMap = null) {
     return result;
 }
 
-// ===== MACRO BLACKOUT CACHE =====
+// ============================================================
+// MACRO BLACKOUT
+// ============================================================
 let macroBlackoutCache = { data: false, timestamp: 0 };
 
 export async function getMacroBlackoutStatus() {
-    // Cache de 15 minutos
     if (Date.now() - macroBlackoutCache.timestamp < 900000) {
         return macroBlackoutCache.data;
     }
@@ -1042,7 +1026,6 @@ export async function getMacroBlackoutStatus() {
         macroBlackoutCache = { data: false, timestamp: Date.now() };
         return false;
     } catch(e) {
-        // Fallback estático se a rede falhar
         const now = new Date();
         const day = now.getDay();
         const hour = now.getHours();
@@ -1055,11 +1038,8 @@ export async function getMacroBlackoutStatus() {
 // ============================================================
 // 13. FUNÇÕES HISTÓRICAS PARA BACKTEST
 // ============================================================
-
-// --- Funding Rate Histórico ---
 export async function fetchHistoricalFunding(symbol, startTime, endTime) {
     const cacheKey = `funding_hist_${symbol}_${startTime}_${endTime}`;
-    // Tenta cache (1 hora)
     const cached = getCachedData(cacheKey, 3600000);
     if (cached && !cached.stale) return cached;
 
@@ -1083,7 +1063,6 @@ export async function fetchHistoricalFunding(symbol, startTime, endTime) {
     return all;
 }
 
-// --- Open Interest Histórico ---
 export async function fetchHistoricalOI(symbol, startTime, endTime) {
     const cacheKey = `oi_hist_${symbol}_${startTime}_${endTime}`;
     const cached = getCachedData(cacheKey, 3600000);
@@ -1109,10 +1088,9 @@ export async function fetchHistoricalOI(symbol, startTime, endTime) {
     return all;
 }
 
-// --- MVRV Histórico (CoinMetrics) ---
 export async function fetchHistoricalMVRV(startDate, endDate) {
     const cacheKey = `mvrv_hist_${startDate}_${endDate}`;
-    const cached = getCachedData(cacheKey, 86400000); // 1 dia
+    const cached = getCachedData(cacheKey, 86400000);
     if (cached && !cached.stale) return cached;
 
     const url = `https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=CapMVRVCur&frequency=1d&start_time=${startDate}&end_time=${endDate}&page_size=1000`;
@@ -1128,14 +1106,13 @@ export async function fetchHistoricalMVRV(startDate, endDate) {
         }
     } catch (e) { /* fallback */ }
 
-    // Fallback: valor estático (para não quebrar o backtest)
     const fallback = [{ time: new Date(startDate).getTime() / 1000, value: 1.2 }];
     setCachedData(cacheKey, fallback);
     return fallback;
 }
 
 // ============================================================
-// 14. STUBS (compatibilidade)
+// 14. STUBS
 // ============================================================
 export const fetchFREDVIX = async () => null;
 export const fetchFREDUS10Y = async () => null;
