@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Backtest Engine — SMC + MTF (v3.6.0) com Robô de Sinais</title>
+    <title>Backtest Engine — SMC + MTF (v3.6.1) com Robô de Sinais</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
@@ -61,7 +61,7 @@
 </head>
 <body>
 <div class="container">
-    <h1>🧪 Backtest Engine — SMC + MTF (v3.6.0) com Robô de Sinais</h1>
+    <h1>🧪 Backtest Engine — SMC + MTF (v3.6.1) com Robô de Sinais</h1>
 
     <div class="io-section">
         <button class="btn-io" id="exportBtn">📤 Exportar cache</button>
@@ -154,16 +154,29 @@
 
     <div class="legend">
         <strong>Legenda:</strong> Dados: Preços (Binance 1h/4h), Funding Rate (Binance), OI (Binance), MVRV (CoinMetrics).<br>
-        <strong>v3.6.0:</strong> Adicionado Robô de Sinais com Telegram e cooldown.
+        <strong>v3.6.1:</strong> Correção de escopo da variável cachedData.
     </div>
 </div>
 
 <script type="module">
     // ============================================================
-    // BACKTEST ENGINE v3.6.0 – COM ROBÔ DE SINAIS (CÓDIGO COMPLETO)
+    // VARIÁVEIS GLOBAIS (declaradas PRIMEIRO)
     // ============================================================
+    let cachedData = {
+        candles1h: [],
+        candles4h: [],
+        funding: [],
+        oi: [],
+        mvrv: []
+    };
+    let cachedSymbol = null;
+    let lastResult = null;
+    let lastParams = null;
+    let liveInterval = null;
 
-    // ----- FUNÇÕES DO INDICADOR -----
+    // ============================================================
+    // FUNÇÕES DO INDICADOR
+    // ============================================================
     const calcEMA = (data, period) => {
         if (!data || data.length === 0) return [];
         const result = [];
@@ -396,55 +409,6 @@
             components: { mtf: mtfScore > 0 ? 'ALINHADO' : 'NEUTRO', smc: 'NEUTRO', mom: adxValue > adxThreshold ? 'FORTE' : 'FRACO', of: 'NEUTRO', macro: 'NEUTRO', oi: data.oiDelta > 0 ? 'CRESCENDO' : 'DIMINUINDO' },
             blockReason
         };
-    };
-
-    const calculateConfidenceScore = ({ 
-        mtfAligned, mtfAlignedParcial, adx, volumeAnomaly, fundingRate, 
-        openInterestTrend, divergence, macroBlackout, smcStructure, 
-        direction, scoreMinLong = 60, scoreMaxShort = 40 
-    }) => {
-        let score = 50;
-        const reasons = [];
-        const sign = direction === 'SHORT' ? -1 : 1;
-        if (mtfAligned) { score += sign * 18; reasons.push('MTF alinhado'); }
-        else if (mtfAlignedParcial) { score += sign * 8; reasons.push('MTF parcialmente alinhado'); }
-        else { score -= sign * 12; reasons.push('MTF desalinhado'); }
-        const adxVal = typeof adx === 'object' ? adx.adx : adx;
-        if (adxVal >= 25) { score += sign * 15; reasons.push(`ADX ${adxVal.toFixed(1)} forte`); }
-        else if (adxVal >= 20) { score += sign * 7; reasons.push(`ADX ${adxVal.toFixed(1)} formando`); }
-        else { score -= sign * 15; reasons.push(`ADX ${adxVal.toFixed(1)} lateral/fraco`); }
-        if (volumeAnomaly) {
-            if (volumeAnomaly.type === 'HIGH') { score += sign * 10; reasons.push('Volume alto'); }
-            else if (volumeAnomaly.type === 'LOW') { score -= sign * 5; reasons.push('Volume baixo'); }
-        }
-        if (smcStructure === 'BOS') { score += sign * 5; reasons.push('BOS confirmado'); }
-        const FUNDING_PENALTY = 18;
-        const FUNDING_BONUS = 8;
-        if (direction === 'LONG') {
-            if (fundingRate > 0.0006) { score -= FUNDING_PENALTY; reasons.push('Funding elevado (LONG)'); }
-            else if (fundingRate < 0) { score += FUNDING_BONUS; reasons.push('Funding negativo (LONG)'); }
-        } else if (direction === 'SHORT') {
-            if (fundingRate < -0.0006) { score -= FUNDING_PENALTY; reasons.push('Funding negativo (SHORT)'); }
-            else if (fundingRate > 0) { score += FUNDING_BONUS; reasons.push('Funding positivo (SHORT)'); }
-        }
-        if (divergence) {
-            if (divergence.type === 'BULLISH_REGULAR' && direction === 'LONG') { score += 15; reasons.push('Divergência RSI altista confirmada'); }
-            else if (divergence.type === 'BEARISH_REGULAR' && direction === 'SHORT') { score += 15; reasons.push('Divergência RSI baixista confirmada'); }
-        }
-        if (macroBlackout) { score -= 20; reasons.push('Macro blackout'); }
-        if (openInterestTrend === 'INCREASING' && direction === 'LONG') { score += 5; reasons.push('OI crescente LONG'); }
-        else if (openInterestTrend === 'DECREASING' && direction === 'SHORT') { score += 5; reasons.push('OI decrescente SHORT'); }
-        score = Math.min(100, Math.max(0, score));
-        let level = 'MEDIUM';
-        if (score >= 75) level = 'VERY_HIGH';
-        else if (score >= 60) level = 'HIGH';
-        else if (score >= 40) level = 'MEDIUM';
-        else if (score >= 20) level = 'LOW';
-        else level = 'VERY_LOW';
-        let finalDirection = 'NEUTRO';
-        if (score >= scoreMinLong) finalDirection = 'LONG';
-        else if (score <= scoreMaxShort) finalDirection = 'SHORT';
-        return { score, level, direction: finalDirection, reasons };
     };
 
     // ----- FETCH -----
@@ -1744,8 +1708,8 @@
         alert(`Relatório HTML e CSV baixados com sucesso!\nTrades: ${closed.length}`);
     }
 
-    // ============================================================
-    // UI – BACKTEST E BOTÕES EXISTENTES
+        // ============================================================
+    // UI – BACKTEST E BOTÕES
     // ============================================================
 
     const getParam = (id) => {
@@ -1960,7 +1924,7 @@
     });
 
     // ============================================================
-    // ROBÔ DE SINAIS – NOVO (ADICIONADO AQUI)
+    // ROBÔ DE SINAIS
     // ============================================================
 
     const ROBOT_ASSETS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
@@ -1972,7 +1936,6 @@
     // Carrega histórico de sinais do localStorage
     let alertLog = JSON.parse(localStorage.getItem('alertLog')) || [];
 
-    // Função para enviar mensagem via Telegram
     async function sendTelegramAlert(message) {
         const TELEGRAM_TOKEN = '8670184440:AAFBfhFFTMnUWsgIFyRh0huBYbL-Q_vhT5k';
         const TELEGRAM_CHAT_ID = '1137196768';
@@ -1990,7 +1953,6 @@
         }
     }
 
-    // Formata e envia alerta de sinal
     async function sendSignalAlert(symbol, signal) {
         const dir = signal.direction;
         const emoji = dir === 'LONG' ? '🟢' : '🔴';
@@ -2026,7 +1988,6 @@
         }
     }
 
-    // Função que verifica um símbolo e retorna sinal ou null
     async function checkSignal(symbol) {
         try {
             const now = Date.now();
@@ -2534,7 +2495,7 @@
         });
     })();
 
-    console.log('Backtest Engine v3.6.0 – com Robô de Sinais carregado.');
+    console.log('Backtest Engine v3.6.1 – corrigido escopo de cachedData.');
 </script>
 </body>
 </html>
