@@ -2,13 +2,13 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8" />
-   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-   <link rel="preconnect" href="https://fonts.googleapis.com">
-   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <title>Dashboard Institucional — V2 Engine</title>
-   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-   <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         /* ===== CSS COMPLETO ===== */
         :root {
@@ -56,24 +56,8 @@
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 32px; }
         .score-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
         .confirmation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .candle-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 16px 20px 12px 20px;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            min-height: 380px;
-        }
-        .summary-card, .score-box, .confirmation-pillar, .whale-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 20px;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+        .candle-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px 12px 20px; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; height: 100%; min-height: 380px; }
+        .summary-card, .score-box, .confirmation-pillar, .whale-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
         .candle-card:hover, .summary-card:hover, .score-box:hover { border-color: var(--border-active); background: var(--bg-card-hover); transform: translateY(-2px); box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3); }
         .candle-card h3, .summary-card h3 { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; font-weight: 500; }
         .summary-card .value { font-size: 1.75rem; font-weight: 700; margin-bottom: 4px; font-family: var(--font-mono); letter-spacing: -0.5px; }
@@ -150,50 +134,15 @@
         .confidence-MEDIUM { background: rgba(255,193,7,0.15); color: #ffc107; border: 1px solid #ffc107; }
         .confidence-LOW { background: rgba(255,152,0,0.15); color: #ff9800; border: 1px solid #ff9800; }
         .confidence-VERY_LOW { background: rgba(255,82,82,0.15); color: #ff5252; border: 1px solid #ff5252; }
-        .backtest-btn {
-            background: var(--accent-purple);
-            color: #fff;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 10px 25px -5px rgba(124, 58, 237, 0.4);
-        }
+        .backtest-btn { background: var(--accent-purple); color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 10px 25px -5px rgba(124, 58, 237, 0.4); }
         .backtest-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(124, 58, 237, 0.6); }
         .backtest-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-        .score-footer {
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px solid var(--border);
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            display: flex;
-            align-items: flex-start;
-            gap: 6px;
-            line-height: 1.4;
-        }
+        .score-footer { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 0.7rem; color: var(--text-muted); display: flex; align-items: flex-start; gap: 6px; line-height: 1.4; }
         .score-footer .info-icon { flex-shrink: 0; margin-top: 1px; }
         .score-footer strong { color: var(--text-light); }
         .score-footer .highlight { color: var(--accent-yellow); }
-        .score-bars-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-bottom: 32px;
-        }
-        .score-bar-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 16px 20px;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
+        .score-bars-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+        .score-bar-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; gap: 6px; }
         .score-bar-card h3 { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 500; margin: 0; }
         .score-bar-card .score-value-large { font-size: 2.2rem; font-weight: 700; font-family: var(--font-mono); letter-spacing: -1px; }
         .score-bar-card .score-bar-track { width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; }
@@ -203,21 +152,11 @@
         .score-bar-card .score-direction.short { color: var(--accent-red); }
         .score-bar-card .score-direction.neutral { color: var(--text-muted); }
         @media (max-width: 768px) { .score-bars-grid { grid-template-columns: 1fr; } }
-        .live-params {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 16px 20px;
-            margin-bottom: 24px;
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 16px 24px;
-        }
+        .live-params { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; }
         .live-params label { font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
         .live-params input[type="number"] { width: 70px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-dark); color: var(--text-light); font-family: var(--font-mono); font-size: 0.9rem; }
         .live-params input[type="checkbox"] { accent-color: var(--accent-blue); width: 16px; height: 16px; cursor: pointer; }
-        .live-params .param-group { display: flex; align-items: center; gap: 6px; }
+        .live-params .param-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
         .live-params .badge-param { background: rgba(255,255,255,0.05); padding: 2px 10px; border-radius: 12px; font-size: 0.7rem; color: var(--text-muted); border: 1px solid var(--border); }
     </style>
 </head>
@@ -241,35 +180,77 @@
         <!-- ===== PAINEL DE PARÂMETROS AO VIVO ===== -->
         <div class="live-params">
             <div class="param-group">
-                <label for="live-score-min">Score mínimo LONG:
-                    <input type="number" id="live-score-min" value="50" min="0" max="100" step="1">
-                </label>
-                <span class="badge-param" id="live-score-badge">Atual: 50</span>
+                <label for="live-score-min">Score min LONG: <input type="number" id="live-score-min" value="68" min="0" max="100" step="1"></label>
+                <span class="badge-param" id="live-score-badge">68</span>
             </div>
             <div class="param-group">
-                <label for="live-adx-min">ADX mínimo:
-                    <input type="number" id="live-adx-min" value="17" min="0" max="100" step="1">
-                </label>
-                <span class="badge-param" id="live-adx-badge">Atual: 17</span>
+                <label for="live-score-max-short">Score max SHORT: <input type="number" id="live-score-max-short" value="32" min="0" max="100" step="1"></label>
+                <span class="badge-param" id="live-score-short-badge">32</span>
             </div>
             <div class="param-group">
-                <label for="live-score-max-short">Score máximo SHORT:
-                    <input type="number" id="live-score-max-short" value="49" min="0" max="100" step="1">
-                </label>
-                <span class="badge-param" id="live-score-short-badge">Atual: 49</span>
+                <label for="live-adx-min">ADX min: <input type="number" id="live-adx-min" value="22" min="0" max="100" step="1"></label>
+                <span class="badge-param" id="live-adx-badge">22</span>
             </div>
             <div class="param-group">
-                <label for="live-rr-min">R:R mínimo:
-                    <input type="number" id="live-rr-min" value="1.5" min="0.1" max="10" step="0.1">
-                </label>
-                <span class="badge-param" id="live-rr-badge">Atual: 1.5</span>
+                <label for="live-rr-min">R:R min: <input type="number" id="live-rr-min" value="1.8" min="0.1" max="10" step="0.1"></label>
+                <span class="badge-param" id="live-rr-badge">1.8</span>
+            </div>
+            <!-- NOVOS CAMPOS -->
+            <div class="param-group">
+                <label>Stop LONG (ATR): <input type="number" id="live-stop-long" value="1.5" min="0.5" max="5" step="0.1"></label>
             </div>
             <div class="param-group">
-                <label><input type="checkbox" id="live-require-bos" checked> Exigir BOS</label>
-                <label><input type="checkbox" id="live-require-retest" checked> Exigir retest</label>
-                <label><input type="checkbox" id="live-require-mtf" checked> Exigir MTF</label>
-                <button id="live-apply-btn" class="backtest-btn" style="padding:6px 16px;font-size:0.8rem;background:var(--accent-blue);">Aplicar</button>
+                <label>Stop SHORT (ATR): <input type="number" id="live-stop-short" value="2.0" min="0.5" max="5" step="0.1"></label>
             </div>
+            <div class="param-group">
+                <label>TP1 LONG (ATR): <input type="number" id="live-tp1-long" value="2.0" min="0.5" max="10" step="0.1"></label>
+            </div>
+            <div class="param-group">
+                <label>TP1 SHORT (ATR): <input type="number" id="live-tp1-short" value="1.5" min="0.5" max="10" step="0.1"></label>
+            </div>
+            <div class="param-group">
+                <label>TP2 (ATR): <input type="number" id="live-tp2-dist" value="4.0" min="1.0" max="15" step="0.1"></label>
+            </div>
+            <div class="param-group">
+                <label>Trail LONG (ATR): <input type="number" id="live-trail-long" value="1.2" min="0.5" max="5" step="0.1"></label>
+            </div>
+            <div class="param-group">
+                <label>Trail SHORT (ATR): <input type="number" id="live-trail-short" value="1.5" min="0.5" max="5" step="0.1"></label>
+            </div>
+            <div class="param-group">
+                <label>TP1 %: <input type="number" id="live-tp1-pct" value="40" min="5" max="90" step="5"></label>
+            </div>
+            <div class="param-group">
+                <label>TP2 %: <input type="number" id="live-tp2-pct" value="40" min="5" max="90" step="5"></label>
+            </div>
+            <div class="param-group">
+                <label>Runner %: <input type="number" id="live-runner-pct" value="20" min="5" max="90" step="5"></label>
+            </div>
+            <div class="param-group">
+                <label>Max Hold (h): <input type="number" id="live-max-hold" value="72" min="1" max="500" step="1"></label>
+            </div>
+            <div class="param-group">
+                <label>HTF Bull Velas: <input type="number" id="live-htf-bull" value="3" min="1" max="20" step="1"></label>
+            </div>
+            <div class="param-group">
+                <label>HTF Bear Velas: <input type="number" id="live-htf-bear" value="6" min="1" max="20" step="1"></label>
+            </div>
+            <div class="param-group">
+                <label>DI diff LONG: <input type="number" id="live-di-long" value="0" min="0" max="20" step="1"></label>
+            </div>
+            <div class="param-group">
+                <label>DI diff SHORT: <input type="number" id="live-di-short" value="5" min="0" max="20" step="1"></label>
+            </div>
+            <div class="param-group">
+                <label>MVRV drop %: <input type="number" id="live-mvrv-drop" value="15" min="1" max="100" step="1"></label>
+            </div>
+            <div class="param-group">
+                <label><input type="checkbox" id="live-require-bos" checked> BOS</label>
+                <label><input type="checkbox" id="live-require-retest" checked> Retest</label>
+                <label><input type="checkbox" id="live-require-mtf" checked> MTF</label>
+                <label><input type="checkbox" id="live-require-sweep"> Sweep</label>
+            </div>
+            <button id="live-apply-btn" class="backtest-btn" style="padding:6px 16px;font-size:0.8rem;background:var(--accent-blue);">Aplicar</button>
         </div>
 
         <!-- ===== GRÁFICOS DE CANDLESTICK ===== -->
@@ -553,8 +534,15 @@
 
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
+    <!-- ========================================================== -->
+    <!-- INÍCIO DO SCRIPT PRINCIPAL (continua na Parte 2)           -->
+    <!-- ========================================================== -->
     <script type="module">
-        // ===== IMPORTAÇÕES =====
+
+        // ================================================================
+// SCRIPT PRINCIPAL – Parte 2 (continuação)
+// ================================================================
+
         import {
             fetchHistoricalCandles,
             fetchFundingRate,
@@ -576,7 +564,10 @@
             fetchHashrate,
             fetchOIDelta,
             sleep,
-            getMacroBlackoutStatus
+            getMacroBlackoutStatus,
+            fetchHistoricalFunding,
+            fetchHistoricalOI,
+            fetchHistoricalMVRV
         } from './js/dados_externos.js';
 
         import * as indicadores from './js/indicadores.js';
@@ -586,6 +577,14 @@
         import * as historico from './js/historicos_sinais.js';
         import { CONFIG } from './js/config.js';
         import { runBacktest } from './js/backtest.js';
+
+        // ===== NOVAS IMPORTAÇÕES DO RISK MANAGEMENT =====
+        import {
+            checkBOSAndRetest,
+            calculateStopAndTargets,
+            checkPositionManagement,
+            getMTFAlignmentLocal
+        } from './js/risk_management.js';
 
         // ===== INTERCEPTAÇÃO YAHOO =====
         const originalFetch = window.fetch;
@@ -597,40 +596,39 @@
             return originalFetch(url, options);
         };
 
-        // ===== BOS E RETEST (SWING_LOOKBACK = 3) =====
-        function checkBOSAndRetest(state, direction, retestDistPct) {
-            const SWING_LOOKBACK = 3;
-            const recentHighs = state.swingHighs.slice(-SWING_LOOKBACK);
-            const recentLows = state.swingLows.slice(-SWING_LOOKBACK);
-            if (direction === 'LONG') {
-                const brokenLevel = recentHighs.length ? Math.max(...recentHighs) : null;
-                if (!brokenLevel) return { bos: false, retest: false, level: null };
-                const bos = state.price > brokenLevel;
-                const retest = bos && Math.abs(state.price - brokenLevel) / brokenLevel < retestDistPct;
-                return { bos, retest, level: brokenLevel };
-            } else if (direction === 'SHORT') {
-                const brokenLevel = recentLows.length ? Math.min(...recentLows) : null;
-                if (!brokenLevel) return { bos: false, retest: false, level: null };
-                const bos = state.price < brokenLevel;
-                const retest = bos && Math.abs(state.price - brokenLevel) / brokenLevel < retestDistPct;
-                return { bos, retest, level: brokenLevel };
-            }
-            return { bos: false, retest: false, level: null };
-        }
-
-        // ===== ROBOT_CONFIG – Parâmetros do Relatório =====
+        // ===== ROBOT_CONFIG (com todos os novos parâmetros) =====
         const ROBOT_CONFIG = {
-            scoreMin: 50,
-            scoreMaxShort: 49,
-            adxMin: 17,
-            rrMin: 1.5,
-            requireBOS: false,
-            requireRetest: false,
-            requireMTF: false,
+            scoreMin: 68,
+            scoreMaxShort: 32,
+            adxMin: 22,
+            rrMin: 1.8,
+            requireBOS: true,
+            requireRetest: true,
+            requireMTF: true,
+            requireSweep: false,
             requireEMARetest: false,
-            retestDistPct: 0.04,
+            retestDistPct: 0.02,
+            stopLong: 1.5,
+            stopShort: 2.0,
+            tp1Long: 2.0,
+            tp1Short: 1.5,
+            tp2Dist: 4.0,
+            trailLong: 1.2,
+            trailShort: 1.5,
+            tp1Pct: 0.4,
+            tp2Pct: 0.4,
+            runnerPct: 0.2,
+            maxHoldHours: 72,
+            htfBullishVelas: 3,
+            htfBearishVelas: 6,
+            diDiffMinLong: 0,
+            diDiffMinShort: 5,
+            mvrvDropPercent: 0.15,
+            zFundingMax: 1.5,
+            zOiMax: 1.5
         };
-        console.log('[ROBOT] Configuração:', ROBOT_CONFIG);
+
+        console.log('[ROBOT] Configuração carregada:', ROBOT_CONFIG);
 
         // ===== IMPORTS LIMPOS =====
         const {
@@ -656,7 +654,8 @@
                 htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity },
                 mtfConfluence: null, adx: 0, plusDI: 0, minusDI: 0, divergence: null,
                 volumeAnomaly: null, macroBlackout: false, vwap: 0,
-                mvrv: null, sopr: null, realizedPrice: null, fearGreedData: null
+                mvrv: null, sopr: null, realizedPrice: null, fearGreedData: null,
+                score: 50, direction: 'NEUTRO'
             };
         });
 
@@ -881,7 +880,7 @@
                 if (!fundFilt.pass) blocked.push(fundFilt.reason);
                 const canTrade = blocked.length === 0 && scoreData.score >= 55;
                 let trailingParams = canTrade ? generateTrailingStopParams(candles, indicators.close, scoreData.direction) : null;
-                // Atualiza UI do comitê (código encurtado, mas funcional)
+                // Atualiza UI do comitê
                 const bar = document.getElementById('committee-bar'); if (bar) bar.style.width = scoreData.score + '%';
                 document.getElementById('committee-score').textContent = scoreData.score;
                 const label = document.getElementById('committee-label');
@@ -1094,7 +1093,7 @@
                         if (assetsData[symbol]) {
                             assetsData[symbol].price = price;
                             updateLivePriceUI(symbol, price);
-                            if (activePositions[symbol]) checkPositionManagement(symbol, price);
+                            if (activePositions[symbol]) checkPositionManagementLive(symbol, price);
                         }
                     } else if (stream.includes('@kline')) {
                         const k = data.k;
@@ -1133,7 +1132,7 @@
                             if (assetsData[symbol]) {
                                 assetsData[symbol].price = price;
                                 updateLivePriceUI(symbol, price);
-                                if (activePositions[symbol]) checkPositionManagement(symbol, price);
+                                if (activePositions[symbol]) checkPositionManagementLive(symbol, price);
                             }
                         }
                     } catch(e) { /* ignora */ }
@@ -1206,99 +1205,74 @@
             updateAnalysisScores(s);
         }
 
-        function updateActiveTradesUI() {}
-
-        function checkPositionManagement(symbol, currentPrice) {
+        // ===== NOVA GESTÃO DE POSIÇÃO AO VIVO (usa risk_management) =====
+        function checkPositionManagementLive(symbol, currentPrice) {
             const pos = activePositions[symbol];
             if (!pos) return;
             const data = assetsData[symbol];
-            const MAX_HOLD_HOURS = 12;
-            if (pos.entryTime && (Date.now() - pos.entryTime) / (1000 * 60 * 60) >= MAX_HOLD_HOURS && !pos.movedToBE) {
-                const isProfitable = pos.type === 'LONG' ? currentPrice > pos.entryPrice : currentPrice < pos.entryPrice;
-                closePosition(symbol, `TIME EXIT (${MAX_HOLD_HOURS}h)`, isProfitable);
-                return;
-            }
-            let updateUI = false;
-            if (pos.type === 'LONG') {
-                if (data.swingLows.length > 0) {
-                    const lastSwingLow = Math.min(...data.swingLows);
-                    let newTrail = lastSwingLow - (data.atr_1H * 0.2);
-                    if (data.atrHistory && data.atrHistory.length > 20) {
-                        const avgATR = data.atrHistory.slice(-20).reduce((a, b) => a + b, 0) / 20;
-                        if (data.atr_1H > avgATR * 1.5) newTrail -= data.atr_1H * 0.1;
-                        else if (data.atr_1H < avgATR * 0.7) newTrail += data.atr_1H * 0.1;
-                    }
-                    if (newTrail > pos.trailingStop) { pos.trailingStop = newTrail; telegram.sendTelegramAlert(`📈 TRAILING STOP AJUSTADO (${symbol}) - $${newTrail.toFixed(2)}`); }
-                }
-                if (currentPrice >= pos.tp1 && !pos.partialTaken) {
-                    pos.partialTaken = true; pos.sizeRemaining = 0.5; pos.realizedPNL = (pos.tp1 - pos.entryPrice) * 0.5;
-                    pos.trailingStop = pos.entryPrice + (data.atr_1H * 0.1); pos.movedToBE = true;
-                    telegram.sendTelegramAlert(`🎯 TP1 PARCIAL (${symbol}) - 50% em $${pos.tp1.toFixed(2)}`);
-                    updateUI = true;
-                }
-                if (currentPrice >= pos.tp2) { closePosition(symbol, 'TP2 ATINGIDO', true); updateUI = true; }
-                else if (currentPrice <= pos.trailingStop) { closePosition(symbol, pos.movedToBE ? 'Trailing Stop/BE' : 'Stop Loss', pos.movedToBE); updateUI = true; }
+            if (!data) return;
+
+            // Construir candle simplificado para a função de gestão
+            const candle = {
+                time: Date.now() / 1000,
+                high: currentPrice * 1.001, // aproximação, mas a função usa high/low para verificar TP/stop
+                low: currentPrice * 0.999,
+                close: currentPrice,
+                open: currentPrice // não usado
+            };
+            // Precisamos de um state com os dados necessários
+            const state = {
+                atr_1H: data.atr_1H || (currentPrice * 0.02),
+                atrHistory: data.atrHistory || [],
+                swingHighs: data.swingHighs || [],
+                swingLows: data.swingLows || [],
+                volatilityFactor: data.volatilityFactor || 1.0,
+                price: currentPrice
+            };
+
+            // Parâmetros para gestão
+            const params = {
+                tp1Pct: ROBOT_CONFIG.tp1Pct,
+                tp2Pct: ROBOT_CONFIG.tp2Pct,
+                runnerPct: ROBOT_CONFIG.runnerPct,
+                trailLong: ROBOT_CONFIG.trailLong,
+                trailShort: ROBOT_CONFIG.trailShort,
+                maxHoldHours: ROBOT_CONFIG.maxHoldHours
+            };
+
+            // Atualiza trailing stop a cada chamada (para manter sincronizado)
+            // A função checkPositionManagement já faz isso internamente.
+
+            const result = checkPositionManagement(pos, state, candle, params);
+            if (result.closed) {
+                // Fechou a posição
+                const pnlUsd = result.totalPnlUsd || 0;
+                const pnlPct = result.totalPnlPct || 0;
+                // Atualiza histórico
+                updateSignalStatus(symbol, result.exitPrice, pnlUsd);
+                // Envia alerta
+                telegram.sendTelegramAlert(
+                    `${pnlUsd >= 0 ? '✅' : '❌'} POSIÇÃO FECHADA (${symbol}) - ${result.reason} - P&L: ${pnlPct.toFixed(2)}%`
+                );
+                delete activePositions[symbol];
+                renderSignalTable();
+                updateActiveTradesUI();
             } else {
-                if (data.swingHighs.length > 0) {
-                    const lastSwingHigh = Math.max(...data.swingHighs);
-                    let newTrail = lastSwingHigh + (data.atr_1H * 0.2);
-                    if (data.atrHistory && data.atrHistory.length > 20) {
-                        const avgATR = data.atrHistory.slice(-20).reduce((a, b) => a + b, 0) / 20;
-                        if (data.atr_1H > avgATR * 1.5) newTrail += data.atr_1H * 0.1;
-                        else if (data.atr_1H < avgATR * 0.7) newTrail -= data.atr_1H * 0.1;
-                    }
-                    if (newTrail < pos.trailingStop || pos.trailingStop === 0) { pos.trailingStop = newTrail; telegram.sendTelegramAlert(`📉 TRAILING STOP AJUSTADO (${symbol}) - $${newTrail.toFixed(2)}`); }
-                }
-                if (currentPrice <= pos.tp1 && !pos.partialTaken) {
-                    pos.partialTaken = true; pos.sizeRemaining = 0.5; pos.realizedPNL = (pos.entryPrice - pos.tp1) * 0.5;
-                    pos.trailingStop = pos.entryPrice - (data.atr_1H * 0.1); pos.movedToBE = true;
-                    telegram.sendTelegramAlert(`🎯 TP1 PARCIAL (${symbol}) - 50% em $${pos.tp1.toFixed(2)}`);
-                    updateUI = true;
-                }
-                if (currentPrice <= pos.tp2) { closePosition(symbol, 'TP2 ATINGIDO', true); updateUI = true; }
-                else if (currentPrice >= pos.trailingStop) { closePosition(symbol, pos.movedToBE ? 'Trailing Stop/BE' : 'Stop Loss', pos.movedToBE); updateUI = true; }
+                // Atualiza a posição no estado
+                activePositions[symbol] = result.position;
+                // Se o trailing stop mudou, podemos notificar (opcional)
+                // Podemos enviar uma mensagem de ajuste se desejar
+                // Para não sobrecarregar, vamos silencioso
             }
-            if (updateUI) updateActiveTradesUI();
         }
 
-        function closePosition(symbol, reason, isWin) {
-            const pos = activePositions[symbol];
-            if (!pos) return;
-            const stats = banco.getTradeStats();
-            if (isWin) stats.wins++; else stats.losses++;
-            banco.setTradeStats(stats);
-            const currentPrice = assetsData[symbol].price;
-            const pnlPct = pos.type === 'LONG' ? ((currentPrice - pos.entryPrice) / pos.entryPrice) * 100 : ((pos.entryPrice - currentPrice) / pos.entryPrice) * 100;
-            const pnlUsd = (pnlPct / 100) * 10000;
-            telegram.sendTelegramAlert(`${isWin ? '✅' : '❌'} POSIÇÃO FECHADA (${symbol}) - ${reason} - P&L: ${pnlPct.toFixed(2)}%`);
-            updateSignalStatus(symbol, currentPrice, pnlUsd);
-            delete activePositions[symbol];
-            updateActiveTradesUI();
+        function updateActiveTradesUI() {
+            // Atualiza o painel de trades ativos (pode ser implementado depois)
         }
 
-        async function updateMTFAndOI() {
-            await Promise.all(CONFIG.ASSETS.map(async (symbol) => {
-                try {
-                    const [mtf, oi] = await Promise.all([getMTFConfluence(symbol), fetchOpenInterest(symbol)]);
-                    assetsData[symbol].mtfConfluence = mtf;
-                    if (oi && typeof oi.delta === 'number') assetsData[symbol].oiDelta = oi.delta;
-                } catch(e) { console.warn(`[MTF/OI] ${symbol}:`, e); }
-            }));
-        }
-
-        // ===== AVALIAÇÃO DE MERCADO (COM MELHORIAS) =====
+        // ===== AVALIAÇÃO DE MERCADO (COM NOVA LÓGICA DE ENTRADA) =====
         async function evaluateMarkets() {
             const macroBlackout = await getMacroBlackoutStatus();
-
-            // Busca dados diários para calcular MA200 (caso o mtfData não forneça belowMA200)
-            let btcDailyCandles = [];
-            try {
-                const btcDaily = await fetchHistoricalCandles('BTCUSDT', '1d', 210);
-                if (btcDaily && btcDaily.length >= 200) btcDailyCandles = btcDaily;
-            } catch(e) { /* ignora */ }
-
-            // Obtém MVRV do BTC para usar como bônus em todos os ativos
-            const btcMvrv = assetsData['BTCUSDT']?.mvrv;
 
             for (const symbol of CONFIG.ASSETS) {
                 const data = assetsData[symbol];
@@ -1309,7 +1283,7 @@
                 data.plusDI = adxData.plusDI;
                 data.minusDI = adxData.minusDI;
 
-                // Calcula RSI
+                // RSI e divergência
                 let rsiValues = [];
                 let avgGain = 0, avgLoss = 0;
                 const closes1H = data.candles1H.map(c => c.close);
@@ -1329,35 +1303,26 @@
                 }
                 data.divergence = detectRSIDivergence(data.candles1H, rsiValues);
 
-                // Volatilidade e Volume
                 const currentATR = data.atr_1H || 0;
                 const avgPrice = data.candles1H.slice(-20).reduce((s,c) => s+c.close,0)/20;
                 const volatilityPct = avgPrice > 0 ? (currentATR / avgPrice) * 100 : 1.5;
                 const volThreshold = volatilityPct > 2 ? 2.5 : 1.8;
                 data.volumeAnomaly = detectVolumeAnomaly(data.candles1H, 20, volThreshold);
 
-                // VWAP
                 const last24Candles = data.candles1H.slice(-24);
                 data.vwap = calculateVWAP(last24Candles);
                 data.macroBlackout = macroBlackout;
 
-                // ===== MTF CONFLUENCE COM belowMA200 =====
-                const mtfData = await getMTFConfluence(symbol);
-                data.mtfConfluence = mtfData;
-                const mtf = mtfData || {};
-
-                // Se o mtfData não tiver belowMA200, calculamos aqui com os candles diários
-                let belowMA200 = mtf.belowMA200 ?? false;
-                if (!belowMA200 && btcDailyCandles.length >= 200) {
-                    const closesDaily = btcDailyCandles.map(c => c.close);
-                    const ma200 = calcEMA(closesDaily, 200).slice(-1)[0];
-                    const lastPrice = closesDaily[closesDaily.length - 1];
-                    belowMA200 = lastPrice < ma200;
-                }
+                // MTF usando getMTFAlignmentLocal (mais rápido e local)
+                const mtf = getMTFAlignmentLocal(data.candles1H, data.candles4H, Date.now()/1000, {
+                    htfBullishVelas: ROBOT_CONFIG.htfBullishVelas,
+                    htfBearishVelas: ROBOT_CONFIG.htfBearishVelas
+                });
+                data.mtfConfluence = mtf;
 
                 const mtfAligned = ROBOT_CONFIG.requireMTF ? (mtf?.alinhado || false) : true;
 
-                // ===== SCORE INICIAL (CONFIANÇA) usando adxThreshold =====
+                // Score e confiança
                 const scoreData = computeScore(symbol, assetsData, liqMap, ROBOT_CONFIG.adxMin);
                 let blockReason = scoreData.blockReason;
 
@@ -1376,61 +1341,53 @@
                 });
 
                 let score = confidence.score;
-
-                // ===== FILTRO MACRO: belowMA200 (penalidade proporcional) =====
-                const tempDirection = (score >= ROBOT_CONFIG.scoreMin) ? 'LONG' : (score <= ROBOT_CONFIG.scoreMaxShort ? 'SHORT' : null);
-
-                if (belowMA200 && tempDirection === 'LONG') {
-                    score = Math.max(25, score - 12);
-                }
-
-                // ===== FILTROS ADICIONAIS =====
-                const adxValue = typeof data.adx === 'object' ? data.adx.adx : data.adx;
-                if (adxValue < ROBOT_CONFIG.adxMin && !blockReason) {
-                    blockReason = blockReason ? blockReason + `; ADX < ${ROBOT_CONFIG.adxMin} (lateral)` : `ADX < ${ROBOT_CONFIG.adxMin} (lateral)`;
-                }
-                if (data.macroBlackout && !blockReason) {
-                    blockReason = blockReason ? blockReason + '; Macro blackout' : 'Macro blackout';
-                }
-
-                // ===== DIREÇÃO PRIMÁRIA (usa score ajustado) =====
                 const primaryDirection = (score >= ROBOT_CONFIG.scoreMin) ? 'LONG' : (score <= ROBOT_CONFIG.scoreMaxShort ? 'SHORT' : null);
 
+                // Filtros específicos
+                const adxVal = typeof data.adx === 'object' ? data.adx.adx : data.adx;
+                if (adxVal < ROBOT_CONFIG.adxMin && !blockReason) {
+                    blockReason = `ADX < ${ROBOT_CONFIG.adxMin}`;
+                }
+                if (data.macroBlackout && !blockReason) {
+                    blockReason = 'Macro blackout';
+                }
                 if (primaryDirection === 'LONG' && data.price < data.vwap && !blockReason) {
-                    blockReason = blockReason ? blockReason + '; Preço abaixo do VWAP' : 'Preço abaixo do VWAP';
+                    blockReason = 'Preço abaixo do VWAP';
                 } else if (primaryDirection === 'SHORT' && data.price > data.vwap && !blockReason) {
-                    blockReason = blockReason ? blockReason + '; Preço acima do VWAP' : 'Preço acima do VWAP';
+                    blockReason = 'Preço acima do VWAP';
                 }
 
-                if (ROBOT_CONFIG.requireMTF) {
-                    if (primaryDirection === 'LONG' && data.htfStructure.bias === 'BEARISH' && !blockReason) {
-                        blockReason = blockReason ? blockReason + '; HTF 4H Bearish' : 'HTF 4H Bearish';
-                    }
-                    if (primaryDirection === 'SHORT' && data.htfStructure.bias === 'BULLISH' && !blockReason) {
-                        blockReason = blockReason ? blockReason + '; HTF 4H Bullish' : 'HTF 4H Bullish';
+                // DI diff
+                if (primaryDirection === 'LONG' && !blockReason && (data.plusDI - data.minusDI) < ROBOT_CONFIG.diDiffMinLong) {
+                    blockReason = `DI diff < ${ROBOT_CONFIG.diDiffMinLong}`;
+                }
+                if (primaryDirection === 'SHORT' && !blockReason && (data.minusDI - data.plusDI) < ROBOT_CONFIG.diDiffMinShort) {
+                    blockReason = `DI diff < ${ROBOT_CONFIG.diDiffMinShort}`;
+                }
+
+                // HTF
+                if (primaryDirection === 'LONG' && !blockReason && mtf.bias === 'BEARISH') {
+                    blockReason = `HTF 4H Bearish (${ROBOT_CONFIG.htfBullishVelas} velas bullish necessárias)`;
+                }
+                if (primaryDirection === 'SHORT' && !blockReason && mtf.bias === 'BULLISH') {
+                    blockReason = `HTF 4H Bullish (${ROBOT_CONFIG.htfBearishVelas} velas bearish necessárias)`;
+                }
+
+                // MVRV drop para SHORT
+                if (primaryDirection === 'SHORT' && !blockReason && data.mvrvHistory && data.mvrvHistory.length > 0) {
+                    const peak = Math.max(...data.mvrvHistory);
+                    const drop = peak > 0 ? (peak - data.mvrv) / peak : 0;
+                    if (drop > ROBOT_CONFIG.mvrvDropPercent) {
+                        blockReason = `MVRV drop ${(drop*100).toFixed(1)}%`;
                     }
                 }
 
                 if (!blockReason) {
-                    const derivCheck = checkDerivativesFilter(data.fundingRate, data.oiDelta);
-                    if (!derivCheck.allow) blockReason = derivCheck.reason;
+                    const deriv = checkDerivativesFilter(data.fundingRate, data.oiDelta);
+                    if (!deriv.allow) blockReason = deriv.reason;
                 }
 
-                // ===== BÔNUS ON-CHAIN ESTENDIDO A TODOS OS ATIVOS =====
-                let onChainMultiplier = 1.0;
-                if (btcMvrv !== null && btcMvrv !== undefined) {
-                    const fgVal = data.fearGreedData?.value ?? assetsData['BTCUSDT']?.fearGreedData?.value;
-                    if (primaryDirection === 'LONG' && btcMvrv < 0.8 && fgVal !== null && fgVal < 25) {
-                        onChainMultiplier = 1.2;
-                        console.log(`[On-Chain Bônus] ${symbol} LONG em capitulação (MVRV BTC baixo + medo extremo)`);
-                    }
-                    if (primaryDirection === 'SHORT' && btcMvrv > 1.5 && fgVal !== null && fgVal > 75) {
-                        onChainMultiplier = 1.2;
-                        console.log(`[On-Chain Bônus] ${symbol} SHORT em euforia (MVRV BTC alto + ganância extrema)`);
-                    }
-                }
-
-                // ===== ATUALIZA UI DO SCORE PRINCIPAL (BTC) =====
+                // Atualiza UI do score principal (BTC)
                 if (symbol === 'BTCUSDT') {
                     updateMainScoreUI({ ...scoreData, score: confidence.score }, blockReason);
                     const confEl = document.getElementById('confidence-score');
@@ -1440,119 +1397,107 @@
                     }
                 }
 
-                // ===== ARMAZENA SCORE E DIREÇÃO PARA BARRAS =====
-                assetsData[symbol].score = confidence.score;
-                assetsData[symbol].direction = confidence.direction || 'NEUTRO';
+                // Armazena para score bars
+                data.score = confidence.score;
+                data.direction = confidence.direction || 'NEUTRO';
 
-                const prevScore = previousScores[symbol] || 50;
-                if (!activePositions[symbol] && !blockReason && isSafeToTrade()) {
-                    const now = Date.now();
-                    if (now - (alertCooldowns[symbol] || 0) > 1800000 && primaryDirection) {
-                        const atr = data.atr_1H || (data.price * 0.02);
-                        const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
-                        if (!expCheck.blocked) {
-                            const structure = checkBOSAndRetest(data, primaryDirection, ROBOT_CONFIG.retestDistPct);
-                            const smcSetup = structure.bos;
-                            let retestConfirmed = structure.retest;
-                            if (!retestConfirmed && ROBOT_CONFIG.requireEMARetest) {
-                                const ema20 = calcEMA(data.candles1H.map(c => c.close), 20).slice(-1)[0] || data.price;
-                                retestConfirmed = Math.abs(data.price - ema20) / ema20 < 0.005;
-                            }
-                            const bosPassed = ROBOT_CONFIG.requireBOS ? smcSetup : true;
-                            const retestPassed = ROBOT_CONFIG.requireRetest ? retestConfirmed : true;
-                            if (bosPassed && retestPassed) {
-                                let stop, tp1, tp2, tp3, structLevel;
-                                let liqTarget1 = null, liqTarget2 = null;
-                                const liqs = liquidationLevels[symbol] || [];
-                                if (liqs.length > 0) {
-                                    if (primaryDirection === 'LONG') {
-                                        liqTarget1 = Math.max(...liqs.filter(l => l > data.price));
-                                        liqTarget2 = liqTarget1 ? liqTarget1 * 1.02 : null;
-                                    } else {
-                                        liqTarget1 = Math.min(...liqs.filter(l => l < data.price));
-                                        liqTarget2 = liqTarget1 ? liqTarget1 * 0.98 : null;
-                                    }
-                                }
+                // Verifica se já tem posição aberta
+                if (activePositions[symbol]) continue;
 
-                                // ===== STOP LOSS OTIMIZADO =====
-                                if (primaryDirection === 'LONG') {
-                                    const recentLows = data.swingLows.slice(-3);
-                                    structLevel = (recentLows.length ? Math.min(...recentLows) : data.price * 0.98) - (atr * 0.3);
-                                    const atrStop = data.price - atr * 1.5;
-                                    stop = (recentLows.length && (data.price - structLevel) <= atr * 2.5) ? structLevel : atrStop;
-                                    tp1 = data.price + (atr * 2.2);
-                                    tp2 = liqTarget1 || (data.price + (atr * 4.5));
-                                    tp3 = liqTarget2 || (data.price + (atr * 7));
-                                } else {
-                                    const recentHighs = data.swingHighs.slice(-3);
-                                    structLevel = (recentHighs.length ? Math.max(...recentHighs) : data.price * 1.02) + (atr * 0.3);
-                                    const atrStopShort = data.price + atr * 1.5;
-                                    stop = (recentHighs.length && (structLevel - data.price) <= atr * 2.5) ? structLevel : atrStopShort;
-                                    tp1 = data.price - (atr * 2.2);
-                                    tp2 = liqTarget1 || (data.price - (atr * 4.5));
-                                    tp3 = liqTarget2 || (data.price - (atr * 7));
-                                }
+                // Verifica cooldown
+                const now = Date.now();
+                if (now - (alertCooldowns[symbol] || 0) < 1800000) continue; // 30 min
 
-                                // RR Ponderado
-                                let rrPonderado;
-                                if (primaryDirection === 'LONG') {
-                                    const ganhoPonderado = (tp1 - data.price) * 0.5 + (tp2 - data.price) * 0.3 + (tp3 - data.price) * 0.2;
-                                    rrPonderado = (data.price - stop) > 0 ? ganhoPonderado / (data.price - stop) : 0;
-                                } else {
-                                    const ganhoPonderado = (data.price - tp1) * 0.5 + (data.price - tp2) * 0.3 + (data.price - tp3) * 0.2;
-                                    rrPonderado = (stop - data.price) > 0 ? ganhoPonderado / (stop - data.price) : 0;
-                                }
+                // Se não houver posição e não houver block, tenta entrada
+                if (!blockReason && primaryDirection && isSafeToTrade()) {
+                    const structure = checkBOSAndRetest(data, primaryDirection, ROBOT_CONFIG.retestDistPct);
+                    const smcSetup = structure.bos;
+                    let retestConfirmed = structure.retest;
+                    if (!retestConfirmed && ROBOT_CONFIG.requireEMARetest) {
+                        const ema20 = calcEMA(data.candles1H.map(c => c.close), 20).slice(-1)[0] || data.price;
+                        retestConfirmed = Math.abs(data.price - ema20) / ema20 < 0.005;
+                    }
+                    const bosPassed = ROBOT_CONFIG.requireBOS ? smcSetup : true;
+                    const retestPassed = ROBOT_CONFIG.requireRetest ? retestConfirmed : true;
 
-                                if (rrPonderado >= ROBOT_CONFIG.rrMin) {
-                                    const stats = banco.getTradeStats();
-                                    const totalTrades = stats.wins + stats.losses;
-                                    const winRate = totalTrades > 0 ? stats.wins / totalTrades : 0.5;
-                                    const fgFilt = fearGreedFilter(data.fearGreedData, primaryDirection);
-                                    if (!fgFilt.pass && !blockReason) blockReason = fgFilt.reason;
-                                    const riskPct = KellyPositionSize(winRate, rrPonderado) * (fgFilt.multiplier || 1) * onChainMultiplier;
-                                    if (!blockReason) {
-                                        telegram.sendTradeAlert(symbol, primaryDirection.toLowerCase(), score, data.price, stop, [{price: tp1, rr: rrPonderado}, {price: tp2, rr: rrPonderado * 2}, {price: tp3, rr: rrPonderado * 3}], `MTF ${primaryDirection} + BOS + Re-teste + VWAP`, riskPct, null);
-                                        activePositions[symbol] = {
-                                            type: primaryDirection,
-                                            entryPrice: data.price,
-                                            stop: stop,
-                                            tp1: tp1,
-                                            tp2: tp2,
-                                            movedToBE: false,
-                                            trailingStop: stop,
-                                            partialTaken: false,
-                                            sizeRemaining: 1,
-                                            realizedPNL: 0,
-                                            entryTime: Date.now()
-                                        };
-                                        alertCooldowns[symbol] = Date.now();
-                                        addSignal(symbol, primaryDirection, data.price, stop, tp1);
-                                        updateActiveTradesUI();
-                                    }
-                                }
+                    if (bosPassed && retestPassed) {
+                        const levels = calculateStopAndTargets(data, primaryDirection, ROBOT_CONFIG);
+                        if (levels.rrPonderado >= ROBOT_CONFIG.rrMin) {
+                            // Verifica exposição
+                            const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
+                            if (!expCheck.blocked) {
+                                // Calcula tamanho da posição (Kelly)
+                                const stats = banco.getTradeStats();
+                                const totalTrades = stats.wins + stats.losses;
+                                const winRate = totalTrades > 0 ? stats.wins / totalTrades : 0.5;
+                                const riskPct = KellyPositionSize(winRate, levels.rrPonderado);
+                                const stopDist = primaryDirection === 'LONG' ? (data.price - levels.stop) / data.price : (levels.stop - data.price) / data.price;
+                                const sizeUSD = (riskPct * 10000) / stopDist; // usando equity fixa de 10k para simplicidade
+                                const sizeMult = Math.min(sizeUSD / 10000, 1.0);
+
+                                // Envia alerta via Telegram (usando a nova função V2)
+                                const rationale = `MTF ${primaryDirection} + BOS/Retest + VWAP`;
+                                const levelsForTelegram = {
+                                    stop: levels.stop,
+                                    tp1: levels.tp1,
+                                    tp2: levels.tp2,
+                                    tp3: levels.tp3,
+                                    rr1: (levels.tp1 - data.price) / (data.price - levels.stop),
+                                    rr2: (levels.tp2 - data.price) / (data.price - levels.stop),
+                                    rr3: (levels.tp3 - data.price) / (data.price - levels.stop),
+                                    tp1Pct: ROBOT_CONFIG.tp1Pct,
+                                    tp2Pct: ROBOT_CONFIG.tp2Pct,
+                                    runnerPct: ROBOT_CONFIG.runnerPct,
+                                    trailMultiplier: primaryDirection === 'LONG' ? ROBOT_CONFIG.trailLong : ROBOT_CONFIG.trailShort
+                                };
+                                await telegram.sendTradeAlertV2(
+                                    symbol,
+                                    primaryDirection.toLowerCase(),
+                                    score,
+                                    data.price,
+                                    levelsForTelegram,
+                                    rationale,
+                                    riskPct,
+                                    null
+                                );
+
+                                // Abre posição
+                                activePositions[symbol] = {
+                                    type: primaryDirection,
+                                    entryPrice: data.price,
+                                    stop: levels.stop,
+                                    tp1: levels.tp1,
+                                    tp2: levels.tp2,
+                                    trailingStop: levels.stop,
+                                    partialTaken: false,
+                                    tp2Taken: false,
+                                    sizeRemaining: sizeMult,
+                                    partialPnlUsd: 0,
+                                    partialPnlPct: 0,
+                                    maxProfitPrice: data.price,
+                                    entryTime: Date.now(),
+                                    movedToBE: false,
+                                    initialEquity: 10000,
+                                    symbol: symbol
+                                };
+                                alertCooldowns[symbol] = Date.now();
+                                addSignal(symbol, primaryDirection, data.price, levels.stop, levels.tp1);
+                                updateActiveTradesUI();
                             }
                         }
                     }
                 }
-
-                // ===== ALERTAS DE MUDANÇA DE TENDÊNCIA =====
-                if (prevScore < 50 && score >= 50) {
-                    telegram.sendTelegramAlert(`🔄 TENDÊNCIA MUDOU (${symbol}) - Score subiu para ${score}. Possível reversão Long.`);
-                }
-                if (prevScore > 50 && score <= 50) {
-                    telegram.sendTelegramAlert(`🔄 TENDÊNCIA MUDOU (${symbol}) - Score caiu para ${score}. Possível reversão Short.`);
-                }
-                previousScores[symbol] = score;
             }
             updateScoreBars();
         }
 
+        // ===== ATUALIZA DADOS EXTERNOS =====
         let externalUpdating = false;
         async function updateExternalData() {
             if (externalUpdating) return;
             externalUpdating = true;
             try {
-                // Funding para TODOS os ativos
+                // Funding para todos
                 for (const symbol of CONFIG.ASSETS) {
                     const funding = await fetchFundingRate(symbol);
                     if (funding && assetsData[symbol]) {
@@ -1606,29 +1551,46 @@
             } catch(e) { console.warn('Erro updateExternalData:', e); } finally { externalUpdating = false; setTimeout(updateExternalData, 120000); }
         }
 
+        // ===== APLICAR PARÂMETROS =====
         function applyLiveParams() {
-            const scoreMin = parseInt(document.getElementById('live-score-min').value) || 50;
-            const scoreMaxShort = parseInt(document.getElementById('live-score-max-short').value) || 49;
-            const adxMin = parseInt(document.getElementById('live-adx-min').value) || 17;
-            const rrMin = parseFloat(document.getElementById('live-rr-min').value) || 1.5;
-            const requireBOS = document.getElementById('live-require-bos').checked;
-            const requireRetest = document.getElementById('live-require-retest').checked;
-            const requireMTF = document.getElementById('live-require-mtf').checked;
-            ROBOT_CONFIG.scoreMin = scoreMin;
-            ROBOT_CONFIG.scoreMaxShort = scoreMaxShort;
-            ROBOT_CONFIG.adxMin = adxMin;
-            ROBOT_CONFIG.rrMin = rrMin;
-            ROBOT_CONFIG.requireBOS = requireBOS;
-            ROBOT_CONFIG.requireRetest = requireRetest;
-            ROBOT_CONFIG.requireMTF = requireMTF;
-            document.getElementById('live-score-badge').textContent = 'Atual: ' + scoreMin;
-            document.getElementById('live-score-short-badge').textContent = 'Atual: ' + scoreMaxShort;
-            document.getElementById('live-adx-badge').textContent = 'Atual: ' + adxMin;
-            document.getElementById('live-rr-badge').textContent = 'Atual: ' + rrMin;
+            const getVal = (id) => parseFloat(document.getElementById(id).value) || 0;
+            const getCheck = (id) => document.getElementById(id).checked;
+
+            ROBOT_CONFIG.scoreMin = getVal('live-score-min');
+            ROBOT_CONFIG.scoreMaxShort = getVal('live-score-max-short');
+            ROBOT_CONFIG.adxMin = getVal('live-adx-min');
+            ROBOT_CONFIG.rrMin = getVal('live-rr-min');
+            ROBOT_CONFIG.stopLong = getVal('live-stop-long');
+            ROBOT_CONFIG.stopShort = getVal('live-stop-short');
+            ROBOT_CONFIG.tp1Long = getVal('live-tp1-long');
+            ROBOT_CONFIG.tp1Short = getVal('live-tp1-short');
+            ROBOT_CONFIG.tp2Dist = getVal('live-tp2-dist');
+            ROBOT_CONFIG.trailLong = getVal('live-trail-long');
+            ROBOT_CONFIG.trailShort = getVal('live-trail-short');
+            ROBOT_CONFIG.tp1Pct = getVal('live-tp1-pct') / 100;
+            ROBOT_CONFIG.tp2Pct = getVal('live-tp2-pct') / 100;
+            ROBOT_CONFIG.runnerPct = getVal('live-runner-pct') / 100;
+            ROBOT_CONFIG.maxHoldHours = getVal('live-max-hold');
+            ROBOT_CONFIG.htfBullishVelas = getVal('live-htf-bull');
+            ROBOT_CONFIG.htfBearishVelas = getVal('live-htf-bear');
+            ROBOT_CONFIG.diDiffMinLong = getVal('live-di-long');
+            ROBOT_CONFIG.diDiffMinShort = getVal('live-di-short');
+            ROBOT_CONFIG.mvrvDropPercent = getVal('live-mvrv-drop') / 100;
+            ROBOT_CONFIG.requireBOS = getCheck('live-require-bos');
+            ROBOT_CONFIG.requireRetest = getCheck('live-require-retest');
+            ROBOT_CONFIG.requireMTF = getCheck('live-require-mtf');
+            ROBOT_CONFIG.requireSweep = getCheck('live-require-sweep');
+
+            document.getElementById('live-score-badge').textContent = ROBOT_CONFIG.scoreMin;
+            document.getElementById('live-score-short-badge').textContent = ROBOT_CONFIG.scoreMaxShort;
+            document.getElementById('live-adx-badge').textContent = ROBOT_CONFIG.adxMin;
+            document.getElementById('live-rr-badge').textContent = ROBOT_CONFIG.rrMin;
+
             localStorage.setItem('robot_config', JSON.stringify(ROBOT_CONFIG));
-            console.log('[ROBOT] Parâmetros salvos:', ROBOT_CONFIG);
+            console.log('[ROBOT] Parâmetros aplicados:', ROBOT_CONFIG);
         }
 
+        // ===== INICIALIZAÇÃO =====
         async function init() {
             cacheDOM();
             const saved = localStorage.getItem('robot_config');
@@ -1636,27 +1598,58 @@
                 try {
                     const parsed = JSON.parse(saved);
                     Object.assign(ROBOT_CONFIG, parsed);
-                    document.getElementById('live-score-min').value = ROBOT_CONFIG.scoreMin;
-                    document.getElementById('live-score-max-short').value = ROBOT_CONFIG.scoreMaxShort;
-                    document.getElementById('live-adx-min').value = ROBOT_CONFIG.adxMin;
-                    document.getElementById('live-rr-min').value = ROBOT_CONFIG.rrMin;
+                    // Atualiza campos da UI
+                    const map = {
+                        'live-score-min': 'scoreMin',
+                        'live-score-max-short': 'scoreMaxShort',
+                        'live-adx-min': 'adxMin',
+                        'live-rr-min': 'rrMin',
+                        'live-stop-long': 'stopLong',
+                        'live-stop-short': 'stopShort',
+                        'live-tp1-long': 'tp1Long',
+                        'live-tp1-short': 'tp1Short',
+                        'live-tp2-dist': 'tp2Dist',
+                        'live-trail-long': 'trailLong',
+                        'live-trail-short': 'trailShort',
+                        'live-tp1-pct': 'tp1Pct',
+                        'live-tp2-pct': 'tp2Pct',
+                        'live-runner-pct': 'runnerPct',
+                        'live-max-hold': 'maxHoldHours',
+                        'live-htf-bull': 'htfBullishVelas',
+                        'live-htf-bear': 'htfBearishVelas',
+                        'live-di-long': 'diDiffMinLong',
+                        'live-di-short': 'diDiffMinShort',
+                        'live-mvrv-drop': 'mvrvDropPercent'
+                    };
+                    for (const [id, key] of Object.entries(map)) {
+                        const el = document.getElementById(id);
+                        if (el) {
+                            if (typeof ROBOT_CONFIG[key] === 'number') {
+                                el.value = ROBOT_CONFIG[key];
+                            }
+                        }
+                    }
                     document.getElementById('live-require-bos').checked = ROBOT_CONFIG.requireBOS;
                     document.getElementById('live-require-retest').checked = ROBOT_CONFIG.requireRetest;
                     document.getElementById('live-require-mtf').checked = ROBOT_CONFIG.requireMTF;
-                    document.getElementById('live-score-badge').textContent = 'Atual: ' + ROBOT_CONFIG.scoreMin;
-                    document.getElementById('live-score-short-badge').textContent = 'Atual: ' + ROBOT_CONFIG.scoreMaxShort;
-                    document.getElementById('live-adx-badge').textContent = 'Atual: ' + ROBOT_CONFIG.adxMin;
-                    document.getElementById('live-rr-badge').textContent = 'Atual: ' + ROBOT_CONFIG.rrMin;
-                    console.log('[ROBOT] Configuração carregada:', ROBOT_CONFIG);
+                    document.getElementById('live-require-sweep').checked = ROBOT_CONFIG.requireSweep;
+                    document.getElementById('live-score-badge').textContent = ROBOT_CONFIG.scoreMin;
+                    document.getElementById('live-score-short-badge').textContent = ROBOT_CONFIG.scoreMaxShort;
+                    document.getElementById('live-adx-badge').textContent = ROBOT_CONFIG.adxMin;
+                    document.getElementById('live-rr-badge').textContent = ROBOT_CONFIG.rrMin;
                 } catch(e) { console.warn('Erro ao carregar configuração:', e); }
             }
             loadSignalHistory();
             renderSignalTable();
             graficos.initCharts();
+
+            // Inicializa gráficos de candle
             const candleBTC = graficos.initCandleChart('candle-btc', '#00e896');
             const candleETH = graficos.initCandleChart('candle-eth', '#00b4d8');
             const candleSOL = graficos.initCandleChart('candle-sol', '#ffd60a');
             const candleCharts = { 'BTCUSDT': candleBTC, 'ETHUSDT': candleETH, 'SOLUSDT': candleSOL };
+
+            // Carrega dados históricos iniciais
             for (const symbol of CONFIG.ASSETS) {
                 const [c1H, c4H, c1D] = await Promise.all([
                     fetchHistoricalCandles(symbol, '1h', 200),
@@ -1685,13 +1678,14 @@
                     if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
                 }
             }
+
             initWebSockets();
             await updateExternalData();
-            await updateMTFAndOI();
             await evaluateMarkets();
             await updateTimeframeStats();
             updateRealPnL();
 
+            // Atualiza força do sinal a cada 10 segundos
             setInterval(async () => {
                 const symbol = 'BTCUSDT';
                 try {
@@ -1705,6 +1699,7 @@
                 } catch(e) { console.warn('Força do Sinal:', e); }
             }, 10000);
 
+            // Atualiza Fear & Greed a cada 10 min
             setInterval(async () => {
                 const fg = await fetchFearGreed();
                 if (fg) {
@@ -1719,6 +1714,7 @@
                 }
             }, 600000);
 
+            // Atualiza candles e avalia mercado a cada 5 min
             setInterval(async () => {
                 for (const symbol of CONFIG.ASSETS) {
                     const c1H = await fetchHistoricalCandles(symbol, '1h', 10);
@@ -1745,14 +1741,15 @@
                         assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
                     }
                 }
-                await updateMTFAndOI();
                 await evaluateMarkets();
                 await updateTimeframeStats();
                 renderSignalTable(); // atualiza P&L ao vivo
             }, 300000);
 
+            // Botão de aplicar parâmetros
             document.getElementById('live-apply-btn').addEventListener('click', applyLiveParams);
 
+            // Botão de teste Telegram
             document.getElementById('test-telegram-btn').addEventListener('click', async function() {
                 this.disabled = true;
                 document.getElementById('test-btn-label').innerHTML = '<span class="spinner"></span> Enviando...';
@@ -1761,6 +1758,7 @@
                 setTimeout(() => { document.getElementById('test-btn-label').textContent = '📨 Testar Alerta'; this.disabled = false; }, 3000);
             });
 
+            // Botão de backtest
             document.getElementById('run-backtest-btn').addEventListener('click', async function() {
                 this.disabled = true;
                 this.textContent = '⏳ Processando...';
@@ -1779,6 +1777,25 @@
                         mtfRequired: ROBOT_CONFIG.requireMTF || false,
                         ignoreBOS: !ROBOT_CONFIG.requireBOS,
                         ignoreRetest: !ROBOT_CONFIG.requireRetest,
+                        requireSweep: ROBOT_CONFIG.requireSweep || false,
+                        maxHoldHours: ROBOT_CONFIG.maxHoldHours,
+                        htfBullishVelas: ROBOT_CONFIG.htfBullishVelas,
+                        diDiffMinLong: ROBOT_CONFIG.diDiffMinLong,
+                        mvrvDropPercent: ROBOT_CONFIG.mvrvDropPercent,
+                        htfBearishVelas: ROBOT_CONFIG.htfBearishVelas,
+                        diDiffMinShort: ROBOT_CONFIG.diDiffMinShort,
+                        stopLong: ROBOT_CONFIG.stopLong,
+                        stopShort: ROBOT_CONFIG.stopShort,
+                        tp1Long: ROBOT_CONFIG.tp1Long,
+                        tp1Short: ROBOT_CONFIG.tp1Short,
+                        tp2Dist: ROBOT_CONFIG.tp2Dist,
+                        trailLong: ROBOT_CONFIG.trailLong,
+                        trailShort: ROBOT_CONFIG.trailShort,
+                        tp1Pct: ROBOT_CONFIG.tp1Pct,
+                        tp2Pct: ROBOT_CONFIG.tp2Pct,
+                        runnerPct: ROBOT_CONFIG.runnerPct,
+                        zFundingMax: ROBOT_CONFIG.zFundingMax,
+                        zOiMax: ROBOT_CONFIG.zOiMax
                     };
                     console.log('[Backtest] Parâmetros:', options);
                     for (const sym of symbols) {
@@ -1829,6 +1846,7 @@
                 } catch(e) { console.error(e); if (statusEl) statusEl.textContent = '❌ Erro: ' + e.message; } finally { this.disabled = false; this.textContent = '▶️ Executar Backtest'; }
             });
 
+            // Atualiza timestamp a cada segundo
             setInterval(() => {
                 const ts = getCurrentTimestamp();
                 const headerEl = DOM['header-timestamp'] || document.getElementById('header-timestamp');
