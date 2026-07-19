@@ -2332,4 +2332,44 @@ setInterval(() => {
     });
 })();
 
+// ============================================================
+// TESTE DO TELEGRAM
+// ============================================================
+async function testTelegram() {
+    const led = document.getElementById('telegramTestLed');
+    const status = document.getElementById('telegramTestStatus');
+    const log = document.getElementById('telegramTestLog');
+    
+    led.style.background = '#ffd60a';
+    status.textContent = 'Enviando...';
+    log.textContent = '⏳ Aguarde...';
+    
+    try {
+        const TELEGRAM_TOKEN = '8670184440:AAFBfhFFTMnUWsgIFyRh0huBYbL-Q_vhT5k';
+        const TELEGRAM_CHAT_ID = '1137196768';
+        const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+        const message = `🧪 Teste de conexão do Telegram\n⏰ ${new Date().toLocaleString('pt-BR')}\n✅ Mensagem enviada com sucesso!`;
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: message, parse_mode: 'HTML' })
+        });
+        if (resp.ok) {
+            led.style.background = '#00e896';
+            status.textContent = '✅ Conectado';
+            log.textContent = '✅ Mensagem enviada com sucesso!';
+        } else {
+            led.style.background = '#ff4d6d';
+            status.textContent = '❌ Falha';
+            log.textContent = `❌ Erro HTTP ${resp.status}`;
+        }
+    } catch (e) {
+        led.style.background = '#ff4d6d';
+        status.textContent = '❌ Erro';
+        log.textContent = `❌ ${e.message}`;
+    }
+}
+
+document.getElementById('telegramTestBtn').addEventListener('click', testTelegram);
+
 console.log('✅ Módulo backtest_engine.js carregado com sucesso.');
