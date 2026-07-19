@@ -10,6 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
+        /* ===== CSS COMPLETO ===== */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Inter', system-ui, sans-serif;
@@ -21,11 +22,7 @@
             justify-content: center;
             align-items: flex-start;
         }
-        .container {
-            max-width: 1440px;
-            width: 100%;
-            margin: 0 auto;
-        }
+        .container { max-width: 1440px; width: 100%; margin: 0 auto; }
         h1 {
             font-size: 2rem;
             font-weight: 700;
@@ -38,313 +35,60 @@
             align-items: center;
             gap: 12px;
         }
-        h1 small {
-            font-size: 0.8rem;
-            font-weight: 400;
-            -webkit-text-fill-color: #6b7280;
-            color: #6b7280;
-            background: none;
-        }
-        .card {
-            background: #0f1117;
-            border: 1px solid #2a2a44;
-            border-radius: 12px;
-            padding: 20px 24px;
-            margin-bottom: 24px;
-        }
-        .card-title {
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #6b7280;
-            font-weight: 600;
-            margin-bottom: 12px;
-        }
-        .params-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 12px;
-        }
-        .params-grid label {
-            display: block;
-            font-size: 0.7rem;
-            color: #8b949e;
-            margin-bottom: 4px;
-        }
-        .params-grid input[type="number"],
-        .params-grid input[type="text"] {
-            width: 100%;
-            padding: 6px 8px;
-            border-radius: 6px;
-            border: 1px solid #2a2a44;
-            background: #1a1a2e;
-            color: #e6e8eb;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.9rem;
-        }
-        .params-grid input[type="checkbox"] {
-            accent-color: #7c3aed;
-            width: 18px;
-            height: 18px;
-            margin-right: 6px;
-        }
-        .params-grid .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 6px;
-        }
-        .btn {
-            background: #7c3aed;
-            color: #fff;
-            border: none;
-            padding: 10px 24px;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: all .2s;
-            box-shadow: 0 4px 15px rgba(124,58,237,.3);
-        }
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(124,58,237,.5);
-        }
-        .btn:disabled {
-            opacity: .6;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .btn-secondary {
-            background: #2a2a44;
-            box-shadow: none;
-        }
-        .btn-secondary:hover {
-            background: #3a3a5a;
-            box-shadow: none;
-        }
-        .btn-success {
-            background: #00b894;
-            box-shadow: 0 4px 15px rgba(0,184,148,.3);
-        }
-        .btn-success:hover {
-            box-shadow: 0 8px 25px rgba(0,184,148,.5);
-        }
-        .btn-danger {
-            background: #e17055;
-            box-shadow: 0 4px 15px rgba(225,112,85,.3);
-        }
-        .btn-danger:hover {
-            box-shadow: 0 8px 25px rgba(225,112,85,.5);
-        }
-        .controls {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-bottom: 16px;
-            align-items: center;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 12px;
-            margin: 16px 0;
-        }
-        .stat-card {
-            background: #0f1117;
-            border: 1px solid #2a2a44;
-            border-radius: 10px;
-            padding: 12px;
-            text-align: center;
-        }
-        .stat-card .label {
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            color: #6b7280;
-            letter-spacing: .5px;
-        }
-        .stat-card .value {
-            font-size: 1.4rem;
-            font-weight: 700;
-            font-family: 'JetBrains Mono', monospace;
-            margin-top: 4px;
-        }
+        h1 small { font-size: 0.8rem; font-weight: 400; -webkit-text-fill-color: #6b7280; color: #6b7280; background: none; }
+        .card { background: #0f1117; border: 1px solid #2a2a44; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; }
+        .card-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; font-weight: 600; margin-bottom: 12px; }
+        .params-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+        .params-grid label { display: block; font-size: 0.7rem; color: #8b949e; margin-bottom: 4px; }
+        .params-grid input[type="number"] { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid #2a2a44; background: #1a1a2e; color: #e6e8eb; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; }
+        .params-grid input[type="checkbox"] { accent-color: #7c3aed; width: 18px; height: 18px; margin-right: 6px; }
+        .params-grid .checkbox-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+        .btn { background: #7c3aed; color: #fff; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all .2s; box-shadow: 0 4px 15px rgba(124,58,237,.3); }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(124,58,237,.5); }
+        .btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+        .btn-secondary { background: #2a2a44; box-shadow: none; }
+        .btn-secondary:hover { background: #3a3a5a; box-shadow: none; }
+        .btn-success { background: #00b894; box-shadow: 0 4px 15px rgba(0,184,148,.3); }
+        .btn-success:hover { box-shadow: 0 8px 25px rgba(0,184,148,.5); }
+        .btn-danger { background: #e17055; box-shadow: 0 4px 15px rgba(225,112,85,.3); }
+        .btn-danger:hover { box-shadow: 0 8px 25px rgba(225,112,85,.5); }
+        .controls { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; align-items: center; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin: 16px 0; }
+        .stat-card { background: #0f1117; border: 1px solid #2a2a44; border-radius: 10px; padding: 12px; text-align: center; }
+        .stat-card .label { font-size: 0.65rem; text-transform: uppercase; color: #6b7280; letter-spacing: .5px; }
+        .stat-card .value { font-size: 1.4rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; margin-top: 4px; }
         .stat-card .value.positive { color: #00e896; }
         .stat-card .value.negative { color: #ff4d6d; }
-        .table-wrapper {
-            overflow-x: auto;
-            border: 1px solid #2a2a44;
-            border-radius: 12px;
-            background: #0f1117;
-            margin: 16px 0;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.8rem;
-        }
-        th {
-            text-align: left;
-            padding: 12px 16px;
-            color: #6b7280;
-            text-transform: uppercase;
-            font-size: 0.65rem;
-            letter-spacing: .5px;
-            border-bottom: 1px solid #2a2a44;
-        }
-        td {
-            padding: 10px 16px;
-            border-bottom: 1px solid #1a1a2e;
-            font-family: 'JetBrains Mono', monospace;
-        }
+        .table-wrapper { overflow-x: auto; border: 1px solid #2a2a44; border-radius: 12px; background: #0f1117; margin: 16px 0; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        th { text-align: left; padding: 12px 16px; color: #6b7280; text-transform: uppercase; font-size: 0.65rem; letter-spacing: .5px; border-bottom: 1px solid #2a2a44; }
+        td { padding: 10px 16px; border-bottom: 1px solid #1a1a2e; font-family: 'JetBrains Mono', monospace; }
         tbody tr:hover { background: rgba(255,255,255,.02); }
         .positive { color: #00e896; }
         .negative { color: #ff4d6d; }
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.7rem;
-            font-weight: 600;
-        }
-        .status-badge.online {
-            background: rgba(0,232,150,.15);
-            color: #00e896;
-            border: 1px solid #00e896;
-        }
-        .status-badge.offline {
-            background: rgba(255,77,109,.15);
-            color: #ff4d6d;
-            border: 1px solid #ff4d6d;
-        }
-        .diagnostic {
-            background: #0f1117;
-            border: 1px solid #2a2a44;
-            border-radius: 12px;
-            padding: 16px;
-            margin: 16px 0;
-            font-size: 0.8rem;
-        }
-        .tag {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            margin: 4px 6px 4px 0;
-            background: #1a1a2e;
-            border: 1px solid #2a2a44;
-        }
-        .tag.pass {
-            background: rgba(0,232,150,.15);
-            color: #00e896;
-            border-color: #00e896;
-        }
-        .tag.block {
-            background: rgba(255,77,109,.15);
-            color: #ff4d6d;
-            border-color: #ff4d6d;
-        }
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin: 32px 0 16px 0;
-            padding-bottom: 12px;
-            border-bottom: 1px solid #2a2a44;
-            color: #e6e8eb;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .candles-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-bottom: 32px;
-        }
-        .candle-card {
-            background: #0f1117;
-            border: 1px solid #2a2a44;
-            border-radius: 12px;
-            padding: 16px 20px 12px 20px;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            min-height: 300px;
-        }
-        .candle-card h3 {
-            font-size: 0.8rem;
-            color: #6b7280;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 12px;
-            font-weight: 500;
-        }
-        .candle-stats {
-            display: flex;
-            justify-content: center;
-            gap: 8px;
-            margin-bottom: 12px;
-            font-size: 0.75rem;
-            flex-wrap: wrap;
-        }
-        .candle-stats .stat {
-            padding: 4px 8px;
-            border-radius: 4px;
-            background: rgba(255,255,255,0.03);
-            font-family: 'JetBrains Mono', monospace;
-        }
+        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; }
+        .status-badge.online { background: rgba(0,232,150,.15); color: #00e896; border: 1px solid #00e896; }
+        .status-badge.offline { background: rgba(255,77,109,.15); color: #ff4d6d; border: 1px solid #ff4d6d; }
+        .diagnostic { background: #0f1117; border: 1px solid #2a2a44; border-radius: 12px; padding: 16px; margin: 16px 0; font-size: 0.8rem; }
+        .tag { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 0.75rem; margin: 4px 6px 4px 0; background: #1a1a2e; border: 1px solid #2a2a44; }
+        .tag.pass { background: rgba(0,232,150,.15); color: #00e896; border-color: #00e896; }
+        .tag.block { background: rgba(255,77,109,.15); color: #ff4d6d; border-color: #ff4d6d; }
+        .section-title { font-size: 1.1rem; font-weight: 600; margin: 32px 0 16px 0; padding-bottom: 12px; border-bottom: 1px solid #2a2a44; color: #e6e8eb; display: flex; align-items: center; gap: 8px; }
+        .candles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+        .candle-card { background: #0f1117; border: 1px solid #2a2a44; border-radius: 12px; padding: 16px 20px 12px 20px; display: flex; flex-direction: column; height: 100%; min-height: 300px; }
+        .candle-card h3 { font-size: 0.8rem; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; font-weight: 500; }
+        .candle-stats { display: flex; justify-content: center; gap: 8px; margin-bottom: 12px; font-size: 0.75rem; flex-wrap: wrap; }
+        .candle-stats .stat { padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.03); font-family: 'JetBrains Mono', monospace; }
         .candle-stats .stat.positive { color: #00e896; background: rgba(0,232,150,0.05); }
         .candle-stats .stat.negative { color: #ff4d6d; background: rgba(255,77,109,0.05); }
-        .candle-container {
-            width: 100%;
-            flex: 1;
-            min-height: 180px;
-        }
-        .source-with-time {
-            font-size: 0.7rem;
-            color: #6b7280;
-            display: block;
-            margin-top: 4px;
-        }
-        .data-source {
-            font-size: 0.7rem;
-            color: #6b7280;
-            display: block;
-            margin-top: 4px;
-            font-style: italic;
-        }
-        .chart-wrapper {
-            height: 320px;
-            width: 100%;
-            margin-bottom: 32px;
-            background: #0f1117;
-            border: 1px solid #2a2a44;
-            border-radius: 12px;
-            padding: 24px;
-            box-sizing: border-box;
-        }
-        .chart-wrapper canvas {
-            display: block;
-            width: 100% !important;
-            height: 100% !important;
-        }
-        .footer {
-            font-size: 0.7rem;
-            color: #6b7280;
-            text-align: center;
-            margin-top: 32px;
-            border-top: 1px solid #2a2a44;
-            padding-top: 16px;
-        }
-        @media (max-width: 1024px) {
-            .candles-grid { grid-template-columns: 1fr 1fr; }
-        }
-        @media (max-width: 768px) {
-            .params-grid { grid-template-columns: 1fr 1fr; }
-            .stats-grid { grid-template-columns: 1fr 1fr; }
-            .candles-grid { grid-template-columns: 1fr; }
-        }
+        .candle-container { width: 100%; flex: 1; min-height: 180px; }
+        .source-with-time { font-size: 0.7rem; color: #6b7280; display: block; margin-top: 4px; }
+        .data-source { font-size: 0.7rem; color: #6b7280; display: block; margin-top: 4px; font-style: italic; }
+        .chart-wrapper { height: 320px; width: 100%; margin-bottom: 32px; background: #0f1117; border: 1px solid #2a2a44; border-radius: 12px; padding: 24px; box-sizing: border-box; }
+        .chart-wrapper canvas { display: block; width: 100% !important; height: 100% !important; }
+        .footer { font-size: 0.7rem; color: #6b7280; text-align: center; margin-top: 32px; border-top: 1px solid #2a2a44; padding-top: 16px; }
+        @media (max-width: 1024px) { .candles-grid { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 768px) { .params-grid { grid-template-columns: 1fr 1fr; } .stats-grid { grid-template-columns: 1fr 1fr; } .candles-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -471,7 +215,6 @@
                 </tbody>
             </table>
         </div>
-        <!-- Gráfico de ETF Flows (opcional, mantido do original) -->
         <div class="chart-wrapper"><canvas id="chart_etf_flows"></canvas></div>
     </section>
 
@@ -492,6 +235,7 @@
 <script type="module">
     // ================================================================
     // SITE UNIFICADO — ROBÔ DE SINAIS + GRÁFICOS + ON-CHAIN
+    // VERSÃO CORRIGIDA — SEM DUPLICAÇÃO DE getMTFConfluence
     // ================================================================
 
     import { runBacktest } from './js/backtest.js';
@@ -505,20 +249,70 @@
         fetchMVRV,
         fetchFearGreed,
         fetchMacroStatic,
-        getMTFConfluence,
+        // getMTFConfluence  // <-- REMOVIDO para evitar duplicação
         fetchOrderBook,
-        fetchBasis,
-        fetchPutCallRatio,
-        fetchEthGasPrice,
-        fetchDeFiData,
+        setCurrentPrice,
         fetchCQActiveAddresses,
         fetchHashrate,
         fetchOIDelta,
         sleep,
-        getMacroBlackoutStatus
+        getMacroBlackoutStatus,
+        fetchBasis,
+        fetchPutCallRatio,
+        fetchEthGasPrice,
+        fetchDeFiData
     } from './js/dados_externos.js';
     import * as indicadores from './js/indicadores.js';
     import * as graficos from './js/graficos.js';
+
+    // ===== FUNÇÃO LOCAL DE MTF (substitui getMTFConfluence) =====
+    function getMTFAlignmentLocal(candles1H, candles4H, currentTime, options = {}) {
+        const { htfBullishVelas = 3, htfBearishVelas = 6 } = options;
+        const relevant1H = candles1H.filter(c => c.time <= currentTime).slice(-50);
+        const relevant4H = candles4H.filter(c => c.time <= currentTime).slice(-50);
+        if (relevant1H.length < 20 || relevant4H.length < 10) {
+            return { alinhado: false, score: 0, directions: [], bias: 'NEUTRAL' };
+        }
+
+        const getDir = (candles) => {
+            if (candles.length < 20) return 'NEUTRO';
+            const closes = candles.map(c => c.close);
+            const ema20 = indicadores.calcEMA(closes, 20).slice(-1)[0];
+            const ema50 = indicadores.calcEMA(closes, 50).slice(-1)[0];
+            const last = closes[closes.length - 1];
+            if (ema20 > ema50 && last > ema20) return 'BULL';
+            if (ema20 < ema50 && last < ema20) return 'BEAR';
+            return 'NEUTRO';
+        };
+
+        const dir1H = getDir(relevant1H);
+        const dir4H = getDir(relevant4H);
+        const bulls = [dir1H, dir4H].filter(d => d === 'BULL').length;
+        const bears = [dir1H, dir4H].filter(d => d === 'BEAR').length;
+
+        // HTF bias baseado em velas consecutivas
+        let bias = 'NEUTRAL';
+        if (relevant4H.length >= htfBullishVelas + htfBearishVelas) {
+            const closes4H = relevant4H.map(c => c.close);
+            const ema200 = indicadores.calcEMA(closes4H, 200);
+            const lastBull = closes4H.slice(-htfBullishVelas);
+            const lastBear = closes4H.slice(-htfBearishVelas);
+            const ema200Bull = ema200.slice(-htfBullishVelas);
+            const ema200Bear = ema200.slice(-htfBearishVelas);
+            const allAbove = lastBull.every((c, i) => c > ema200Bull[i]);
+            const allBelow = lastBear.every((c, i) => c < ema200Bear[i]);
+            if (allBelow) bias = 'BEARISH';
+            else if (allAbove) bias = 'BULLISH';
+        }
+
+        return {
+            directions: [{ tf: '1h', dir: dir1H }, { tf: '4h', dir: dir4H }],
+            score: bulls - bears,
+            alinhado: bulls === 2 || bears === 2,
+            bias: bias,
+            alinhadoParcial: (dir4H === 'BULL' && dir1H !== 'BEAR') || (dir4H === 'BEAR' && dir1H !== 'BULL')
+        };
+    }
 
     // ===== DOM =====
     const $ = id => document.getElementById(id);
@@ -669,7 +463,11 @@
                 const candles4h = await fetchHistoricalCandles(symbol, '4h', 50);
                 const funding = await fetchFundingRate(symbol);
                 const oi = await fetchOpenInterest(symbol);
-                const mtf = await getMTFConfluence(symbol);
+                // USAR FUNÇÃO LOCAL getMTFAlignmentLocal
+                const mtf = getMTFAlignmentLocal(candles1h, candles4h, Date.now()/1000, {
+                    htfBullishVelas: ROBOT_CONFIG.htfBullishVelas,
+                    htfBearishVelas: ROBOT_CONFIG.htfBearishVelas
+                });
                 const macroBlackout = await getMacroBlackoutStatus();
                 const fg = await fetchFearGreed();
 
@@ -721,17 +519,10 @@
                         stop = state.price + atr * 1.5;
                         tp1 = state.price - atr * 2.2;
                     }
-                    const sent = await sendTradeAlert(
-                        symbol,
-                        scoreData.direction.toLowerCase(),
-                        scoreData.score,
-                        state.price,
-                        stop,
-                        [{ price: tp1, rr: 1.5 }],
-                        `MTF + BOS + Retest`,
-                        2.0,
-                        null
-                    );
+                    // Envia sinal (função sendTradeAlert deve estar disponível)
+                    // Aqui usamos sendTelegramAlert para simplificar
+                    const msg = `${scoreData.direction} ${symbol} | Entrada: $${state.price.toFixed(2)} | Stop: $${stop.toFixed(2)} | TP1: $${tp1.toFixed(2)} | Score: ${scoreData.score}`;
+                    const sent = await sendTelegramAlert(msg);
                     if (sent) {
                         saveSignal(symbol, scoreData.direction, state.price, stop, tp1);
                         lastSignals[symbol] = Date.now();
@@ -754,9 +545,6 @@
         statusMsg.textContent = '⏳ Executando backtest...';
 
         try {
-            // ============================================================
-            //  NOVO: usa o ROBOT_CONFIG completo (valores do painel ao vivo)
-            // ============================================================
             const options = {
                 scoreMin: ROBOT_CONFIG.scoreMin,
                 scoreMaxShort: ROBOT_CONFIG.scoreMaxShort,
@@ -1052,7 +840,7 @@
     }
 
     init();
-    console.log('🤖 Robô de Sinais + Gráficos + On-Chain iniciado.');
+    console.log('🤖 Robô de Sinais + Gráficos + On-Chain iniciado (corrigido).');
 </script>
 </body>
 </html>
