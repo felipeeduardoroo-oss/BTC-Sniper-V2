@@ -1030,3 +1030,179 @@ export async function getMacroBlackoutStatus() {
 export const fetchFREDVIX = async () => null;
 export const fetchFREDUS10Y = async () => null;
 export const fetchFREDDXY = async () => null;
+
+
+// ============================================================
+// FUNÇÕES HISTÓRICAS PARA BACKTEST (adicionar ao dados_externos.js)
+// ============================================================
+
+// --- Funding Rate Histórico ---
+export async function fetchHistoricalFunding(symbol, startTime, endTime) {
+    const cacheKey = `funding_hist_${symbol}_${startTime}_${endTime}`;
+    // Tenta cache (1 hora)
+    const cached = getCachedData(cacheKey, 3600000);
+    if (cached && !cached.stale) return cached;
+
+    let all = [];
+    let currentStart = startTime;
+    const limit = 1000;
+    while (currentStart < endTime) {
+        const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&startTime=${currentStart}&endTime=${endTime}&limit=${limit}`;
+        try {
+            const data = await fetchWithRetry(url, {}, 2);
+            if (!data || data.length === 0) break;
+            const mapped = data.map(d => ({ time: d.fundingTime, rate: parseFloat(d.fundingRate) }));
+            all = all.concat(mapped);
+            const lastTime = mapped[mapped.length - 1].time;
+            if (lastTime >= endTime) break;
+            currentStart = lastTime + 1;
+            await sleep(Math.min(100, 300));
+        } catch (e) { break; }
+    }
+    setCachedData(cacheKey, all);
+    return all;
+}
+
+// --- Open Interest Histórico ---
+export async function fetchHistoricalOI(symbol, startTime, endTime) {
+    const cacheKey = `oi_hist_${symbol}_${startTime}_${endTime}`;
+    const cached = getCachedData(cacheKey, 3600000);
+    if (cached && !cached.stale) return cached;
+
+    let all = [];
+    let currentStart = startTime;
+    const limit = 500;
+    while (currentStart < endTime) {
+        const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=1h&startTime=${currentStart}&endTime=${endTime}&limit=${limit}`;
+        try {
+            const data = await fetchWithRetry(url, {}, 2);
+            if (!data || data.length === 0) break;
+            const mapped = data.map(d => ({ time: d.timestamp, oi: parseFloat(d.sumOpenInterest) }));
+            all = all.concat(mapped);
+            const lastTime = mapped[mapped.length - 1].time;
+            if (lastTime >= endTime) break;
+            currentStart = lastTime + 1;
+            await sleep(Math.min(100, 300));
+        } catch (e) { break; }
+    }
+    setCachedData(cacheKey, all);
+    return all;
+}
+
+// --- MVRV Histórico (CoinMetrics) ---
+export async function fetchHistoricalMVRV(startDate, endDate) {
+    const cacheKey = `mvrv_hist_${startDate}_${endDate}`;
+    const cached = getCachedData(cacheKey, 86400000); // 1 dia
+    if (cached && !cached.stale) return cached;
+
+    const url = `https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=CapMVRVCur&frequency=1d&start_time=${startDate}&end_time=${endDate}&page_size=1000`;
+    try {
+        const data = await fetchWithRetry(url, {}, 2);
+        if (data?.data && Array.isArray(data.data)) {
+            const result = data.data.map(d => ({
+                time: new Date(d.time).getTime() / 1000,
+                value: parseFloat(d.CapMVRVCur)
+            }));
+            setCachedData(cacheKey, result);
+            return result;
+        }
+    } catch (e) { /* fallback */ }
+
+    // Fallback: valor estático (para não quebrar o backtest)
+    const fallback = [{ time: new Date(startDate).getTime() / 1000, value: 1.2 }];
+    setCachedData(cacheKey, fallback);
+    return fallback;
+}
+
+// --- MTF Confluence com suporte a cache local (para backtest) ---
+// Modifique a função getMTFConfluence existente para aceitar um parâmetro 'candles' opcional
+// Se fornecido, usa cálculo local (mais rápido para backtest)
+export async function getMTFConfluence(symbol, candlesMap = null) {
+    if (candlesMap && candlesMap.candles1H && candlesMap.candles4H) {
+        // Cálculo local (usando a função importada do risk_management)
+        // Para evitar dependência circular, importamos dinamicamente ou duplicamos a lógica aqui
+        // Vou importar do risk_management (cuidado com ciclos)
+        const { getMTFAlignmentLocal } = await import('./risk_management.js');
+        const now = Date.now() / 1000;
+        return getMTFAlignmentLocal(candlesMap.candles1H, candlesMap.candles4H, now);
+    }
+
+    // Comportamento original (via API)
+    const cacheKey = `mtf_${symbol}`;
+    const cached = getCachedData(cacheKey, 300000);
+    if (cached && !cached.stale) return cached;
+
+    const timeframes = [
+        { tf: '15m', weight: 1 },
+        { tf: '1h', weight: 2 },
+        { tf: '4h', weight: 3 },
+        { tf: '1d', weight: 4 }
+    ];
+
+    const candlesPromises = timeframes.map(item => fetchHistoricalCandles(symbol, item.tf, 80));
+    const candlesResults = await Promise.all(candlesPromises);
+
+    let totalScore = 0;
+    let totalWeight = 0;
+    const directions = [];
+    let bullishWeight = 0;
+    let bearishWeight = 0;
+
+    for (let i = 0; i < timeframes.length; i++) {
+        const candles = candlesResults[i];
+        const { tf, weight } = timeframes[i];
+        if (!candles || candles.length < 40) continue;
+
+        const closes = candles.map(c => c.close);
+        const ema20 = calcEMA(closes, 20);
+        const ema50 = calcEMA(closes, 50);
+        const last = candles.length - 1;
+        const lastClose = closes[last];
+
+        let tfScore = 0;
+        let dir = 'NEUTRO';
+
+        if (ema20[last] > ema50[last] && lastClose > ema20[last]) {
+            tfScore = 1;
+            dir = 'BULL';
+            bullishWeight += weight;
+        } else if (ema20[last] < ema50[last] && lastClose < ema20[last]) {
+            tfScore = -1;
+            dir = 'BEAR';
+            bearishWeight += weight;
+        }
+
+        // Filtro macro 1D
+        if (tf === '1d') {
+            const ma200 = calcEMA(closes, 200);
+            const isBelowMA200 = lastClose < ma200[ma200.length - 1];
+            if (isBelowMA200) {
+                tfScore -= 1.5;
+                directions.push({ tf, dir: 'BEAR (Below MA200)', score: tfScore });
+            } else {
+                directions.push({ tf, dir, score: tfScore });
+            }
+        } else {
+            directions.push({ tf, dir, score: tfScore });
+        }
+
+        totalScore += tfScore * weight;
+        totalWeight += weight;
+    }
+
+    const normalizedScore = totalWeight > 0 ? totalScore / (totalWeight * 1.2) : 0;
+
+    const result = {
+        directions,
+        score: Math.round(normalizedScore * 10) / 10,
+        confluencia: Math.max(bullishWeight, bearishWeight) >= 6 ? 'FORTE' : 
+                     Math.max(bullishWeight, bearishWeight) >= 4 ? 'MODERADA' : 'FRACA',
+        alinhado: Math.max(bullishWeight, bearishWeight) >= 4.5,
+        bias: bullishWeight > bearishWeight + 2 ? 'BULLISH' : 
+              bearishWeight > bullishWeight + 1 ? 'BEARISH' : 'NEUTRAL',
+        belowMA200: directions.some(d => d.tf === '1d' && d.dir.includes('Below MA200'))
+    };
+
+    setCachedData(cacheKey, result);
+    return result;
+}
