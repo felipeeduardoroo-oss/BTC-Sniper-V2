@@ -1,10 +1,9 @@
 // ============================================================
-// novas_secoes.js – Gráfico de Candlestick (LightweightCharts)
+// novas_secoes.js – 3 Gráficos de Candlestick (LightweightCharts)
 // e Painel On-Chain / Derivativos
 // ============================================================
 
-// ===== Funções auxiliares de fetch (adaptadas dos arquivos fornecidos) =====
-
+// ===== Funções auxiliares de fetch (adaptadas) =====
 const fetchWithRetry = async (url, opts = {}, retries = 3) => {
     let delay = 100;
     for (let i = 0; i < retries; i++) {
@@ -42,12 +41,11 @@ const fetchHistoricalCandles = async (symbol, interval, limit = 200) => {
     }
 };
 
+// ===== Funções para o painel on-chain (mesmas da versão anterior) =====
 const fetchFundingRate = async (symbol) => {
     try {
         const data = await fetchWithRetry(`https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`, {}, 2);
-        if (data && data.length) {
-            return parseFloat(data[0].fundingRate);
-        }
+        if (data && data.length) return parseFloat(data[0].fundingRate);
         return null;
     } catch { return null; }
 };
@@ -135,34 +133,26 @@ const fetchETFData = async () => {
     } catch { return null; }
 };
 
-// ===== Candlestick (LightweightCharts) =====
-
-let candleChartInstance = null;
-let candleInterval = null;
-let currentSymbol = 'BTCUSDT';
+// ============================================================
+// 3 GRÁFICOS DE CANDLESTICK
+// ============================================================
+let chartInstances = {}; // { 'BTCUSDT': { chart, series }, 'ETHUSDT': ..., 'SOLUSDT': ... }
+let updateIntervals = {};
 let currentTimeframe = '1h';
+const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+const CONTAINER_IDS = { 'BTCUSDT': 'chartBTC', 'ETHUSDT': 'chartETH', 'SOLUSDT': 'chartSOL' };
 
-export function initCandlestick(symbol = 'BTCUSDT', timeframe = '1h') {
-    currentSymbol = symbol;
-    currentTimeframe = timeframe;
+// Cria um gráfico individual
+function createChart(containerId, symbol) {
+    const container = document.getElementById(containerId);
+    if (!container) return null;
 
-    const container = document.getElementById('candlestickChart');
-    if (!container) return;
+    // Limpa conteúdo anterior
+    container.innerHTML = '';
 
-    // Limpa instância anterior
-    if (candleChartInstance) {
-        candleChartInstance.remove();
-        candleChartInstance = null;
-    }
-    if (candleInterval) {
-        clearInterval(candleInterval);
-        candleInterval = null;
-    }
-
-    // Cria o gráfico
     const chart = LightweightCharts.createChart(container, {
         width: container.clientWidth,
-        height: 400,
+        height: 280,
         layout: {
             background: { color: '#0f1117' },
             textColor: '#e6e8eb',
@@ -184,7 +174,7 @@ export function initCandlestick(symbol = 'BTCUSDT', timeframe = '1h') {
         },
     });
 
-    const candleSeries = chart.addCandlestickSeries({
+    const series = chart.addCandlestickSeries({
         upColor: '#00e896',
         downColor: '#ff4d6d',
         borderDownColor: '#ff4d6d',
@@ -193,87 +183,128 @@ export function initCandlestick(symbol = 'BTCUSDT', timeframe = '1h') {
         wickUpColor: '#00e896',
     });
 
-    candleChartInstance = { chart, candleSeries };
-
-    // Função para carregar dados e atualizar
-    const loadCandles = async () => {
-        const statusEl = document.getElementById('candleStatus');
-        statusEl.textContent = '⏳ Carregando...';
-        try {
-            const candles = await fetchHistoricalCandles(symbol, timeframe, 200);
-            if (candles.length === 0) {
-                statusEl.textContent = '❌ Sem dados';
-                return;
-            }
-            // Formata para o LightweightCharts (time em segundos)
-            const formatted = candles.map(c => ({
-                time: c.time,
-                open: c.open,
-                high: c.high,
-                low: c.low,
-                close: c.close,
-            }));
-            candleSeries.setData(formatted);
-            chart.timeScale().fitContent();
-            statusEl.textContent = `✅ Atualizado ${new Date().toLocaleTimeString()}`;
-        } catch (e) {
-            console.error(e);
-            statusEl.textContent = '❌ Erro ao carregar';
-        }
-    };
-
-    // Carrega inicial
-    loadCandles();
-
-    // Atualiza a cada 30 segundos (polling)
-    candleInterval = setInterval(async () => {
-        // Busca apenas o último candle para adicionar
-        try {
-            const candles = await fetchHistoricalCandles(symbol, timeframe, 1);
-            if (candles.length === 0) return;
-            const last = candles[0];
-            // Verifica se já existe no gráfico (evita duplicar)
-            const currentData = candleSeries.data();
-            const lastTime = currentData.length > 0 ? currentData[currentData.length - 1].time : 0;
-            if (last.time > lastTime) {
-                candleSeries.update({
-                    time: last.time,
-                    open: last.open,
-                    high: last.high,
-                    low: last.low,
-                    close: last.close,
-                });
-                document.getElementById('candleStatus').textContent = `🔄 Atualizado ${new Date().toLocaleTimeString()}`;
-            }
-        } catch (e) { /* silencioso */ }
-    }, 30000);
-
-    // Ajusta resize
-    window.addEventListener('resize', () => {
-        if (candleChartInstance) {
-            const container = document.getElementById('candlestickChart');
-            candleChartInstance.chart.resize(container.clientWidth, 400);
-        }
-    });
+    return { chart, series };
 }
 
-// ===== Painel On-Chain =====
+// Carrega dados iniciais e configura atualização periódica
+async function loadCandlesAndUpdate(symbol, timeframe) {
+    const containerId = CONTAINER_IDS[symbol];
+    if (!containerId) return;
 
+    // Se já existe instância, destrói
+    if (chartInstances[symbol]) {
+        chartInstances[symbol].chart.remove();
+        delete chartInstances[symbol];
+    }
+    if (updateIntervals[symbol]) {
+        clearInterval(updateIntervals[symbol]);
+        delete updateIntervals[symbol];
+    }
+
+    const chartObj = createChart(containerId, symbol);
+    if (!chartObj) return;
+    chartInstances[symbol] = chartObj;
+
+    const statusEl = document.getElementById('multiStatus');
+    statusEl.textContent = '⏳ Carregando...';
+
+    try {
+        // Busca dados históricos (200 velas)
+        const candles = await fetchHistoricalCandles(symbol, timeframe, 200);
+        if (candles.length === 0) {
+            statusEl.textContent = '❌ Sem dados para ' + symbol;
+            return;
+        }
+
+        const formatted = candles.map(c => ({
+            time: c.time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+        }));
+        chartObj.series.setData(formatted);
+        chartObj.chart.timeScale().fitContent();
+
+        statusEl.textContent = '✅ Atualizado ' + new Date().toLocaleTimeString();
+
+        // Configura atualização a cada 30 segundos (polling)
+        updateIntervals[symbol] = setInterval(async () => {
+            try {
+                // Busca apenas a última vela
+                const lastCandles = await fetchHistoricalCandles(symbol, timeframe, 1);
+                if (lastCandles.length === 0) return;
+                const last = lastCandles[0];
+                // Verifica se já existe no gráfico
+                const currentData = chartObj.series.data();
+                const lastTime = currentData.length > 0 ? currentData[currentData.length - 1].time : 0;
+                if (last.time > lastTime) {
+                    chartObj.series.update({
+                        time: last.time,
+                        open: last.open,
+                        high: last.high,
+                        low: last.low,
+                        close: last.close,
+                    });
+                    // Ajusta escala se necessário
+                    chartObj.chart.timeScale().fitContent();
+                    statusEl.textContent = '🔄 Atualizado ' + new Date().toLocaleTimeString();
+                }
+            } catch (e) { /* silencioso */ }
+        }, 30000);
+
+    } catch (e) {
+        console.error('Erro ao carregar candles para ' + symbol, e);
+        statusEl.textContent = '❌ Erro em ' + symbol;
+    }
+}
+
+// Inicializa os 3 gráficos com um timeframe
+export function initMultiCandlestick(timeframe = '1h') {
+    currentTimeframe = timeframe;
+    const statusEl = document.getElementById('multiStatus');
+    statusEl.textContent = '⏳ Carregando gráficos...';
+
+    // Limpa todos os intervalos anteriores
+    for (const sym of SYMBOLS) {
+        if (updateIntervals[sym]) {
+            clearInterval(updateIntervals[sym]);
+            delete updateIntervals[sym];
+        }
+        if (chartInstances[sym]) {
+            chartInstances[sym].chart.remove();
+            delete chartInstances[sym];
+        }
+    }
+
+    // Carrega cada símbolo
+    Promise.all(SYMBOLS.map(sym => loadCandlesAndUpdate(sym, timeframe)))
+        .then(() => {
+            statusEl.textContent = '✅ Todos os gráficos ativos (atualização a cada 30s)';
+        })
+        .catch(() => {
+            statusEl.textContent = '⚠️ Alguns gráficos podem não ter carregado';
+        });
+}
+
+// ============================================================
+// PAINEL ON-CHAIN (mesmo da versão anterior)
+// ============================================================
 let onChainInterval = null;
 
 export function initOnChain() {
-    // Atualiza imediatamente
     updateOnChain();
-
-    // Atualiza a cada 60 segundos
     if (onChainInterval) clearInterval(onChainInterval);
     onChainInterval = setInterval(updateOnChain, 60000);
 }
 
+export function refreshOnChain() {
+    updateOnChain();
+}
+
 async function updateOnChain() {
-    const symbol = document.getElementById('candleSymbol')?.value || 'BTCUSDT';
+    const symbol = 'BTCUSDT'; // usamos BTC para os dados agregados
     try {
-        // Busca todos os dados em paralelo
         const [mvrv, funding, oi, basis, pcr, fng, etf] = await Promise.all([
             fetchMVRV(),
             fetchFundingRate(symbol),
@@ -363,9 +394,4 @@ async function updateOnChain() {
     } catch (e) {
         console.warn('Erro ao atualizar painel on-chain:', e);
     }
-}
-
-// Exporta também a função de atualização manual se quiser
-export function refreshOnChain() {
-    updateOnChain();
 }
