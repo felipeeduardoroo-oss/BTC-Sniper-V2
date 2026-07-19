@@ -3,7 +3,7 @@
 // e Painel On-Chain / Derivativos
 // ============================================================
 
-// ===== Funções auxiliares de fetch (adaptadas) =====
+// ===== Funções auxiliares de fetch =====
 const fetchWithRetry = async (url, opts = {}, retries = 3) => {
     let delay = 100;
     for (let i = 0; i < retries; i++) {
@@ -41,7 +41,7 @@ const fetchHistoricalCandles = async (symbol, interval, limit = 200) => {
     }
 };
 
-// ===== Funções para o painel on-chain (mesmas da versão anterior) =====
+// ===== Funções para o painel on-chain =====
 const fetchFundingRate = async (symbol) => {
     try {
         const data = await fetchWithRetry(`https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&limit=1`, {}, 2);
@@ -136,44 +136,25 @@ const fetchETFData = async () => {
 // ============================================================
 // 3 GRÁFICOS DE CANDLESTICK
 // ============================================================
-let chartInstances = {}; // { 'BTCUSDT': { chart, series }, 'ETHUSDT': ..., 'SOLUSDT': ... }
+let chartInstances = {};
 let updateIntervals = {};
 let currentTimeframe = '1h';
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
 const CONTAINER_IDS = { 'BTCUSDT': 'chartBTC', 'ETHUSDT': 'chartETH', 'SOLUSDT': 'chartSOL' };
 
-// Cria um gráfico individual
 function createChart(containerId, symbol) {
     const container = document.getElementById(containerId);
     if (!container) return null;
-
-    // Limpa conteúdo anterior
     container.innerHTML = '';
-
     const chart = LightweightCharts.createChart(container, {
         width: container.clientWidth,
         height: 280,
-        layout: {
-            background: { color: '#0f1117' },
-            textColor: '#e6e8eb',
-        },
-        grid: {
-            vertLines: { color: 'rgba(42, 42, 68, 0.3)' },
-            horzLines: { color: 'rgba(42, 42, 68, 0.3)' },
-        },
-        crosshair: {
-            mode: LightweightCharts.CrosshairMode.Normal,
-        },
-        priceScale: {
-            borderColor: 'rgba(255,255,255,0.06)',
-        },
-        timeScale: {
-            borderColor: 'rgba(255,255,255,0.06)',
-            timeVisible: true,
-            secondsVisible: false,
-        },
+        layout: { background: { color: '#0f1117' }, textColor: '#e6e8eb' },
+        grid: { vertLines: { color: 'rgba(42, 42, 68, 0.3)' }, horzLines: { color: 'rgba(42, 42, 68, 0.3)' } },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        priceScale: { borderColor: 'rgba(255,255,255,0.06)' },
+        timeScale: { borderColor: 'rgba(255,255,255,0.06)', timeVisible: true, secondsVisible: false },
     });
-
     const series = chart.addCandlestickSeries({
         upColor: '#00e896',
         downColor: '#ff4d6d',
@@ -182,16 +163,12 @@ function createChart(containerId, symbol) {
         wickDownColor: '#ff4d6d',
         wickUpColor: '#00e896',
     });
-
     return { chart, series };
 }
 
-// Carrega dados iniciais e configura atualização periódica
 async function loadCandlesAndUpdate(symbol, timeframe) {
     const containerId = CONTAINER_IDS[symbol];
     if (!containerId) return;
-
-    // Se já existe instância, destrói
     if (chartInstances[symbol]) {
         chartInstances[symbol].chart.remove();
         delete chartInstances[symbol];
@@ -200,72 +177,45 @@ async function loadCandlesAndUpdate(symbol, timeframe) {
         clearInterval(updateIntervals[symbol]);
         delete updateIntervals[symbol];
     }
-
     const chartObj = createChart(containerId, symbol);
     if (!chartObj) return;
     chartInstances[symbol] = chartObj;
-
     const statusEl = document.getElementById('multiStatus');
     statusEl.textContent = '⏳ Carregando...';
-
     try {
-        // Busca dados históricos (200 velas)
         const candles = await fetchHistoricalCandles(symbol, timeframe, 200);
         if (candles.length === 0) {
             statusEl.textContent = '❌ Sem dados para ' + symbol;
             return;
         }
-
-        const formatted = candles.map(c => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-        }));
+        const formatted = candles.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close }));
         chartObj.series.setData(formatted);
         chartObj.chart.timeScale().fitContent();
-
         statusEl.textContent = '✅ Atualizado ' + new Date().toLocaleTimeString();
-
-        // Configura atualização a cada 30 segundos (polling)
         updateIntervals[symbol] = setInterval(async () => {
             try {
-                // Busca apenas a última vela
                 const lastCandles = await fetchHistoricalCandles(symbol, timeframe, 1);
                 if (lastCandles.length === 0) return;
                 const last = lastCandles[0];
-                // Verifica se já existe no gráfico
                 const currentData = chartObj.series.data();
                 const lastTime = currentData.length > 0 ? currentData[currentData.length - 1].time : 0;
                 if (last.time > lastTime) {
-                    chartObj.series.update({
-                        time: last.time,
-                        open: last.open,
-                        high: last.high,
-                        low: last.low,
-                        close: last.close,
-                    });
-                    // Ajusta escala se necessário
+                    chartObj.series.update({ time: last.time, open: last.open, high: last.high, low: last.low, close: last.close });
                     chartObj.chart.timeScale().fitContent();
                     statusEl.textContent = '🔄 Atualizado ' + new Date().toLocaleTimeString();
                 }
             } catch (e) { /* silencioso */ }
         }, 30000);
-
     } catch (e) {
         console.error('Erro ao carregar candles para ' + symbol, e);
         statusEl.textContent = '❌ Erro em ' + symbol;
     }
 }
 
-// Inicializa os 3 gráficos com um timeframe
 export function initMultiCandlestick(timeframe = '1h') {
     currentTimeframe = timeframe;
     const statusEl = document.getElementById('multiStatus');
     statusEl.textContent = '⏳ Carregando gráficos...';
-
-    // Limpa todos os intervalos anteriores
     for (const sym of SYMBOLS) {
         if (updateIntervals[sym]) {
             clearInterval(updateIntervals[sym]);
@@ -276,19 +226,13 @@ export function initMultiCandlestick(timeframe = '1h') {
             delete chartInstances[sym];
         }
     }
-
-    // Carrega cada símbolo
     Promise.all(SYMBOLS.map(sym => loadCandlesAndUpdate(sym, timeframe)))
-        .then(() => {
-            statusEl.textContent = '✅ Todos os gráficos ativos (atualização a cada 30s)';
-        })
-        .catch(() => {
-            statusEl.textContent = '⚠️ Alguns gráficos podem não ter carregado';
-        });
+        .then(() => { statusEl.textContent = '✅ Todos os gráficos ativos (atualização a cada 30s)'; })
+        .catch(() => { statusEl.textContent = '⚠️ Alguns gráficos podem não ter carregado'; });
 }
 
 // ============================================================
-// PAINEL ON-CHAIN (mesmo da versão anterior)
+// PAINEL ON-CHAIN
 // ============================================================
 let onChainInterval = null;
 
@@ -303,7 +247,7 @@ export function refreshOnChain() {
 }
 
 async function updateOnChain() {
-    const symbol = 'BTCUSDT'; // usamos BTC para os dados agregados
+    const symbol = 'BTCUSDT';
     try {
         const [mvrv, funding, oi, basis, pcr, fng, etf] = await Promise.all([
             fetchMVRV(),
@@ -314,19 +258,12 @@ async function updateOnChain() {
             fetchFearGreed(),
             fetchETFData()
         ]);
-
-        // MVRV
+        // Atualiza cada elemento (código igual ao anterior)
         const mvrvEl = document.getElementById('oc-mvrv');
         const mvrvSub = document.getElementById('oc-mvrv-sub');
-        if (mvrv !== null) {
-            mvrvEl.textContent = mvrv.toFixed(2);
-            mvrvSub.textContent = 'On-chain';
-        } else {
-            mvrvEl.textContent = '--';
-            mvrvSub.textContent = 'Indisponível';
-        }
+        if (mvrv !== null) { mvrvEl.textContent = mvrv.toFixed(2); mvrvSub.textContent = 'On-chain'; }
+        else { mvrvEl.textContent = '--'; mvrvSub.textContent = 'Indisponível'; }
 
-        // Funding Rate
         const fundingEl = document.getElementById('oc-funding');
         const fundingSub = document.getElementById('oc-funding-sub');
         if (funding !== null) {
@@ -334,12 +271,8 @@ async function updateOnChain() {
             fundingEl.textContent = `${pct}%`;
             fundingEl.className = 'value ' + (funding > 0.0005 ? 'positive' : (funding < -0.0005 ? 'negative' : ''));
             fundingSub.textContent = funding > 0.001 ? 'Longs sobre-apostados' : (funding < -0.001 ? 'Shorts sobre-apostados' : 'Equilibrado');
-        } else {
-            fundingEl.textContent = '--';
-            fundingSub.textContent = 'Indisponível';
-        }
+        } else { fundingEl.textContent = '--'; fundingSub.textContent = 'Indisponível'; }
 
-        // Open Interest
         const oiEl = document.getElementById('oc-oi');
         const oiDeltaEl = document.getElementById('oc-oi-delta');
         if (oi) {
@@ -347,50 +280,33 @@ async function updateOnChain() {
             const delta = oi.delta;
             oiDeltaEl.textContent = `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%`;
             oiDeltaEl.className = 'sub ' + (delta > 0 ? 'positive' : 'negative');
-        } else {
-            oiEl.textContent = '--';
-            oiDeltaEl.textContent = '--';
-        }
+        } else { oiEl.textContent = '--'; oiDeltaEl.textContent = '--'; }
 
-        // Basis
         const basisEl = document.getElementById('oc-basis');
         if (basis !== null) {
             basisEl.textContent = `${basis >= 0 ? '+' : ''}${basis.toFixed(2)}%`;
             basisEl.className = 'value ' + (basis > 0.5 ? 'positive' : (basis < -0.5 ? 'negative' : ''));
-        } else {
-            basisEl.textContent = '--';
-        }
+        } else { basisEl.textContent = '--'; }
 
-        // Put/Call Ratio
         const pcrEl = document.getElementById('oc-pcr');
         if (pcr !== null) {
             pcrEl.textContent = pcr.toFixed(2);
             pcrEl.className = 'value ' + (pcr > 0.7 ? 'negative' : (pcr < 0.3 ? 'positive' : ''));
-        } else {
-            pcrEl.textContent = '--';
-        }
+        } else { pcrEl.textContent = '--'; }
 
-        // Fear & Greed
         const fngEl = document.getElementById('oc-fng');
         const fngSub = document.getElementById('oc-fng-sub');
         if (fng) {
             fngEl.textContent = fng.value;
             fngEl.className = 'value ' + (fng.value < 25 ? 'negative' : (fng.value > 75 ? 'positive' : ''));
             fngSub.textContent = fng.classification;
-        } else {
-            fngEl.textContent = '--';
-            fngSub.textContent = 'Indisponível';
-        }
+        } else { fngEl.textContent = '--'; fngSub.textContent = 'Indisponível'; }
 
-        // ETF Flows
         const etfEl = document.getElementById('oc-etf');
         if (etf !== null) {
             etfEl.textContent = `$${etf.toFixed(0)}M`;
             etfEl.className = 'value ' + (etf > 0 ? 'positive' : 'negative');
-        } else {
-            etfEl.textContent = '--';
-        }
-
+        } else { etfEl.textContent = '--'; }
     } catch (e) {
         console.warn('Erro ao atualizar painel on-chain:', e);
     }
