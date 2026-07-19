@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        /* ===== CSS COMPLETO (mesmo do original) ===== */
+        /* ===== CSS COMPLETO (mesmo do seu arquivo) ===== */
         :root {
             --bg-dark: #08090d; --bg-card: #0f1117; --bg-card-hover: #14171f; --primary: #0f1117; --secondary: #1a1d29;
             --border: rgba(255, 255, 255, 0.06); --border-active: rgba(0, 180, 216, 0.5);
@@ -195,6 +195,7 @@
                 <label for="live-rr-min">R:R min: <input type="number" id="live-rr-min" value="1.8" min="0.1" max="10" step="0.1"></label>
                 <span class="badge-param" id="live-rr-badge">1.8</span>
             </div>
+            <!-- NOVOS CAMPOS -->
             <div class="param-group">
                 <label>Stop LONG (ATR): <input type="number" id="live-stop-long" value="1.5" min="0.5" max="5" step="0.1"></label>
             </div>
@@ -534,7 +535,7 @@
     <button class="telegram-test-btn" id="test-telegram-btn"><span id="test-btn-label">📨 Testar Alerta</span></button>
 
     <!-- ========================================================== -->
-    <!-- SCRIPT PRINCIPAL – CORRIGIDO                                -->
+    <!-- SCRIPT PRINCIPAL (CORRIGIDO)                               -->
     <!-- ========================================================== -->
     <script type="importmap">
     {
@@ -545,1559 +546,162 @@
     </script>
 
     <script type="module">
-    // ================================================================
-    // SCRIPT PRINCIPAL – CORREÇÃO DE IMPORTACÕES E FUNÇÕES AUSENTES
-    // ================================================================
+        import { runBacktest } from './js/backtest.js';
+        // Os demais imports permanecem iguais ao seu arquivo original
+        // (use o mesmo código que você já tinha, apenas substitua o trecho do backtest)
+        // Aqui vou mostrar APENAS a parte do backtest corrigida.
 
-    import {
-        fetchHistoricalCandles,
-        fetchFundingRate,
-        fetchOpenInterest,
-        fetchBasis,
-        fetchBlockchairStats,
-        fetchEthGasPrice,
-        fetchPutCallRatio,
-        fetchDeFiData,
-        fetchFearGreed,
-        fetchMacroStatic,
-        fetchOrderBook,
-        setCurrentPrice,
-        fetchMVRV,
-        fetchCQActiveAddresses,
-        fetchHashrate,
-        fetchOIDelta,
-        sleep,
-        getMacroBlackoutStatus,
-        fetchHistoricalFunding,
-        fetchHistoricalOI,
-        fetchHistoricalMVRV
-    } from './js/dados_externos.js';
+        // ===== INSIRA AQUI TODOS OS OUTROS IMPORTS E O RESTO DO SEU CÓDIGO =====
+        // (mantenha exatamente como estava, com exceção do evento do botão abaixo)
 
-    import * as indicadores from './js/indicadores.js';
-    import * as graficos from './js/graficos.js';
-    import * as telegram from './js/telegram.js';
-    import * as banco from './js/banco_de_dados.js';
-    import * as historico from './js/historicos_sinais.js';
-    import { CONFIG } from './js/config.js';
-    import { runBacktest } from './js/backtest.js';
+        // ...
 
-    // ===== INTERCEPTAÇÃO YAHOO =====
-    const originalFetch = window.fetch;
-    window.fetch = function(url, options) {
-        if (typeof url === 'string' && url.includes('query1.finance.yahoo.com')) {
-            const proxyUrl = 'https://corsproxy.io/?url=' + encodeURIComponent(url);
-            return originalFetch(proxyUrl, options);
-        }
-        return originalFetch(url, options);
-    };
-
-    // ================================================================
-    // FUNÇÕES LOCAIS – SUBSTITUEM O ARQUIVO risk_management.js
-    // ================================================================
-
-    // ===== MTF ALIGNMENT LOCAL =====
-    function getMTFAlignmentLocal(candles1H, candles4H, currentTime, params) {
-        const bullishVelas = params?.htfBullishVelas || 3;
-        const bearishVelas = params?.htfBearishVelas || 6;
-
-        const relevant1H = candles1H.filter(c => c.time <= currentTime).slice(-50);
-        const relevant4H = candles4H.filter(c => c.time <= currentTime).slice(-50);
-
-        if (relevant1H.length < 20 || relevant4H.length < 10) {
-            return { alinhado: false, score: 0, directions: [], bias: 'NEUTRAL' };
-        }
-
-        const getDirection = (candles) => {
-            if (candles.length < 20) return 'NEUTRO';
-            const closes = candles.map(c => c.close);
-            const ema20 = indicadores.calcEMA(closes, 20).slice(-1)[0];
-            const ema50 = indicadores.calcEMA(closes, 50).slice(-1)[0];
-            const last = closes[closes.length - 1];
-            if (ema20 > ema50 && last > ema20) return 'BULL';
-            if (ema20 < ema50 && last < ema20) return 'BEAR';
-            return 'NEUTRO';
-        };
-
-        // HTF bias usando as últimas N velas
-        let htfBias = 'NEUTRAL';
-        if (relevant4H.length >= Math.max(bullishVelas, bearishVelas)) {
-            const lastBull = relevant4H.slice(-bullishVelas);
-            const lastBear = relevant4H.slice(-bearishVelas);
-            const closes4 = relevant4H.map(c => c.close);
-            const ema200 = indicadores.calcEMA(closes4, 200).slice(-1)[0] || closes4[closes4.length-1];
-            const bullOk = lastBull.every(c => c.close > ema200);
-            const bearOk = lastBear.every(c => c.close < ema200);
-            if (bullOk) htfBias = 'BULLISH';
-            else if (bearOk) htfBias = 'BEARISH';
-        }
-
-        const dir1H = getDirection(relevant1H);
-        const dir4H = getDirection(relevant4H);
-        const bulls = [dir1H, dir4H].filter(d => d === 'BULL').length;
-        const bears = [dir1H, dir4H].filter(d => d === 'BEAR').length;
-
-        return {
-            directions: [{ tf: '1h', dir: dir1H }, { tf: '4h', dir: dir4H }],
-            score: bulls - bears,
-            alinhado: bulls === 2 || bears === 2,
-            bias: htfBias
-        };
-    }
-
-    // ===== CALCULAR STOP E TARGETS =====
-    function calculateStopAndTargets(data, direction, config) {
-        const atr = data.atr_1H || (data.price * 0.02);
-        const volatilityFactor = data.volatilityFactor || 1.0;
-        const price = data.price;
-
-        let stop, tp1, tp2, tp3;
-        const stopMult = direction === 'LONG' ? config.stopLong : config.stopShort;
-        const tp1Mult = direction === 'LONG' ? config.tp1Long : config.tp1Short;
-        const tp2Mult = config.tp2Dist;
-
-        if (direction === 'LONG') {
-            stop = price - atr * stopMult * volatilityFactor;
-            tp1 = price + atr * tp1Mult * volatilityFactor;
-            tp2 = price + atr * tp2Mult * volatilityFactor;
-            tp3 = price + atr * 7.0 * volatilityFactor;
-        } else {
-            stop = price + atr * stopMult * volatilityFactor;
-            tp1 = price - atr * tp1Mult * volatilityFactor;
-            tp2 = price - atr * tp2Mult * volatilityFactor;
-            tp3 = price - atr * 7.0 * volatilityFactor;
-        }
-
-        // RR ponderado
-        let rrPonderado;
-        if (direction === 'LONG') {
-            const ganhoPond = (tp1 - price) * 0.5 + (tp2 - price) * 0.3 + (tp3 - price) * 0.2;
-            rrPonderado = (price - stop) > 0 ? ganhoPond / (price - stop) : 0;
-        } else {
-            const ganhoPond = (price - tp1) * 0.5 + (price - tp2) * 0.3 + (price - tp3) * 0.2;
-            rrPonderado = (stop - price) > 0 ? ganhoPond / (stop - price) : 0;
-        }
-
-        return { stop, tp1, tp2, tp3, rrPonderado };
-    }
-
-    // ===== GERENCIAMENTO DE POSIÇÃO =====
-    function checkPositionManagement(position, state, candle, params) {
-        const {
-            tp1Pct = 0.4,
-            tp2Pct = 0.4,
-            runnerPct = 0.2,
-            trailLong = 1.2,
-            trailShort = 1.5,
-            maxHoldHours = 72
-        } = params;
-
-        const pos = { ...position };
-        const high = candle.high;
-        const low = candle.low;
-        const close = candle.close;
-        const atr = state.atr_1H || 0;
-        const volatility = state.volatilityFactor || 1.0;
-
-        let closed = false;
-        let exitPrice = close;
-        let reason = '';
-
-        // Verifica tempo máximo
-        if (pos.entryTime) {
-            const hours = (Date.now() - pos.entryTime) / (1000 * 60 * 60);
-            if (hours >= maxHoldHours) {
-                closed = true;
-                reason = 'Tempo máximo excedido';
-            }
-        }
-
-        if (!closed) {
-            if (pos.type === 'LONG') {
-                // TP2
-                if (!pos.tp2Taken && high >= pos.tp2) {
-                    pos.tp2Taken = true;
-                    const closeFraction = tp2Pct / (tp2Pct + runnerPct);
-                    const sizeClose = pos.sizeRemaining * closeFraction;
-                    const pnlPct = (pos.tp2 - pos.entryPrice) / pos.entryPrice * 100;
-                    pos.partialPnlUsd = (pos.initialEquity * sizeClose) * (pnlPct / 100);
-                    pos.partialPnlPct = pnlPct * sizeClose;
-                    pos.sizeRemaining -= sizeClose;
-                    pos.trailingStop = Math.max(pos.trailingStop, pos.tp1);
-                }
-                // TP1 parcial
-                else if (!pos.partialTaken && high >= pos.tp1) {
-                    pos.partialTaken = true;
-                    const sizeClose = pos.sizeRemaining * tp1Pct;
-                    const pnlPct = (pos.tp1 - pos.entryPrice) / pos.entryPrice * 100;
-                    pos.partialPnlUsd = (pos.initialEquity * sizeClose) * (pnlPct / 100);
-                    pos.partialPnlPct = pnlPct * sizeClose;
-                    pos.sizeRemaining -= sizeClose;
-                    pos.trailingStop = Math.max(pos.entryPrice, pos.entryPrice + atr * volatility * trailLong);
-                    pos.maxProfitPrice = high;
-                }
-                // Stop
-                if (!closed && low <= pos.stop) {
-                    closed = true;
-                    exitPrice = pos.stop;
-                    reason = 'Stop Loss';
-                }
-                // Trailing
-                else if (pos.partialTaken && low <= pos.trailingStop) {
-                    closed = true;
-                    exitPrice = pos.trailingStop;
-                    reason = 'Trailing Stop';
-                }
-                // Atualiza trailing
-                else if (pos.partialTaken) {
-                    pos.maxProfitPrice = Math.max(pos.maxProfitPrice || pos.entryPrice, high);
-                    const newStop = pos.maxProfitPrice - atr * volatility * trailLong;
-                    if (newStop > pos.trailingStop) pos.trailingStop = newStop;
-                }
-            } else { // SHORT
-                if (!pos.tp2Taken && low <= pos.tp2) {
-                    pos.tp2Taken = true;
-                    const closeFraction = tp2Pct / (tp2Pct + runnerPct);
-                    const sizeClose = pos.sizeRemaining * closeFraction;
-                    const pnlPct = (pos.entryPrice - pos.tp2) / pos.entryPrice * 100;
-                    pos.partialPnlUsd = (pos.initialEquity * sizeClose) * (pnlPct / 100);
-                    pos.partialPnlPct = pnlPct * sizeClose;
-                    pos.sizeRemaining -= sizeClose;
-                    pos.trailingStop = Math.min(pos.trailingStop, pos.tp1);
-                }
-                else if (!pos.partialTaken && low <= pos.tp1) {
-                    pos.partialTaken = true;
-                    const sizeClose = pos.sizeRemaining * tp1Pct;
-                    const pnlPct = (pos.entryPrice - pos.tp1) / pos.entryPrice * 100;
-                    pos.partialPnlUsd = (pos.initialEquity * sizeClose) * (pnlPct / 100);
-                    pos.partialPnlPct = pnlPct * sizeClose;
-                    pos.sizeRemaining -= sizeClose;
-                    pos.trailingStop = Math.min(pos.entryPrice, pos.entryPrice - atr * volatility * trailShort);
-                    pos.maxProfitPrice = low;
-                }
-                if (!closed && high >= pos.stop) {
-                    closed = true;
-                    exitPrice = pos.stop;
-                    reason = 'Stop Loss';
-                }
-                else if (pos.partialTaken && high >= pos.trailingStop) {
-                    closed = true;
-                    exitPrice = pos.trailingStop;
-                    reason = 'Trailing Stop';
-                }
-                else if (pos.partialTaken) {
-                    pos.maxProfitPrice = Math.min(pos.maxProfitPrice || pos.entryPrice, low);
-                    const newStop = pos.maxProfitPrice + atr * volatility * trailShort;
-                    if (newStop < pos.trailingStop) pos.trailingStop = newStop;
-                }
-            }
-        }
-
-        if (closed) {
-            const invested = pos.initialEquity * pos.sizeRemaining;
-            let pnlPct = 0;
-            if (pos.type === 'LONG') {
-                pnlPct = (exitPrice - pos.entryPrice) / pos.entryPrice * 100;
-            } else {
-                pnlPct = (pos.entryPrice - exitPrice) / pos.entryPrice * 100;
-            }
-            const pnlUsd = invested * (pnlPct / 100);
-            const totalPnlUsd = pnlUsd + (pos.partialPnlUsd || 0);
-            const totalPnlPct = (pnlPct * pos.sizeRemaining) + (pos.partialPnlPct || 0);
-
-            return {
-                closed: true,
-                exitPrice,
-                reason,
-                totalPnlUsd,
-                totalPnlPct,
-                position: null
-            };
-        }
-
-        return { closed: false, position: pos };
-    }
-
-    // ===== EXTENSÃO DO TELEGRAM (sendTradeAlertV2) =====
-    async function sendTradeAlertV2(symbol, direction, score, price, levels, rationale, riskPct, blockReason) {
-        const dir = direction.toUpperCase();
-        const emoji = direction === 'long' ? '🟢' : '🔴';
-        let msg = `${emoji} <b>SINAL ${dir} - ${symbol}</b>\n`;
-        msg += `Score: ${score}/100 | Risco Alocado: ${riskPct.toFixed(1)}%\n`;
-        if (blockReason) msg += `⚠️ Filtro(s) bloqueado(s): ${blockReason}\n`;
-        msg += `Preço: $${price.toFixed(2)}\nStop: $${levels.stop.toFixed(2)}\n`;
-        msg += `Alvos:\n  TP1 (${(levels.tp1Pct*100).toFixed(0)}%): $${levels.tp1.toFixed(2)} (R:R ${levels.rr1.toFixed(1)})\n`;
-        msg += `  TP2 (${(levels.tp2Pct*100).toFixed(0)}%): $${levels.tp2.toFixed(2)} (R:R ${levels.rr2.toFixed(1)})\n`;
-        msg += `  Runner (${(levels.runnerPct*100).toFixed(0)}%): $${levels.tp3.toFixed(2)} (R:R ${levels.rr3.toFixed(1)})\n`;
-        msg += `Trailing: ${levels.trailMultiplier.toFixed(1)} ATR\n`;
-        msg += `Estrutura: ${rationale}\n⏰ ${new Date().toLocaleString('pt-BR')}`;
-        return telegram.sendTelegramAlert(msg);
-    }
-
-    // ================================================================
-    // CONFIGURAÇÃO E ESTADO GLOBAL
-    // ================================================================
-
-    const ROBOT_CONFIG = {
-        scoreMin: 68,
-        scoreMaxShort: 32,
-        adxMin: 22,
-        rrMin: 1.8,
-        requireBOS: true,
-        requireRetest: true,
-        requireMTF: true,
-        requireSweep: false,
-        requireEMARetest: false,
-        retestDistPct: 0.02,
-        stopLong: 1.5,
-        stopShort: 2.0,
-        tp1Long: 2.0,
-        tp1Short: 1.5,
-        tp2Dist: 4.0,
-        trailLong: 1.2,
-        trailShort: 1.5,
-        tp1Pct: 0.4,
-        tp2Pct: 0.4,
-        runnerPct: 0.2,
-        maxHoldHours: 72,
-        htfBullishVelas: 3,
-        htfBearishVelas: 6,
-        diDiffMinLong: 0,
-        diDiffMinShort: 5,
-        mvrvDropPercent: 0.15,
-        zFundingMax: 1.5,
-        zOiMax: 1.5
-    };
-
-    console.log('[ROBOT] Configuração carregada:', ROBOT_CONFIG);
-
-    const {
-        calculateADX, adxFilter, fundingFilter, orderBookFilter, fearGreedFilter,
-        generateTrailingStopParams, calculateSignalScore, clamp, calcEMA,
-        calculateATR, updateStatefulEMA, updateStatefulRSI, detectRSIDivergence,
-        detectHTFStructure, updateSwingPoints, findSMCSetup, checkLateralMarket,
-        checkDerivativesFilter,
-        checkPortfolioExposure, computeScore, isSafeToTrade,
-        KellyPositionSize, detectVolumeAnomaly, calculateConfidenceScore, calculateVWAP
-    } = indicadores;
-
-    // ===== STATE =====
-    const assetsData = {};
-    CONFIG.ASSETS.forEach(symbol => {
-        assetsData[symbol] = {
-            price: 0, candles1H: [], candles4H: [], candles1D: [],
-            ema50_1H: 0, ema200_4H: 0, rsi_1H: 50, atr_1H: 0, atrHistory: [],
-            swingHighs: [], swingLows: [], currentBOS: 'NEUTRAL', mtfTrend: 'NEUTRAL',
-            oiDelta: 0, volumeRel: 1.0, rsiState: { avgGain: 0, avgLoss: 0, rsi: 50 },
-            bbWidth: 0.1, volumeAvg: 0, currentVolume: 0, fundingRate: 0,
-            trend4H: 'NEUTRAL', trend1D: 'NEUTRAL',
-            htfStructure: { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity },
-            mtfConfluence: null, adx: 0, plusDI: 0, minusDI: 0, divergence: null,
-            volumeAnomaly: null, macroBlackout: false, vwap: 0,
-            mvrv: null, sopr: null, realizedPrice: null, fearGreedData: null,
-            score: 50, direction: 'NEUTRO', volatilityFactor: 1.0,
-            mvrvHistory: []
-        };
-    });
-
-    let activePositions = {};
-    let liqMap = { 'BTCUSDT': { longs: 0, shorts: 0 }, 'ETHUSDT': { longs: 0, shorts: 0 }, 'SOLUSDT': { longs: 0, shorts: 0 } };
-    let liquidationLevels = { 'BTCUSDT': [], 'ETHUSDT': [], 'SOLUSDT': [] };
-    let scoreHistory = [];
-    let previousScores = { 'BTCUSDT': 50, 'ETHUSDT': 50, 'SOLUSDT': 50 };
-    let whaleTrades = {
-        'BTCUSDT': { buys: 0, sells: 0, lastTx: null },
-        'ETHUSDT': { buys: 0, sells: 0, lastTx: null },
-        'SOLUSDT': { buys: 0, sells: 0, lastTx: null }
-    };
-    let alertCooldowns = {};
-    let lastMainScore = 50;
-    let currentEquity = 10000;
-
-    const DOM = {};
-    function cacheDOM() {
-        ['btc-price', 'eth-price', 'sol-price', 'score-value', 'score-bar', 'last-update', 'header-timestamp', 'status-badge'].forEach(id => DOM[id] = document.getElementById(id));
-    }
-
-    function getCurrentTimestamp() {
-        return new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-    }
-
-    function formatCurrency(value) { return '$' + Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-
-    function setTextOrNA(id, value, prefix = '', suffix = '') {
-        const el = document.getElementById(id);
-        if (el) {
-            if (value !== null && value !== undefined && !isNaN(value)) el.textContent = prefix + value + suffix;
-            else el.textContent = 'INDISPONÍVEL';
-        }
-    }
-
-    function updateAnalysisScores(score) {
-        const risk = Math.max(0, 100 - score), confidence = score, entry = Math.min(100, score + 10), exit = Math.max(0, score - 10);
-        document.getElementById('risk-score').textContent = risk.toFixed(0);
-        document.getElementById('confidence-score').textContent = confidence.toFixed(0);
-        document.getElementById('entry-score').textContent = entry.toFixed(0);
-        document.getElementById('exit-score').textContent = exit.toFixed(0);
-        document.getElementById('risk-fill').style.width = risk + '%';
-        document.getElementById('confidence-fill').style.width = confidence + '%';
-        document.getElementById('entry-fill').style.width = entry + '%';
-        document.getElementById('exit-fill').style.width = exit + '%';
-    }
-
-    // ===== HISTÓRICO DE SINAIS =====
-    let signalHistory = [];
-
-    function loadSignalHistory() {
-        const saved = localStorage.getItem('signalHistory');
-        if (saved) { try { signalHistory = JSON.parse(saved); } catch(e) { signalHistory = []; } } else { signalHistory = []; }
-    }
-
-    function saveSignalHistory() { localStorage.setItem('signalHistory', JSON.stringify(signalHistory)); }
-
-    function addSignal(symbol, direction, entry, stop, tp) {
-        const now = new Date();
-        const timestamp = now.toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-        signalHistory.push({ timestamp, symbol, direction, entry, stop, tp, status: 'ABERTA', exitPrice: null, pnl: null, pnlUsd: null });
-        saveSignalHistory();
-        renderSignalTable();
-    }
-
-    function updateSignalStatus(symbol, exitPrice, pnlUsd = null) {
-        for (let i = signalHistory.length - 1; i >= 0; i--) {
-            const s = signalHistory[i];
-            if (s.symbol === symbol && s.status === 'ABERTA') {
-                s.status = 'FECHADA';
-                s.exitPrice = exitPrice;
-                if (s.direction === 'LONG') s.pnl = ((exitPrice - s.entry) / s.entry) * 100;
-                else s.pnl = ((s.entry - exitPrice) / s.entry) * 100;
-                s.pnlUsd = pnlUsd !== null ? pnlUsd : (s.pnl / 100) * 10000;
-                saveSignalHistory();
-                renderSignalTable();
-                return;
-            }
-        }
-    }
-
-    function renderSignalTable() {
-        const tbody = document.getElementById('signal-history-body');
-        if (!tbody) return;
-        if (signalHistory.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-muted);">Nenhum sinal registrado ainda.</td></tr>`;
-            updateRealPnL();
-            return;
-        }
-        const sorted = [...signalHistory].reverse();
-        let html = '';
-        for (const s of sorted) {
-            let stopPct = 0, takePct = 0;
-            if (s.direction === 'LONG') { stopPct = ((s.stop - s.entry) / s.entry) * 100; takePct = ((s.tp - s.entry) / s.entry) * 100; }
-            else { stopPct = ((s.entry - s.stop) / s.entry) * 100; takePct = ((s.entry - s.tp) / s.entry) * 100; }
-
-            let livePnl = '--';
-            const currentPrice = assetsData[s.symbol]?.price;
-            if (currentPrice && s.status === 'ABERTA') {
-                if (s.direction === 'LONG') livePnl = ((currentPrice - s.entry) / s.entry) * 100;
-                else livePnl = ((s.entry - currentPrice) / s.entry) * 100;
-                livePnl = (livePnl >= 0 ? '+' : '') + livePnl.toFixed(2) + '%';
-            } else if (s.pnl !== null) { livePnl = (s.pnl >= 0 ? '+' : '') + s.pnl.toFixed(2) + '%'; }
-
-            const statusClass = s.status === 'ABERTA' ? 'color:var(--accent-green);' : 'color:var(--accent-red);';
-            const pnlColor = s.pnl !== null ? (s.pnl >= 0 ? 'color:var(--accent-green);' : 'color:var(--accent-red);') : '';
-            const stopColor = stopPct < 0 ? 'color:var(--accent-red);' : '';
-            const takeColor = takePct > 0 ? 'color:var(--accent-green);' : '';
-
-            html += `<tr>
-                <td>${s.timestamp}</td><td>${s.symbol}</td><td>${s.direction}</td>
-                <td>$${s.entry.toFixed(2)}</td><td>$${s.stop.toFixed(2)}</td><td>$${s.tp.toFixed(2)}</td>
-                <td style="${stopColor}">${stopPct.toFixed(2)}%</td><td style="${takeColor}">${takePct.toFixed(2)}%</td>
-                <td style="${statusClass}">${s.status}</td>
-                <td style="${pnlColor}">${s.pnl !== null ? (s.pnl >= 0 ? '+' : '') + s.pnl.toFixed(2) + '%' : '--'}</td>
-                <td>${livePnl}</td>
-            </tr>`;
-        }
-        tbody.innerHTML = html;
-        updateRealPnL();
-    }
-
-    function updateRealPnL() {
-        const totalTrades = signalHistory.length;
-        const closedTrades = signalHistory.filter(s => s.status === 'FECHADA' && s.pnl !== null);
-        const openTrades = signalHistory.filter(s => s.status === 'ABERTA');
-        const wins = closedTrades.filter(s => s.pnl > 0).length;
-        const losses = closedTrades.filter(s => s.pnl < 0).length;
-        const winrate = closedTrades.length > 0 ? (wins / closedTrades.length) * 100 : 0;
-        const totalPnlPct = closedTrades.reduce((acc, s) => acc + s.pnl, 0);
-        const totalPnlUsd = closedTrades.reduce((acc, s) => acc + (s.pnlUsd || (s.pnl / 100) * 10000), 0);
-        const grossProfit = closedTrades.filter(s => s.pnl > 0).reduce((acc, s) => acc + (s.pnlUsd || (s.pnl / 100) * 10000), 0);
-        const grossLoss = closedTrades.filter(s => s.pnl < 0).reduce((acc, s) => acc + Math.abs(s.pnlUsd || (s.pnl / 100) * 10000), 0);
-        const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0);
-
-        document.getElementById('real-total-trades').textContent = totalTrades;
-        document.getElementById('real-winrate').textContent = winrate.toFixed(2) + '%';
-        document.getElementById('real-total-pnl-pct').textContent = (totalPnlPct >= 0 ? '+' : '') + totalPnlPct.toFixed(2) + '%';
-        document.getElementById('real-total-pnl-usd').textContent = (totalPnlUsd >= 0 ? '+' : '') + '$' + totalPnlUsd.toFixed(2);
-        document.getElementById('real-profit-factor').textContent = profitFactor === Infinity ? '∞' : profitFactor.toFixed(2);
-        document.getElementById('real-open-trades').textContent = openTrades.length;
-
-        const pnlEl = document.getElementById('real-total-pnl-pct');
-        pnlEl.className = 'value ' + (totalPnlPct >= 0 ? 'positive' : 'negative');
-        document.getElementById('real-total-pnl-usd').className = 'value ' + (totalPnlUsd >= 0 ? 'positive' : 'negative');
-        document.getElementById('real-winrate').className = 'value ' + (winrate > 50 ? 'positive' : 'negative');
-    }
-
-    // ===== RENDER MINI ORDER BOOK =====
-    function renderMiniOrderBook(obData) {
-        if (!obData) return '<span style="color:#8b949e;">N/A</span>';
-        const maxQty = Math.max(...obData.bids.map(b => b.qty), ...obData.asks.map(a => a.qty));
-        const bar = (qty) => (qty / maxQty * 100).toFixed(0);
-        let html = '<div class="orderbook-mini">';
-        for (let i = obData.asks.length - 1; i >= 0; i--) {
-            const a = obData.asks[i];
-            html += `<div style="display:flex;justify-content:space-between;align-items:center;">
-                <span class="ask">${a.price.toFixed(2)}</span>
-                <span style="color:#8b949e;">${a.qty.toFixed(4)}</span>
-                <div class="bar-bg"><div class="bar-fill" style="width:${bar(a.qty)}%;background:#ff5252;"></div></div>
-            </div>`;
-        }
-        const spread = ((obData.asks[0].price - obData.bids[0].price) / obData.bids[0].price * 100).toFixed(3);
-        html += `<div class="spread">Spread: ${spread}%</div>`;
-        for (const b of obData.bids) {
-            html += `<div style="display:flex;justify-content:space-between;align-items:center;">
-                <span class="bid">${b.price.toFixed(2)}</span>
-                <span style="color:#8b949e;">${b.qty.toFixed(4)}</span>
-                <div class="bar-bg"><div class="bar-fill" style="width:${bar(b.qty)}%;background:#00e676;"></div></div>
-            </div>`;
-        }
-        html += '</div>';
-        return html;
-    }
-
-    // ===== COMITÊ (RUN COMMITTEE) =====
-    let committeeRunning = false;
-    async function runCommittee() {
-        if (committeeRunning) return;
-        committeeRunning = true;
-        try {
-            const symbol = 'BTCUSDT';
-            const candles = await fetchHistoricalCandles(symbol, '15m', 100);
-            if (!candles.length) {
-                document.getElementById('committee-main-signal').innerHTML = '<div style="color:#ff5252;font-size:14px;">📡 Dados indisponíveis</div>';
-                committeeRunning = false;
-                setTimeout(runCommittee, 30000);
-                return;
-            }
-
-            const mtfData = getMTFAlignmentLocal(
-                assetsData['BTCUSDT']?.candles1H || [],
-                assetsData['BTCUSDT']?.candles4H || [],
-                Date.now() / 1000,
-                { htfBullishVelas: ROBOT_CONFIG.htfBullishVelas, htfBearishVelas: ROBOT_CONFIG.htfBearishVelas }
-            );
-
-            const [fundingData, obData, fgData] = await Promise.all([
-                fetchFundingRate(symbol), fetchOrderBook(symbol, 10), fetchFearGreed()
-            ]);
-
-            const closes = candles.map(c => c.close);
-            const ema20 = calcEMA(closes, 20);
-            const ema50 = calcEMA(closes, 50);
-            let rsiValues = [], avgGain = 0, avgLoss = 0;
-            for (let i = 1; i < closes.length; i++) {
-                const diff = closes[i] - closes[i - 1];
-                const gain = diff > 0 ? diff : 0, loss = diff < 0 ? Math.abs(diff) : 0;
-                if (i === 1) { avgGain = gain; avgLoss = loss; } else { avgGain = (avgGain * 13 + gain) / 14; avgLoss = (avgLoss * 13 + loss) / 14; }
-                rsiValues.push(avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)));
-            }
-            const currentRSI = rsiValues.length ? rsiValues[rsiValues.length - 1] : 50;
-            const adxData = calculateADX(candles);
-            const divergence = detectRSIDivergence(candles, rsiValues);
-            const volumeMA = candles.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
-            const currentVol = candles[candles.length - 1].volume;
-            const indicators = {
-                close: closes[closes.length - 1], ema20: ema20[ema20.length - 1], ema50: ema50[ema50.length - 1],
-                rsi: currentRSI, adx: adxData.adx, trend: adxData.trend,
-                divergence: divergence ? divergence.type : null, mtfScore: mtfData.score,
-                fundingRate: fundingData ? fundingData.rate : 0, volumeRatio: currentVol / volumeMA
-            };
-            const scoreData = calculateSignalScore(indicators);
-            const adxFilt = adxFilter(candles), obFilt = orderBookFilter(obData, scoreData.direction);
-            const fundFilt = fundingFilter(fundingData, scoreData.direction);
-            const fgFilt = fearGreedFilter(fgData, scoreData.direction);
-            let blocked = [];
-            if (!adxFilt.pass) blocked.push(adxFilt.reason);
-            if (!obFilt.pass) blocked.push(obFilt.reason);
-            if (!fundFilt.pass) blocked.push(fundFilt.reason);
-            const canTrade = blocked.length === 0 && scoreData.score >= 55;
-            let trailingParams = canTrade ? generateTrailingStopParams(candles, indicators.close, scoreData.direction) : null;
-            // Atualiza UI do comitê
-            const bar = document.getElementById('committee-bar'); if (bar) bar.style.width = scoreData.score + '%';
-            document.getElementById('committee-score').textContent = scoreData.score;
-            const label = document.getElementById('committee-label');
-            const colors = {
-                'MUITO FORTE': { bg: 'rgba(0,230,118,0.2)', color: '#00e676', border: '#00e676' },
-                'FORTE': { bg: 'rgba(0,200,83,0.15)', color: '#00c853', border: '#00c853' },
-                'MODERADO': { bg: 'rgba(255,193,7,0.15)', color: '#ffc107', border: '#ffc107' },
-                'NEUTRO': { bg: 'rgba(139,148,158,0.15)', color: '#8b949e', border: '#8b949e' },
-                'MODERADO CONTRA': { bg: 'rgba(255,152,0,0.15)', color: '#ff9800', border: '#ff9800' },
-                'FORTE CONTRA': { bg: 'rgba(255,82,82,0.15)', color: '#ff5252', border: '#ff5252' },
-                'MUITO FORTE CONTRA': { bg: 'rgba(255,23,68,0.2)', color: '#ff1744', border: '#ff1744' }
-            };
-            const c = colors[scoreData.label] || colors['NEUTRO'];
-            if (label) { label.style.background = c.bg; label.style.color = c.color; label.style.border = `1px solid ${c.border}`; label.textContent = scoreData.label; }
-            const mtfContainer = document.getElementById('committee-mtf-badges');
-            if (mtfContainer && mtfData && mtfData.directions) {
-                mtfContainer.innerHTML = mtfData.directions.map(d => `<span class="mtf-badge ${d.dir === 'BULL' ? 'mtf-bull' : d.dir === 'BEAR' ? 'mtf-bear' : 'mtf-neutral'}">${d.tf} ${d.dir}</span>`).join('');
-            }
-            const reasonsContainer = document.getElementById('committee-reasons');
-            if (reasonsContainer) {
-                reasonsContainer.innerHTML = scoreData.reasons.map(r => `<span class="reason-tag ${r.includes('Contra') || r.includes('Baixo') || r.includes('Sem') ? 'negative' : 'positive'}">${r}</span>`).join('');
-            }
-            const fundEl = document.getElementById('committee-funding');
-            if (fundEl && fundingData && fundingData.rate !== undefined) {
-                const fColor = fundingData.rate > 0.01 ? '#ff5252' : fundingData.rate < -0.01 ? '#00e676' : '#ffc107';
-                fundEl.style.color = fColor;
-                fundEl.textContent = `${(fundingData.rate * 100).toFixed(4)}% — ${fundingData.interpretacao || 'EQUILIBRADO'}`;
-            }
-            const adxEl = document.getElementById('committee-adx');
-            if (adxEl && adxData) {
-                const aColor = adxData.adx < 20 ? '#ff5252' : adxData.adx > 50 ? '#ff9800' : '#00e676';
-                adxEl.style.color = aColor;
-                adxEl.textContent = `${adxData.adx.toFixed(1)} ${adxData.adx < 20 ? '(Sem tendência)' : adxData.trend || '(Tendência)'}`;
-            }
-            document.getElementById('committee-ob').innerHTML = renderMiniOrderBook(obData);
-            const signalEl = document.getElementById('committee-main-signal');
-            if (signalEl) {
-                if (canTrade) {
-                    const dir = scoreData.direction;
-                    const color = dir === 'LONG' ? '#00e676' : '#ff1744';
-                    let html = `<div style="color:${color};font-size:24px;font-weight:900;">${dir}</div>`;
-                    html += `<div style="color:#8b949e;font-size:11px;">Score: ${scoreData.score}/100 — ${scoreData.label}</div>`;
-                    if (trailingParams) {
-                        const color2 = dir === 'LONG' ? '#00e676' : '#ff1744';
-                        html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;text-align:left;">
-                            <span style="color:#888;">Stop Loss:</span><span style="color:#ff5252;font-weight:700;">$${trailingParams.stopLoss.toFixed(2)}</span>
-                            <span style="color:#888;">TP1 (50%):</span><span style="color:${color2};font-weight:600;">$${trailingParams.tp1.toFixed(2)}</span>
-                            <span style="color:#888;">TP2 (30%):</span><span style="color:${color2};font-weight:600;">$${trailingParams.tp2.toFixed(2)}</span>
-                            <span style="color:#888;">TP3 (20%):</span><span style="color:${color2};font-weight:600;">$${trailingParams.tp3.toFixed(2)}</span>
-                            <span style="color:#888;">Trailing Ativa:</span><span style="color:#ffc107;">$${trailingParams.trailingActivation.toFixed(2)}</span>
-                            <span style="color:#888;">Trailing Dist:</span><span style="color:#ffc107;">$${trailingParams.trailingDistance.toFixed(2)}</span>
-                            <span style="color:#888;">ATR:</span><span style="color:#aaa;">$${trailingParams.atr.toFixed(2)}</span>
-                        </div>`;
-                    }
-                    if (fgFilt.multiplier !== 1) html += `<div style="margin-top:6px;color:#ffc107;font-size:10px;">Position Size: x${fgFilt.multiplier} (${fgFilt.reason})</div>`;
-                    signalEl.innerHTML = html;
-                } else {
-                    let html = `<div style="color:#8b949e;font-size:16px;font-weight:700;">SEM SINAL</div>`;
-                    if (blocked.length) html += blocked.map(b => `<div style="color:#ff5252;font-size:10px;">⛔ ${b}</div>`).join('');
-                    html += `<div style="color:#8b949e;font-size:10px;margin-top:4px;">Score: ${scoreData.score}/100 — Aguardando confluência</div>`;
-                    signalEl.innerHTML = html;
-                }
-            }
-        } catch(e) { console.error(e); } finally { committeeRunning = false; setTimeout(runCommittee, 60000); }
-    }
-
-    // ===== FORÇA DO SINAL (LEGADO) =====
-    function updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData) {
-        if (!scoreData) return;
-        const bar = document.getElementById('scoreBar');
-        const val = document.getElementById('scoreValue');
-        const label = document.getElementById('scoreLabel');
-        const score = scoreData.score ?? 50;
-        if (bar) bar.style.width = score + '%';
-        if (val) val.textContent = score;
-        const labelText = scoreData.label || (score >= 70 ? 'MUITO FORTE' : score >= 55 ? 'FORTE' : score >= 45 ? 'MODERADO' : score >= 30 ? 'MODERADO CONTRA' : 'FORTE CONTRA');
-        const colors = { 'MUITO FORTE': { bg: 'rgba(0,230,118,0.2)', color: '#00e676', border: '#00e676' }, 'FORTE': { bg: 'rgba(0,200,83,0.15)', color: '#00c853', border: '#00c853' }, 'MODERADO': { bg: 'rgba(255,193,7,0.15)', color: '#ffc107', border: '#ffc107' }, 'NEUTRO': { bg: 'rgba(139,148,158,0.15)', color: '#8b949e', border: '#8b949e' }, 'MODERADO CONTRA': { bg: 'rgba(255,152,0,0.15)', color: '#ff9800', border: '#ff9800' }, 'FORTE CONTRA': { bg: 'rgba(255,82,82,0.15)', color: '#ff5252', border: '#ff5252' }, 'MUITO FORTE CONTRA': { bg: 'rgba(255,23,68,0.2)', color: '#ff1744', border: '#ff1744' } };
-        const c = colors[labelText] || colors['NEUTRO'];
-        if (label) { label.style.background = c.bg; label.style.color = c.color; label.style.border = `1px solid ${c.border}`; label.textContent = labelText; }
-        const mtfContainer = document.getElementById('mtfBadges');
-        if (mtfContainer && mtfData && mtfData.directions) {
-            mtfContainer.innerHTML = mtfData.directions.map(d => `<span class="mtf-badge ${d.dir === 'BULL' ? 'mtf-bull' : d.dir === 'BEAR' ? 'mtf-bear' : 'mtf-neutral'}">${d.tf} ${d.dir}</span>`).join('');
-        }
-        const reasonsContainer = document.getElementById('scoreReasons');
-        if (reasonsContainer) {
-            if (scoreData && Array.isArray(scoreData.reasons) && scoreData.reasons.length) {
-                reasonsContainer.innerHTML = scoreData.reasons.map(r => `<span class="reason-tag ${r.includes('Contra') || r.includes('Baixo') || r.includes('Sem') ? 'negative' : 'positive'}">${r}</span>`).join('');
-            } else {
-                reasonsContainer.innerHTML = `<span class="reason-tag neutral">${scoreData.direction || 'NEUTRO'}</span>`;
-            }
-        }
-        const fundEl = document.getElementById('fundingDisplay');
-        if (fundEl && fundingData && fundingData.rate !== undefined) {
-            const fColor = fundingData.rate > 0.01 ? '#ff5252' : fundingData.rate < -0.01 ? '#00e676' : '#ffc107';
-            fundEl.style.color = fColor;
-            fundEl.textContent = `${(fundingData.rate * 100).toFixed(4)}% — ${fundingData.interpretacao || 'EQUILIBRADO'}`;
-        }
-        const adxEl = document.getElementById('adxDisplay');
-        if (adxEl && adxData && adxData.adx !== undefined) {
-            const aColor = adxData.adx < 20 ? '#ff5252' : adxData.adx > 50 ? '#ff9800' : '#00e676';
-            adxEl.style.color = aColor;
-            adxEl.textContent = `${adxData.adx.toFixed(1)} ${adxData.adx < 20 ? '(Sem tendência)' : adxData.trend || '(Tendência)'}`;
-        }
-        const obContainer = document.getElementById('orderbookMini');
-        if (obContainer) obContainer.innerHTML = renderMiniOrderBook(obData);
-        const mainSignalEl = document.getElementById('mainSignal');
-        if (mainSignalEl) {
-            const dir = scoreData.direction || 'NEUTRO';
-            const scoreValue = scoreData.score ?? 50;
-            if (dir === 'LONG' || dir === 'SHORT') {
-                const color = dir === 'LONG' ? '#00e676' : '#ff1744';
-                mainSignalEl.innerHTML = `<div style="color:${color};font-size:20px;font-weight:900;">${dir}</div><div style="color:#8b949e;font-size:11px;">Score: ${scoreValue}/100 — ${labelText}</div>`;
-            } else {
-                mainSignalEl.innerHTML = `<div style="color:#8b949e;font-size:14px;">Sem direção definida (Score: ${scoreValue}/100)</div>`;
-            }
-        }
-    }
-
-    // ===== SCORE BARS =====
-    function updateScoreBars() {
-        CONFIG.ASSETS.forEach(symbol => {
-            const data = assetsData[symbol];
-            if (!data) return;
-            const score = data.score !== undefined ? data.score : 50;
-            const dir = data.direction || 'NEUTRO';
-            const prefix = symbol.replace('USDT', '').toLowerCase();
-            const valueEl = document.getElementById(`${prefix}-score-value-large`);
-            const dirEl = document.getElementById(`${prefix}-score-direction-large`);
-            const fillEl = document.getElementById(`${prefix}-score-fill-large`);
-            if (valueEl) valueEl.textContent = Math.round(score);
-            if (dirEl) { dirEl.textContent = dir; dirEl.className = `score-direction ${dir.toLowerCase()}`; }
-            if (fillEl) {
-                const pct = Math.min(100, Math.max(0, score));
-                fillEl.style.width = pct + '%';
-                const red = Math.round(255 - (pct / 100) * 255);
-                const green = Math.round((pct / 100) * 255);
-                fillEl.style.background = `rgb(${red}, ${green}, 0)`;
-            }
-        });
-    }
-
-    // ===== TIMEFRAME STATS =====
-    async function updateTimeframeStats() {
-        for (const symbol of CONFIG.ASSETS) {
-            const prefix = symbol.replace('USDT', '').toLowerCase();
-            try {
-                const [candles1d, candles7d, candles30d] = await Promise.all([
-                    fetchHistoricalCandles(symbol, '1d', 2),
-                    fetchHistoricalCandles(symbol, '1d', 8),
-                    fetchHistoricalCandles(symbol, '1d', 31)
-                ]);
-                let change1d = 0, change7d = 0, change30d = 0;
-                if (candles1d.length >= 2) {
-                    const last = candles1d[candles1d.length - 1].close;
-                    const prev = candles1d[candles1d.length - 2].close;
-                    change1d = ((last - prev) / prev) * 100;
-                }
-                if (candles7d.length >= 2) {
-                    const last = candles7d[candles7d.length - 1].close;
-                    const prev = candles7d[0].close;
-                    change7d = ((last - prev) / prev) * 100;
-                }
-                if (candles30d.length >= 2) {
-                    const last = candles30d[candles30d.length - 1].close;
-                    const prev = candles30d[0].close;
-                    change30d = ((last - prev) / prev) * 100;
-                }
-                const el1d = document.getElementById(`${prefix}-stat-1d`);
-                const el1s = document.getElementById(`${prefix}-stat-1s`);
-                const el1m = document.getElementById(`${prefix}-stat-1m`);
-                if (el1d) el1d.innerHTML = `<span class="label">1D</span> ${change1d >= 0 ? '+' : ''}${change1d.toFixed(2)}%`;
-                if (el1s) el1s.innerHTML = `<span class="label">1S</span> ${change7d >= 0 ? '+' : ''}${change7d.toFixed(2)}%`;
-                if (el1m) el1m.innerHTML = `<span class="label">1M</span> ${change30d >= 0 ? '+' : ''}${change30d.toFixed(2)}%`;
-                [el1d, el1s, el1m].forEach(el => {
-                    if (el) {
-                        const value = parseFloat(el.textContent.replace(/[^0-9.-]/g, ''));
-                        el.className = `stat ${value >= 0 ? 'positive' : 'negative'}`;
-                    }
-                });
-            } catch(e) { console.warn(`Erro timeframe ${symbol}:`, e); }
-        }
-    }
-
-    // ===== WEBSOCKET =====
-    let wsRetryCount = 0, wsInstance = null, wsLiqInstance = null;
-    function initWebSockets() {
-        const wsStatusEl = document.getElementById('ws-status') || document.querySelector('.live-indicator');
-        const tradeStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@trade').join('/');
-        const klineStreams = CONFIG.ASSETS.map(a => a.toLowerCase() + '@kline_15m').join('/');
-        const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${tradeStreams}/${klineStreams}`);
-        wsInstance = ws;
-        ws.onopen = () => { wsRetryCount = 0; if (wsStatusEl) { wsStatusEl.textContent = '🔄 WS LIVE (Binance)'; wsStatusEl.style.color = 'var(--accent-green)'; wsStatusEl.style.animation = 'pulse-dot 1.5s infinite'; } };
-        ws.onmessage = (event) => {
-            try {
-                const msg = JSON.parse(event.data);
-                const stream = msg.stream;
-                const data = msg.data;
-                if (stream.includes('@trade')) {
-                    const symbol = data.s;
-                    const price = parseFloat(data.p);
-                    const qty = parseFloat(data.q);
-                    const isBuy = !data.m;
-                    setCurrentPrice(symbol, price);
-                    const tradeValue = price * qty;
-                    if (tradeValue > 100000) {
-                        if (isBuy) whaleTrades[symbol].buys += tradeValue;
-                        else whaleTrades[symbol].sells += tradeValue;
-                        whaleTrades[symbol].lastTx = { price, value: tradeValue, time: Date.now(), side: isBuy ? 'BUY' : 'SELL' };
-                    }
-                    if (assetsData[symbol]) {
-                        assetsData[symbol].price = price;
-                        updateLivePriceUI(symbol, price);
-                        if (activePositions[symbol]) checkPositionManagementLive(symbol, price);
-                    }
-                } else if (stream.includes('@kline')) {
-                    const k = data.k;
-                    const symbol = data.s;
-                    if (assetsData[symbol] && k.x) setTimeout(() => evaluateMarkets(), 1000);
-                }
-            } catch(e) { /* ignora */ }
-        };
-        ws.onerror = (e) => { console.warn('WS Error', e); if (wsStatusEl) { wsStatusEl.textContent = '❌ WS OFFLINE'; wsStatusEl.style.color = 'var(--accent-red)'; } tryFallbackWS(); };
-        ws.onclose = () => { if (wsStatusEl) { wsStatusEl.textContent = '🔄 RECONNECTING...'; wsStatusEl.style.color = 'var(--accent-yellow)'; } wsRetryCount++; const delay = Math.min(3000 * Math.pow(1.5, wsRetryCount), 30000); if (wsRetryCount <= 5) setTimeout(initWebSockets, delay); else tryFallbackWS(); };
-        function tryFallbackWS() {
-            if (wsInstance && wsInstance.readyState !== WebSocket.CLOSED) return;
-            const bybitWs = new WebSocket('wss://stream.bybit.com/v5/public/spot');
-            wsInstance = bybitWs;
-            bybitWs.onopen = () => {
-                if (wsStatusEl) { wsStatusEl.textContent = '🔄 WS FALLBACK (Bybit)'; wsStatusEl.style.color = 'var(--accent-yellow)'; }
-                const topics = CONFIG.ASSETS.map(a => `publicTrade.${a}`).join(',');
-                bybitWs.send(JSON.stringify({ op: 'subscribe', args: topics.split(',') }));
-            };
-            bybitWs.onmessage = (event) => {
-                try {
-                    const msg = JSON.parse(event.data);
-                    if (msg.type === 'snapshot' && msg.topic && msg.topic.startsWith('publicTrade')) {
-                        const symbol = msg.topic.split('.')[1];
-                        const trade = msg.data[0];
-                        const price = parseFloat(trade.price);
-                        const qty = parseFloat(trade.size);
-                        const isBuy = trade.side === 'Buy';
-                        setCurrentPrice(symbol, price);
-                        const tradeValue = price * qty;
-                        if (tradeValue > 100000) {
-                            if (isBuy) whaleTrades[symbol].buys += tradeValue;
-                            else whaleTrades[symbol].sells += tradeValue;
-                            whaleTrades[symbol].lastTx = { price, value: tradeValue, time: Date.now(), side: isBuy ? 'BUY' : 'SELL' };
-                        }
-                        if (assetsData[symbol]) {
-                            assetsData[symbol].price = price;
-                            updateLivePriceUI(symbol, price);
-                            if (activePositions[symbol]) checkPositionManagementLive(symbol, price);
-                        }
-                    }
-                } catch(e) { /* ignora */ }
-            };
-            bybitWs.onclose = () => { if (wsStatusEl) { wsStatusEl.textContent = '⛔ WS FALHOU'; wsStatusEl.style.color = 'var(--accent-red)'; } };
-        }
-        const wsLiq = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
-        wsLiqInstance = wsLiq;
-        wsLiq.onmessage = (event) => {
-            try {
-                const orders = JSON.parse(event.data);
-                orders.forEach(o => {
-                    const symbol = o.order.symbol;
-                    if (liqMap[symbol]) {
-                        const side = o.order.side;
-                        const price = parseFloat(o.order.price);
-                        const qty = parseFloat(o.order.origQty) * price;
-                        if (side === 'BUY') liqMap[symbol].longs += qty;
-                        else liqMap[symbol].shorts += qty;
-                        if (!liquidationLevels[symbol]) liquidationLevels[symbol] = [];
-                        liquidationLevels[symbol].push(price);
-                        if (liquidationLevels[symbol].length > 100) liquidationLevels[symbol].shift();
-                    }
-                });
-            } catch(e) { /* ignora */ }
-        };
-        wsLiq.onclose = () => setTimeout(() => {
-            if (wsLiqInstance && wsLiqInstance.readyState === WebSocket.CLOSED) {
-                wsLiqInstance = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
-                wsLiqInstance.onmessage = wsLiq.onmessage;
-                wsLiqInstance.onclose = wsLiq.onclose;
-            }
-        }, 5000);
-        setInterval(() => { Object.keys(liqMap).forEach(k => liqMap[k] = { longs: 0, shorts: 0 }); }, 4 * 60 * 60 * 1000);
-    }
-
-    function updateLivePriceUI(symbol, price) {
-        const prefix = symbol.replace('USDT', '').toLowerCase();
-        const el = DOM[`${prefix}-price`] || document.getElementById(`${prefix}-price`);
-        if (el) {
-            const oldPrice = parseFloat(el.textContent.replace(/[^0-9.-]/g, ''));
-            el.textContent = formatCurrency(price);
-            if (!isNaN(oldPrice) && price !== oldPrice) {
-                el.style.transition = 'color 0.3s, background 0.3s';
-                const color = price > oldPrice ? 'var(--accent-green)' : 'var(--accent-red)';
-                el.style.color = color;
-                el.style.background = price > oldPrice ? 'rgba(0, 232, 150, 0.1)' : 'rgba(255, 77, 109, 0.1)';
-                setTimeout(() => { el.style.color = ''; el.style.background = ''; }, 300);
-            }
-        }
-    }
-
-    function updateMainScoreUI(scoreData, blockReason) {
-        const s = scoreData.score;
-        const c = scoreData.components;
-        const scoreEl = DOM['score-value'] || document.getElementById('score-value');
-        const barEl = DOM['score-bar'] || document.getElementById('score-bar');
-        if (scoreEl) scoreEl.textContent = s;
-        if (barEl) { barEl.style.width = s + '%'; barEl.style.background = s >= 75 ? 'var(--accent-green)' : s <= 25 ? 'var(--accent-red)' : 'var(--accent-yellow)'; }
-        if (scoreEl) scoreEl.style.color = s >= 75 ? 'var(--accent-green)' : s <= 25 ? 'var(--accent-red)' : 'var(--accent-yellow)';
-        document.getElementById('score-trend').textContent = c.mtf;
-        document.getElementById('score-structure').textContent = c.smc;
-        document.getElementById('score-momentum').textContent = c.mom;
-        document.getElementById('score-volume').textContent = c.of;
-        document.getElementById('score-onchain').textContent = c.macro;
-        document.getElementById('score-oi').textContent = c.oi;
-        const reasonEl = document.getElementById('block-reason');
-        if (blockReason) { reasonEl.style.display = 'block'; reasonEl.textContent = '🚫 ' + blockReason; } else { reasonEl.style.display = 'none'; }
-        lastMainScore = s;
-        updateAnalysisScores(s);
-    }
-
-    // ===== GESTÃO DE POSIÇÃO AO VIVO =====
-    function checkPositionManagementLive(symbol, currentPrice) {
-        const pos = activePositions[symbol];
-        if (!pos) return;
-        const data = assetsData[symbol];
-        if (!data) return;
-
-        const lastCandle = data.candles1H.length ? data.candles1H[data.candles1H.length - 1] : null;
-        const candle = {
-            time: Date.now() / 1000,
-            high: lastCandle ? lastCandle.high : currentPrice * 1.001,
-            low: lastCandle ? lastCandle.low : currentPrice * 0.999,
-            close: currentPrice,
-            open: lastCandle ? lastCandle.open : currentPrice
-        };
-
-        const state = {
-            atr_1H: data.atr_1H || (currentPrice * 0.02),
-            atrHistory: data.atrHistory || [],
-            swingHighs: data.swingHighs || [],
-            swingLows: data.swingLows || [],
-            volatilityFactor: data.volatilityFactor || 1.0,
-            price: currentPrice
-        };
-
-        const params = {
-            tp1Pct: ROBOT_CONFIG.tp1Pct,
-            tp2Pct: ROBOT_CONFIG.tp2Pct,
-            runnerPct: ROBOT_CONFIG.runnerPct,
-            trailLong: ROBOT_CONFIG.trailLong,
-            trailShort: ROBOT_CONFIG.trailShort,
-            maxHoldHours: ROBOT_CONFIG.maxHoldHours
-        };
-
-        const result = checkPositionManagement(pos, state, candle, params);
-        if (result.closed) {
-            const pnlUsd = result.totalPnlUsd || 0;
-            const pnlPct = result.totalPnlPct || 0;
-            currentEquity += pnlUsd;
-            updateSignalStatus(symbol, result.exitPrice, pnlUsd);
-            telegram.sendTelegramAlert(
-                `${pnlUsd >= 0 ? '✅' : '❌'} POSIÇÃO FECHADA (${symbol}) - ${result.reason} - P&L: ${pnlPct.toFixed(2)}%`
-            );
-            delete activePositions[symbol];
-            renderSignalTable();
-            updateActiveTradesUI();
-        } else {
-            activePositions[symbol] = result.position;
-        }
-    }
-
-    function updateActiveTradesUI() {
-        // Placeholder
-    }
-
-    // ===== AVALIAÇÃO DE MERCADO =====
-    async function evaluateMarkets() {
-        const macroBlackout = await getMacroBlackoutStatus();
-
-        for (const symbol of CONFIG.ASSETS) {
-            const data = assetsData[symbol];
-            updateSwingPoints(data);
-
-            const adxData = calculateADX(data.candles1H);
-            data.adx = adxData.adx;
-            data.plusDI = adxData.plusDI;
-            data.minusDI = adxData.minusDI;
-
-            let rsiValues = [];
-            let avgGain = 0, avgLoss = 0;
-            const closes1H = data.candles1H.map(c => c.close);
-            if (closes1H.length > 14) {
-                for (let i = 1; i < closes1H.length; i++) {
-                    const diff = closes1H[i] - closes1H[i - 1];
-                    const gain = diff > 0 ? diff : 0;
-                    const loss = diff < 0 ? Math.abs(diff) : 0;
-                    if (i === 1) { avgGain = gain; avgLoss = loss; }
-                    else {
-                        avgGain = (avgGain * 13 + gain) / 14;
-                        avgLoss = (avgLoss * 13 + loss) / 14;
-                    }
-                    const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
-                    rsiValues.push(rsi);
-                }
-            }
-            data.divergence = detectRSIDivergence(data.candles1H, rsiValues);
-
-            const currentATR = data.atr_1H || 0;
-            const avgPrice = data.candles1H.slice(-20).reduce((s,c) => s+c.close,0)/20;
-            const volatilityPct = avgPrice > 0 ? (currentATR / avgPrice) * 100 : 1.5;
-            const volThreshold = volatilityPct > 2 ? 2.5 : 1.8;
-            data.volumeAnomaly = detectVolumeAnomaly(data.candles1H, 20, volThreshold);
-
-            const last24Candles = data.candles1H.slice(-24);
-            data.vwap = calculateVWAP(last24Candles);
-            data.macroBlackout = macroBlackout;
-
-            if (data.candles1H.length >= 30) {
-                const rets = data.candles1H.slice(-30).map(c => (c.close - c.open) / c.open);
-                const std = Math.sqrt(rets.reduce((s, r) => s + r * r, 0) / rets.length);
-                data.volatilityFactor = Math.min(Math.max(std * 2, 0.5), 2.0);
-            }
-
-            const mtf = getMTFAlignmentLocal(data.candles1H, data.candles4H, Date.now()/1000, {
-                htfBullishVelas: ROBOT_CONFIG.htfBullishVelas,
-                htfBearishVelas: ROBOT_CONFIG.htfBearishVelas
-            });
-            data.mtfConfluence = mtf;
-
-            const mtfAligned = ROBOT_CONFIG.requireMTF ? (mtf?.alinhado || false) : true;
-
-            const scoreData = computeScore(symbol, assetsData, liqMap, ROBOT_CONFIG.adxMin);
-            let blockReason = scoreData.blockReason;
-
-            const confidence = calculateConfidenceScore({
-                mtfAligned: mtfAligned,
-                adx: data.adx,
-                volumeAnomaly: data.volumeAnomaly,
-                fundingRate: data.fundingRate,
-                openInterestTrend: data.oiDelta > 0 ? 'INCREASING' : (data.oiDelta < 0 ? 'DECREASING' : 'NEUTRAL'),
-                divergence: data.divergence,
-                macroBlackout: data.macroBlackout,
-                smcStructure: data.currentBOS || 'NEUTRAL',
-                direction: scoreData.direction,
-                scoreMinLong: ROBOT_CONFIG.scoreMin,
-                scoreMaxShort: ROBOT_CONFIG.scoreMaxShort
-            });
-
-            let score = confidence.score;
-            const primaryDirection = (score >= ROBOT_CONFIG.scoreMin) ? 'LONG' : (score <= ROBOT_CONFIG.scoreMaxShort ? 'SHORT' : null);
-
-            const adxVal = typeof data.adx === 'object' ? data.adx.adx : data.adx;
-            if (adxVal < ROBOT_CONFIG.adxMin && !blockReason) {
-                blockReason = `ADX < ${ROBOT_CONFIG.adxMin}`;
-            }
-            if (data.macroBlackout && !blockReason) {
-                blockReason = 'Macro blackout';
-            }
-            if (primaryDirection === 'LONG' && data.price < data.vwap && !blockReason) {
-                blockReason = 'Preço abaixo do VWAP';
-            } else if (primaryDirection === 'SHORT' && data.price > data.vwap && !blockReason) {
-                blockReason = 'Preço acima do VWAP';
-            }
-            if (primaryDirection === 'LONG' && !blockReason && (data.plusDI - data.minusDI) < ROBOT_CONFIG.diDiffMinLong) {
-                blockReason = `DI diff < ${ROBOT_CONFIG.diDiffMinLong}`;
-            }
-            if (primaryDirection === 'SHORT' && !blockReason && (data.minusDI - data.plusDI) < ROBOT_CONFIG.diDiffMinShort) {
-                blockReason = `DI diff < ${ROBOT_CONFIG.diDiffMinShort}`;
-            }
-            if (primaryDirection === 'LONG' && !blockReason && mtf.bias === 'BEARISH') {
-                blockReason = `HTF 4H Bearish (${ROBOT_CONFIG.htfBullishVelas} velas)`;
-            }
-            if (primaryDirection === 'SHORT' && !blockReason && mtf.bias === 'BULLISH') {
-                blockReason = `HTF 4H Bullish (${ROBOT_CONFIG.htfBearishVelas} velas)`;
-            }
-            if (primaryDirection === 'SHORT' && !blockReason && data.mvrvHistory && data.mvrvHistory.length > 0) {
-                const peak = Math.max(...data.mvrvHistory);
-                const drop = peak > 0 ? (peak - data.mvrv) / peak : 0;
-                if (drop > ROBOT_CONFIG.mvrvDropPercent) {
-                    blockReason = `MVRV drop ${(drop*100).toFixed(1)}%`;
-                }
-            }
-            if (!blockReason) {
-                const deriv = checkDerivativesFilter(data.fundingRate, data.oiDelta);
-                if (!deriv.allow) blockReason = deriv.reason;
-            }
-
-            if (symbol === 'BTCUSDT') {
-                updateMainScoreUI({ ...scoreData, score: confidence.score }, blockReason);
-                const confEl = document.getElementById('confidence-score');
-                if (confEl) {
-                    confEl.textContent = confidence.level;
-                    confEl.className = `confidence-level confidence-${confidence.level}`;
-                }
-            }
-
-            data.score = confidence.score;
-            data.direction = confidence.direction || 'NEUTRO';
-
-            if (activePositions[symbol]) continue;
-
-            const now = Date.now();
-            if (now - (alertCooldowns[symbol] || 0) < 1800000) continue;
-
-            if (!blockReason && primaryDirection && isSafeToTrade()) {
-                const structure = checkBOSAndRetest(data, primaryDirection, ROBOT_CONFIG.retestDistPct);
-                const smcSetup = structure.bos;
-                let retestConfirmed = structure.retest;
-                if (!retestConfirmed && ROBOT_CONFIG.requireEMARetest) {
-                    const ema20 = calcEMA(data.candles1H.map(c => c.close), 20).slice(-1)[0] || data.price;
-                    retestConfirmed = Math.abs(data.price - ema20) / ema20 < 0.005;
-                }
-                const bosPassed = ROBOT_CONFIG.requireBOS ? smcSetup : true;
-                const retestPassed = ROBOT_CONFIG.requireRetest ? retestConfirmed : true;
-
-                if (bosPassed && retestPassed) {
-                    const levels = calculateStopAndTargets(data, primaryDirection, ROBOT_CONFIG);
-                    if (levels.rrPonderado >= ROBOT_CONFIG.rrMin) {
-                        const expCheck = checkPortfolioExposure(activePositions, primaryDirection);
-                        if (!expCheck.blocked) {
-                            const stats = banco.getTradeStats();
-                            const totalTrades = stats.wins + stats.losses;
-                            const winRate = totalTrades > 0 ? stats.wins / totalTrades : 0.5;
-                            const riskPct = KellyPositionSize(winRate, levels.rrPonderado);
-                            const stopDist = primaryDirection === 'LONG' ? (data.price - levels.stop) / data.price : (levels.stop - data.price) / data.price;
-                            const sizeUSD = (riskPct * currentEquity) / stopDist;
-                            const sizeMult = Math.min(sizeUSD / currentEquity, 1.0);
-
-                            const rationale = `MTF ${primaryDirection} + BOS/Retest + VWAP`;
-                            const targets = [
-                                { price: levels.tp1, rr: (levels.tp1 - data.price) / (data.price - levels.stop) },
-                                { price: levels.tp2, rr: (levels.tp2 - data.price) / (data.price - levels.stop) },
-                                { price: levels.tp3, rr: (levels.tp3 - data.price) / (data.price - levels.stop) }
-                            ];
-                            // Usa a nova função V2
-                            await sendTradeAlertV2(
-                                symbol, primaryDirection.toLowerCase(), score, data.price,
-                                {
-                                    stop: levels.stop,
-                                    tp1: levels.tp1,
-                                    tp2: levels.tp2,
-                                    tp3: levels.tp3,
-                                    rr1: targets[0].rr,
-                                    rr2: targets[1].rr,
-                                    rr3: targets[2].rr,
-                                    tp1Pct: ROBOT_CONFIG.tp1Pct,
-                                    tp2Pct: ROBOT_CONFIG.tp2Pct,
-                                    runnerPct: ROBOT_CONFIG.runnerPct,
-                                    trailMultiplier: primaryDirection === 'LONG' ? ROBOT_CONFIG.trailLong : ROBOT_CONFIG.trailShort
-                                },
-                                rationale, riskPct, null
-                            );
-
-                            activePositions[symbol] = {
-                                type: primaryDirection,
-                                entryPrice: data.price,
-                                stop: levels.stop,
-                                tp1: levels.tp1,
-                                tp2: levels.tp2,
-                                tp3: levels.tp3,
-                                trailingStop: levels.stop,
-                                partialTaken: false,
-                                tp2Taken: false,
-                                sizeRemaining: sizeMult,
-                                partialPnlUsd: 0,
-                                partialPnlPct: 0,
-                                maxProfitPrice: data.price,
-                                entryTime: Date.now(),
-                                movedToBE: false,
-                                initialEquity: currentEquity,
-                                symbol: symbol
-                            };
-                            alertCooldowns[symbol] = Date.now();
-                            addSignal(symbol, primaryDirection, data.price, levels.stop, levels.tp1);
-                            updateActiveTradesUI();
-                        }
-                    }
-                }
-            }
-        }
-        updateScoreBars();
-    }
-
-    // ===== ATUALIZA DADOS EXTERNOS =====
-    let externalUpdating = false;
-    async function updateExternalData() {
-        if (externalUpdating) return;
-        externalUpdating = true;
-        try {
-            for (const symbol of CONFIG.ASSETS) {
-                const funding = await fetchFundingRate(symbol);
-                if (funding && assetsData[symbol]) {
-                    assetsData[symbol].fundingRate = funding.rate;
-                    if (symbol === 'BTCUSDT') {
-                        document.getElementById('funding-rate').textContent = (funding.rate * 100).toFixed(4) + '%';
-                        document.getElementById('funding-rate-interp').textContent = funding.interpretacao;
-                    }
-                }
-            }
-            const mvrv = await fetchMVRV();
-            setTextOrNA('mvrv', mvrv);
-            if (mvrv !== null && !isNaN(mvrv)) {
-                document.getElementById('mvrv-interp').textContent = mvrv > 1.0 ? '⚠️ Acima de 1.0' : 'ℹ️ Abaixo de 1.0';
-                if (assetsData['BTCUSDT']) {
-                    assetsData['BTCUSDT'].mvrv = mvrv;
-                    if (!assetsData['BTCUSDT'].mvrvHistory) assetsData['BTCUSDT'].mvrvHistory = [];
-                    assetsData['BTCUSDT'].mvrvHistory.push(mvrv);
-                    if (assetsData['BTCUSDT'].mvrvHistory.length > 90) assetsData['BTCUSDT'].mvrvHistory.shift();
-                }
-            }
-            const cqActive = await fetchCQActiveAddresses();
-            setTextOrNA('active-addresses', cqActive);
-            if (cqActive === null) {
-                const blockchair = await fetchBlockchairStats();
-                if (blockchair) document.getElementById('active-addresses').textContent = blockchair.activeAddresses.toLocaleString();
-            }
-            const hashrate = await fetchHashrate();
-            if (hashrate !== null) document.getElementById('btc-hashrate').textContent = (hashrate / 1e6).toFixed(2) + ' EH/s';
-            const oiData = await fetchOIDelta('BTCUSDT');
-            if (oiData) {
-                document.getElementById('open-interest').textContent = '$' + (oiData.oi / 1e6).toFixed(2) + 'M';
-                document.getElementById('oi-delta').textContent = oiData.delta.toFixed(2) + '%';
-                const oiInterp = document.getElementById('oi-delta-interp');
-                if (oiInterp) oiInterp.textContent = oiData.delta > 5 ? '🟢 Crescendo' : oiData.delta < -5 ? '🔴 Diminuindo' : 'ℹ️ Estável';
-            }
-            const basis = await fetchBasis('BTCUSDT');
-            setTextOrNA('basis', basis !== null ? (basis >= 0 ? '+' : '') + basis.toFixed(2) + '%' : null);
-            const pcr = await fetchPutCallRatio();
-            setTextOrNA('put-call-ratio', pcr !== null ? pcr.toFixed(2) : null);
-            if (pcr !== null) document.getElementById('put-call-interp').textContent = pcr > 1.5 ? '⚠️ Medo' : pcr < 0.7 ? '✅ Otimismo' : 'ℹ️ Neutro';
-            const ethGas = await fetchEthGasPrice();
-            setTextOrNA('eth-gas', ethGas, '', ' Gwei');
-            const defi = await fetchDeFiData();
-            if (defi) {
-                document.getElementById('stablecoin-supply').textContent = '$' + defi.totalStable.toFixed(0) + 'B';
-                document.getElementById('defi-tvl').textContent = '$' + defi.tvl.toFixed(1) + 'B';
-                document.getElementById('defi-tvl-change').textContent = (defi.tvlChange >= 0 ? '+' : '') + defi.tvlChange.toFixed(2) + '%';
-            }
-            const fg = await fetchFearGreed();
-            if (fg) {
-                document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
-                document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
-                assetsData['BTCUSDT'].fearGreedData = fg;
-            }
-        } catch(e) { console.warn('Erro updateExternalData:', e); } finally { externalUpdating = false; setTimeout(updateExternalData, 120000); }
-    }
-
-    // ===== APLICAR PARÂMETROS =====
-    function applyLiveParams() {
-        const getVal = (id) => parseFloat(document.getElementById(id).value) || 0;
-        const getCheck = (id) => document.getElementById(id).checked;
-
-        ROBOT_CONFIG.scoreMin = getVal('live-score-min');
-        ROBOT_CONFIG.scoreMaxShort = getVal('live-score-max-short');
-        ROBOT_CONFIG.adxMin = getVal('live-adx-min');
-        ROBOT_CONFIG.rrMin = getVal('live-rr-min');
-        ROBOT_CONFIG.stopLong = getVal('live-stop-long');
-        ROBOT_CONFIG.stopShort = getVal('live-stop-short');
-        ROBOT_CONFIG.tp1Long = getVal('live-tp1-long');
-        ROBOT_CONFIG.tp1Short = getVal('live-tp1-short');
-        ROBOT_CONFIG.tp2Dist = getVal('live-tp2-dist');
-        ROBOT_CONFIG.trailLong = getVal('live-trail-long');
-        ROBOT_CONFIG.trailShort = getVal('live-trail-short');
-        ROBOT_CONFIG.tp1Pct = getVal('live-tp1-pct') / 100;
-        ROBOT_CONFIG.tp2Pct = getVal('live-tp2-pct') / 100;
-        ROBOT_CONFIG.runnerPct = getVal('live-runner-pct') / 100;
-        ROBOT_CONFIG.maxHoldHours = getVal('live-max-hold');
-        ROBOT_CONFIG.htfBullishVelas = getVal('live-htf-bull');
-        ROBOT_CONFIG.htfBearishVelas = getVal('live-htf-bear');
-        ROBOT_CONFIG.diDiffMinLong = getVal('live-di-long');
-        ROBOT_CONFIG.diDiffMinShort = getVal('live-di-short');
-        ROBOT_CONFIG.mvrvDropPercent = getVal('live-mvrv-drop') / 100;
-        ROBOT_CONFIG.requireBOS = getCheck('live-require-bos');
-        ROBOT_CONFIG.requireRetest = getCheck('live-require-retest');
-        ROBOT_CONFIG.requireMTF = getCheck('live-require-mtf');
-        ROBOT_CONFIG.requireSweep = getCheck('live-require-sweep');
-
-        document.getElementById('live-score-badge').textContent = ROBOT_CONFIG.scoreMin;
-        document.getElementById('live-score-short-badge').textContent = ROBOT_CONFIG.scoreMaxShort;
-        document.getElementById('live-adx-badge').textContent = ROBOT_CONFIG.adxMin;
-        document.getElementById('live-rr-badge').textContent = ROBOT_CONFIG.rrMin;
-
-        localStorage.setItem('robot_config', JSON.stringify(ROBOT_CONFIG));
-        console.log('[ROBOT] Parâmetros aplicados:', ROBOT_CONFIG);
-    }
-
-    // ===== INICIALIZAÇÃO =====
-    async function init() {
-        cacheDOM();
-        const saved = localStorage.getItem('robot_config');
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                Object.assign(ROBOT_CONFIG, parsed);
-                const map = {
-                    'live-score-min': 'scoreMin',
-                    'live-score-max-short': 'scoreMaxShort',
-                    'live-adx-min': 'adxMin',
-                    'live-rr-min': 'rrMin',
-                    'live-stop-long': 'stopLong',
-                    'live-stop-short': 'stopShort',
-                    'live-tp1-long': 'tp1Long',
-                    'live-tp1-short': 'tp1Short',
-                    'live-tp2-dist': 'tp2Dist',
-                    'live-trail-long': 'trailLong',
-                    'live-trail-short': 'trailShort',
-                    'live-tp1-pct': 'tp1Pct',
-                    'live-tp2-pct': 'tp2Pct',
-                    'live-runner-pct': 'runnerPct',
-                    'live-max-hold': 'maxHoldHours',
-                    'live-htf-bull': 'htfBullishVelas',
-                    'live-htf-bear': 'htfBearishVelas',
-                    'live-di-long': 'diDiffMinLong',
-                    'live-di-short': 'diDiffMinShort',
-                    'live-mvrv-drop': 'mvrvDropPercent'
-                };
-                for (const [id, key] of Object.entries(map)) {
-                    const el = document.getElementById(id);
-                    if (el) {
-                        if (typeof ROBOT_CONFIG[key] === 'number') {
-                            el.value = ROBOT_CONFIG[key];
-                        }
-                    }
-                }
-                document.getElementById('live-require-bos').checked = ROBOT_CONFIG.requireBOS;
-                document.getElementById('live-require-retest').checked = ROBOT_CONFIG.requireRetest;
-                document.getElementById('live-require-mtf').checked = ROBOT_CONFIG.requireMTF;
-                document.getElementById('live-require-sweep').checked = ROBOT_CONFIG.requireSweep;
-                document.getElementById('live-score-badge').textContent = ROBOT_CONFIG.scoreMin;
-                document.getElementById('live-score-short-badge').textContent = ROBOT_CONFIG.scoreMaxShort;
-                document.getElementById('live-adx-badge').textContent = ROBOT_CONFIG.adxMin;
-                document.getElementById('live-rr-badge').textContent = ROBOT_CONFIG.rrMin;
-            } catch(e) { console.warn('Erro ao carregar configuração:', e); }
-        }
-        loadSignalHistory();
-        renderSignalTable();
-        graficos.initCharts();
-
-        const candleBTC = graficos.initCandleChart('candle-btc', '#00e896');
-        const candleETH = graficos.initCandleChart('candle-eth', '#00b4d8');
-        const candleSOL = graficos.initCandleChart('candle-sol', '#ffd60a');
-        const candleCharts = { 'BTCUSDT': candleBTC, 'ETHUSDT': candleETH, 'SOLUSDT': candleSOL };
-
-        for (const symbol of CONFIG.ASSETS) {
-            const [c1H, c4H, c1D] = await Promise.all([
-                fetchHistoricalCandles(symbol, '1h', 200),
-                fetchHistoricalCandles(symbol, '4h', 210),
-                fetchHistoricalCandles(symbol, '1d', 210)
-            ]);
-            assetsData[symbol].candles1H = c1H;
-            assetsData[symbol].candles4H = c4H;
-            assetsData[symbol].candles1D = c1D;
-            if (c1H.length > 0) {
-                const closes = c1H.map(c => c.close);
-                assetsData[symbol].price = closes[closes.length - 1];
-                assetsData[symbol].ema50_1H = closes.slice(-50).reduce((a, b) => a + b, 0) / 50;
-                const closes4H = c4H.map(c => c.close);
-                assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : closes.slice(-200).reduce((a, b) => a + b, 0) / 200;
-                assetsData[symbol].atr_1H = calculateATR(c1H, 14);
-                let gains = 0, losses = 0;
-                for (let i = closes.length - 14; i < closes.length; i++) {
-                    const diff = closes[i] - closes[i - 1];
-                    if (diff > 0) gains += diff; else losses += Math.abs(diff);
-                }
-                const avgGain = gains / 14, avgLoss = losses / 14;
-                assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
-                assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
-                assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], c4H);
-                if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], c1H);
-            }
-        }
-
-        initWebSockets();
-        await updateExternalData();
-        await evaluateMarkets();
-        await updateTimeframeStats();
-        updateRealPnL();
-
-        setInterval(async () => {
-            const symbol = 'BTCUSDT';
-            try {
-                const scoreData = computeScore(symbol, assetsData, liqMap, ROBOT_CONFIG.adxMin);
-                const mtfData = getMTFAlignmentLocal(
-                    assetsData[symbol]?.candles1H || [],
-                    assetsData[symbol]?.candles4H || [],
-                    Date.now() / 1000,
-                    { htfBullishVelas: ROBOT_CONFIG.htfBullishVelas, htfBearishVelas: ROBOT_CONFIG.htfBearishVelas }
-                );
-                const fundingData = await fetchFundingRate(symbol);
-                const adxData = calculateADX(assetsData[symbol].candles1H);
-                const obData = await fetchOrderBook(symbol, 10);
-                const fgData = await fetchFearGreed();
-                updateLegacyStrengthPanel(scoreData, mtfData, fundingData, adxData, obData, fgData);
-            } catch(e) { console.warn('Força do Sinal:', e); }
-        }, 10000);
-
-        setInterval(async () => {
-            const fg = await fetchFearGreed();
-            if (fg) {
-                document.getElementById('header-fng').innerHTML = '😱 FEAR & GREED: ' + fg.value + ' (' + fg.classification + ')';
-                document.getElementById('header-sentiment').textContent = fg.value <= 25 ? '⚠️ PESSIMISTA' : '✅ BULLISH';
-                const badge = document.querySelector('.badge.sentiment-bearish');
-                if (badge) {
-                    badge.className = fg.value <= 25 ? 'badge sentiment-bearish' : 'badge sentiment-bullish';
-                    badge.textContent = fg.value <= 25 ? '⚠️ SENTIMENTO: PESSIMISTA' : '✅ SENTIMENTO: OTIMISTA';
-                }
-                assetsData['BTCUSDT'].fearGreedData = fg;
-            }
-        }, 600000);
-
-        setInterval(async () => {
-            for (const symbol of CONFIG.ASSETS) {
-                const c1H = await fetchHistoricalCandles(symbol, '1h', 10);
-                if (c1H.length > 0) {
-                    assetsData[symbol].candles1H = [...assetsData[symbol].candles1H.slice(0, -10), ...c1H];
-                    const closes1H = assetsData[symbol].candles1H.map(c => c.close);
-                    assetsData[symbol].ema50_1H = closes1H.slice(-50).reduce((a, b) => a + b, 0) / 50;
-                    assetsData[symbol].atr_1H = calculateATR(assetsData[symbol].candles1H, 14);
-                    let gains = 0, losses = 0;
-                    for (let i = closes1H.length - 14; i < closes1H.length; i++) {
-                        const diff = closes1H[i] - closes1H[i - 1];
-                        if (diff > 0) gains += diff; else losses += Math.abs(diff);
-                    }
-                    const avgGain = gains / 14, avgLoss = losses / 14;
-                    assetsData[symbol].rsiState = { avgGain, avgLoss, rsi: avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss)) };
-                    assetsData[symbol].rsi_1H = assetsData[symbol].rsiState.rsi;
-                    if (candleCharts[symbol]) graficos.setCandleData(candleCharts[symbol], assetsData[symbol].candles1H);
-                }
-                const c4H = await fetchHistoricalCandles(symbol, '4h', 20);
-                if (c4H.length > 0) {
-                    assetsData[symbol].candles4H = [...assetsData[symbol].candles4H.slice(0, -20), ...c4H];
-                    const closes4H = assetsData[symbol].candles4H.map(c => c.close);
-                    assetsData[symbol].ema200_4H = closes4H.length >= 200 ? closes4H.slice(-200).reduce((a, b) => a + b, 0) / 200 : assetsData[symbol].ema200_4H;
-                    assetsData[symbol].htfStructure = detectHTFStructure(assetsData[symbol], assetsData[symbol].candles4H);
-                }
-            }
-            await evaluateMarkets();
-            await updateTimeframeStats();
-            renderSignalTable();
-        }, 300000);
-
-        document.getElementById('live-apply-btn').addEventListener('click', applyLiveParams);
-
-        document.getElementById('test-telegram-btn').addEventListener('click', async function() {
-            this.disabled = true;
-            document.getElementById('test-btn-label').innerHTML = '<span class="spinner"></span> Enviando...';
-            const ok = await telegram.sendTelegramAlert('🔔 TESTE DE CONEXÃO V2 - Motor Institucional Ativo!');
-            document.getElementById('test-btn-label').textContent = ok ? '✅ Enviado!' : '❌ Falha';
-            setTimeout(() => { document.getElementById('test-btn-label').textContent = '📨 Testar Alerta'; this.disabled = false; }, 3000);
-        });
-
+        // ===== EVENTO DO BOTÃO BACKTEST (CORRIGIDO) =====
         document.getElementById('run-backtest-btn').addEventListener('click', async function() {
             this.disabled = true;
             this.textContent = '⏳ Processando...';
             const statusEl = document.getElementById('backtest-status');
             if (statusEl) statusEl.textContent = 'Buscando dados...';
+
             try {
+                // Lê os parâmetros atuais do ROBOT_CONFIG (que já foi atualizado pelo painel)
+                // Se você estiver usando o ROBOT_CONFIG global, ele já está sincronizado.
+                // Caso contrário, leia os valores dos inputs.
+                const config = {
+                    scoreMin: parseFloat(document.getElementById('live-score-min').value) || 68,
+                    scoreMaxShort: parseFloat(document.getElementById('live-score-max-short').value) || 32,
+                    adxMin: parseFloat(document.getElementById('live-adx-min').value) || 22,
+                    rrMin: parseFloat(document.getElementById('live-rr-min').value) || 1.8,
+                    retestDistPct: parseFloat(document.getElementById('retestDist')?.value || '2.0') / 100 || 0.02,
+                    emaRetest: document.getElementById('live-require-emaretest')?.checked || false,
+                    mtfRequired: document.getElementById('live-require-mtf').checked,
+                    ignoreBOS: !document.getElementById('live-require-bos').checked,
+                    ignoreRetest: !document.getElementById('live-require-retest').checked,
+                    requireSweep: document.getElementById('live-require-sweep').checked || false,
+                    maxHoldHours: parseFloat(document.getElementById('live-max-hold').value) || 72,
+                    htfBullishVelas: parseFloat(document.getElementById('live-htf-bull').value) || 3,
+                    diDiffMinLong: parseFloat(document.getElementById('live-di-long').value) || 0,
+                    mvrvDropPercent: (parseFloat(document.getElementById('live-mvrv-drop').value) || 15) / 100,
+                    htfBearishVelas: parseFloat(document.getElementById('live-htf-bear').value) || 6,
+                    diDiffMinShort: parseFloat(document.getElementById('live-di-short').value) || 5,
+                    stopLong: parseFloat(document.getElementById('live-stop-long').value) || 1.5,
+                    stopShort: parseFloat(document.getElementById('live-stop-short').value) || 2.0,
+                    tp1Long: parseFloat(document.getElementById('live-tp1-long').value) || 2.0,
+                    tp1Short: parseFloat(document.getElementById('live-tp1-short').value) || 1.5,
+                    tp2Dist: parseFloat(document.getElementById('live-tp2-dist').value) || 4.0,
+                    trailLong: parseFloat(document.getElementById('live-trail-long').value) || 1.2,
+                    trailShort: parseFloat(document.getElementById('live-trail-short').value) || 1.5,
+                    tp1Pct: (parseFloat(document.getElementById('live-tp1-pct').value) || 40) / 100,
+                    tp2Pct: (parseFloat(document.getElementById('live-tp2-pct').value) || 40) / 100,
+                    runnerPct: (parseFloat(document.getElementById('live-runner-pct').value) || 20) / 100,
+                    zFundingMax: 1.5,
+                    zOiMax: 1.5
+                };
+
+                console.log('[Backtest] Parâmetros:', config);
+
                 const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
                 const allResults = [];
-                const options = {
-                    scoreMin: ROBOT_CONFIG.scoreMin,
-                    scoreMaxShort: ROBOT_CONFIG.scoreMaxShort,
-                    adxMin: ROBOT_CONFIG.adxMin,
-                    retestDistPct: ROBOT_CONFIG.retestDistPct,
-                    rrMin: ROBOT_CONFIG.rrMin,
-                    emaRetest: ROBOT_CONFIG.requireEMARetest || false,
-                    mtfRequired: ROBOT_CONFIG.requireMTF || false,
-                    ignoreBOS: !ROBOT_CONFIG.requireBOS,
-                    ignoreRetest: !ROBOT_CONFIG.requireRetest,
-                    requireSweep: ROBOT_CONFIG.requireSweep || false,
-                    maxHoldHours: ROBOT_CONFIG.maxHoldHours,
-                    htfBullishVelas: ROBOT_CONFIG.htfBullishVelas,
-                    diDiffMinLong: ROBOT_CONFIG.diDiffMinLong,
-                    mvrvDropPercent: ROBOT_CONFIG.mvrvDropPercent,
-                    htfBearishVelas: ROBOT_CONFIG.htfBearishVelas,
-                    diDiffMinShort: ROBOT_CONFIG.diDiffMinShort,
-                    stopLong: ROBOT_CONFIG.stopLong,
-                    stopShort: ROBOT_CONFIG.stopShort,
-                    tp1Long: ROBOT_CONFIG.tp1Long,
-                    tp1Short: ROBOT_CONFIG.tp1Short,
-                    tp2Dist: ROBOT_CONFIG.tp2Dist,
-                    trailLong: ROBOT_CONFIG.trailLong,
-                    trailShort: ROBOT_CONFIG.trailShort,
-                    tp1Pct: ROBOT_CONFIG.tp1Pct,
-                    tp2Pct: ROBOT_CONFIG.tp2Pct,
-                    runnerPct: ROBOT_CONFIG.runnerPct,
-                    zFundingMax: ROBOT_CONFIG.zFundingMax,
-                    zOiMax: ROBOT_CONFIG.zOiMax
-                };
-                console.log('[Backtest] Parâmetros:', options);
+
                 for (const sym of symbols) {
                     if (statusEl) statusEl.textContent = `Processando ${sym}... (${allResults.length+1}/${symbols.length})`;
-                    const result = await runBacktest(sym, 30, options);
+                    const result = await runBacktest(sym, 30, config);
                     allResults.push({ symbol: sym, ...result });
                 }
+
+                // Consolidar resultados
                 const totalTrades = allResults.reduce((acc, r) => acc + (r.summary?.totalTrades || 0), 0);
                 const totalPnlUsd = allResults.reduce((acc, r) => acc + (r.summary?.totalPnlUsd || 0), 0);
-                const weightedWinrate = allResults.reduce((acc, r) => { const t = r.summary?.totalTrades || 0; return acc + (r.summary?.winrate || 0) * t; }, 0) / (totalTrades || 1);
+                const weightedWinrate = allResults.reduce((acc, r) => {
+                    const t = r.summary?.totalTrades || 0;
+                    return acc + (r.summary?.winrate || 0) * t;
+                }, 0) / (totalTrades || 1);
                 const totalPnlPct = (totalPnlUsd / (10000 * symbols.length)) * 100;
+
+                // Exibir resumo
                 const summaryDiv = document.getElementById('backtest-summary');
                 if (!summaryDiv) throw new Error('Elemento #backtest-summary não encontrado');
-                let html = `<div class="summary-card"><h3>Trades Totais</h3><div class="value">${totalTrades}</div></div>
+                summaryDiv.innerHTML = `
+                    <div class="summary-card"><h3>Trades Totais</h3><div class="value">${totalTrades}</div></div>
                     <div class="summary-card"><h3>Winrate Ponderado</h3><div class="value ${weightedWinrate > 50 ? 'positive' : 'negative'}">${weightedWinrate.toFixed(1)}%</div></div>
                     <div class="summary-card"><h3>P&L Total (USD)</h3><div class="value ${totalPnlUsd >= 0 ? 'positive' : 'negative'}">$${totalPnlUsd.toFixed(2)}</div></div>
                     <div class="summary-card"><h3>Retorno % (carteira)</h3><div class="value ${totalPnlUsd >= 0 ? 'positive' : 'negative'}">${totalPnlPct.toFixed(2)}%</div></div>
-                    <div style="grid-column:1/-1;font-size:0.8rem;color:var(--text-muted);">Detalhes: ${allResults.map(r => `${r.symbol}: ${r.summary?.totalTrades||0} trades, ${(r.summary?.winrate||0).toFixed(1)}%, $${(r.summary?.totalPnlUsd||0).toFixed(2)}`).join(' | ')}</div>`;
-                summaryDiv.innerHTML = html;
+                    <div style="grid-column:1/-1;font-size:0.8rem;color:var(--text-muted);">
+                        Detalhes: ${allResults.map(r => `${r.symbol}: ${r.summary?.totalTrades||0} trades, ${(r.summary?.winrate||0).toFixed(1)}%, $${(r.summary?.totalPnlUsd||0).toFixed(2)}`).join(' | ')}
+                    </div>
+                `;
+
+                // Diagnóstico de bloqueios consolidado
                 const consolidatedBlockStats = {};
-                allResults.forEach(r => { if (r.summary?.blockStats) { for (const [k,v] of Object.entries(r.summary.blockStats)) consolidatedBlockStats[k] = (consolidatedBlockStats[k]||0) + v; } });
+                allResults.forEach(r => {
+                    if (r.summary?.blockStats) {
+                        for (const [k, v] of Object.entries(r.summary.blockStats)) {
+                            consolidatedBlockStats[k] = (consolidatedBlockStats[k] || 0) + v;
+                        }
+                    }
+                });
+
                 const diagDiv = document.getElementById('backtest-diagnostic');
                 const statsDiv = document.getElementById('backtest-blockstats');
-                if (consolidatedBlockStats && diagDiv && statsDiv) {
+                if (consolidatedBlockStats && Object.keys(consolidatedBlockStats).length > 0 && diagDiv && statsDiv) {
                     diagDiv.style.display = 'block';
-                    const totalCandles = Object.values(consolidatedBlockStats).reduce((a,b) => a+b, 0) || 1;
-                    statsDiv.innerHTML = Object.entries(consolidatedBlockStats).sort((a,b) => b[1]-a[1]).map(([reason, count]) => {
-                        const pct = ((count/totalCandles)*100).toFixed(1);
-                        const isGood = reason === 'passou_filtros';
-                        const style = isGood ? 'background:rgba(0,230,118,0.15);color:#00e676;border:1px solid rgba(0,230,118,0.3);' : 'background:rgba(255,82,82,0.12);color:#ff5252;border:1px solid rgba(255,82,82,0.2);';
-                        return `<span style="padding:4px 10px;border-radius:6px;font-size:0.75rem;${style}">${reason}: ${count} (${pct}%)</span>`;
-                    }).join('');
-                } else if (diagDiv) diagDiv.style.display = 'none';
+                    const totalCandles = Object.values(consolidatedBlockStats).reduce((a, b) => a + b, 0) || 1;
+                    statsDiv.innerHTML = Object.entries(consolidatedBlockStats)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([reason, count]) => {
+                            const pct = ((count / totalCandles) * 100).toFixed(1);
+                            const isGood = reason === 'passou_filtros';
+                            const style = isGood
+                                ? 'background:rgba(0,230,118,0.15);color:#00e676;border:1px solid rgba(0,230,118,0.3);'
+                                : 'background:rgba(255,82,82,0.12);color:#ff5252;border:1px solid rgba(255,82,82,0.2);';
+                            return `<span style="padding:4px 10px;border-radius:6px;font-size:0.75rem;${style}">${reason}: ${count} (${pct}%)</span>`;
+                        })
+                        .join('');
+                } else if (diagDiv) {
+                    diagDiv.style.display = 'none';
+                }
+
+                // Preencher tabela de trades
                 const allTrades = allResults.flatMap(r => r.trades || []);
                 const tbody = document.getElementById('backtest-tbody');
                 if (!tbody) throw new Error('Elemento #backtest-tbody não encontrado');
-                if (!allTrades || allTrades.length === 0) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum trade gerado.</td></tr>';
-                else {
-                    let htmlTable = '';
+
+                if (!allTrades || allTrades.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">Nenhum trade gerado.</td></tr>';
+                } else {
+                    let html = '';
                     allTrades.forEach(t => {
                         const pnl = t.pnlPct !== null ? parseFloat(t.pnlPct) : 0;
                         const pnlClass = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
-                        htmlTable += `<tr><td>${t.entryTime}</td><td>${t.symbol}</td><td>${t.direction}</td><td>$${t.entryPrice.toFixed(2)}</td><td>$${t.stopLoss.toFixed(2)}</td><td>$${t.takeProfit1.toFixed(2)}</td><td>${t.exitPrice ? '$'+t.exitPrice.toFixed(2) : '--'}</td><td>${t.reason}</td><td class="${pnlClass}">${t.pnlPct !== null ? (pnl > 0 ? '+' : '') + t.pnlPct + '%' : '--'}</td><td>${t.durationHours ? t.durationHours + 'h' : '--'}</td></tr>`;
+                        html += `<tr>
+                            <td>${t.entryTime}</td>
+                            <td>${t.symbol}</td>
+                            <td>${t.direction}</td>
+                            <td>$${t.entryPrice.toFixed(2)}</td>
+                            <td>$${t.stopLoss.toFixed(2)}</td>
+                            <td>$${t.takeProfit1.toFixed(2)}</td>
+                            <td>${t.exitPrice ? '$'+t.exitPrice.toFixed(2) : '--'}</td>
+                            <td>${t.reason}</td>
+                            <td class="${pnlClass}">${t.pnlPct !== null ? (pnl > 0 ? '+' : '') + t.pnlPct + '%' : '--'}</td>
+                            <td>${t.durationHours ? t.durationHours + 'h' : '--'}</td>
+                        </tr>`;
                     });
-                    tbody.innerHTML = htmlTable;
+                    tbody.innerHTML = html;
                 }
+
                 if (statusEl) statusEl.textContent = `✅ Concluído em ${new Date().toLocaleTimeString()}`;
-            } catch(e) { console.error(e); if (statusEl) statusEl.textContent = '❌ Erro: ' + e.message; } finally { this.disabled = false; this.textContent = '▶️ Executar Backtest'; }
+
+            } catch (e) {
+                console.error(e);
+                if (statusEl) statusEl.textContent = '❌ Erro: ' + e.message;
+            } finally {
+                this.disabled = false;
+                this.textContent = '▶️ Executar Backtest';
+            }
         });
 
-        setInterval(() => {
-            const ts = getCurrentTimestamp();
-            const headerEl = DOM['header-timestamp'] || document.getElementById('header-timestamp');
-            if (headerEl) headerEl.textContent = '📅 ' + ts;
-            const lastEl = DOM['last-update'] || document.getElementById('last-update');
-            if (lastEl) lastEl.textContent = ts;
-            document.getElementById('live-update-time').textContent = ts;
-            const badge = document.getElementById('status-badge');
-            if (badge) { badge.textContent = '✅ LIVE'; badge.className = 'status-badge live'; }
-            const backendBadge = document.getElementById('backend-status');
-            if (backendBadge) {
-                backendBadge.textContent = '💤 BACKEND: DORMINDO (fallback)';
-                backendBadge.className = 'status-badge';
-                backendBadge.style.borderColor = 'var(--accent-yellow)';
-                backendBadge.style.color = 'var(--accent-yellow)';
-            }
-        }, 1000);
-
-        setInterval(() => {
-            renderSignalTable();
-        }, 2000);
-
-        setTimeout(runCommittee, 1000);
-    }
-
-    init();
+        // O restante do seu código (inicialização, websockets, etc.) permanece intacto.
+        // ...
     </script>
 </body>
 </html>
