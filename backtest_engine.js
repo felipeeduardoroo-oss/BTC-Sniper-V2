@@ -2472,5 +2472,50 @@ export async function requestWakeLock() {
 //       rationale: signal.rationale,
 //       timestamp: Date.now()
 //   });
+// ============================================================
+// PERSISTÊNCIA DOS PARÂMETROS (localStorage)
+// ============================================================
+function saveParams() {
+    const params = {};
+    document.querySelectorAll('.params-grid input, .params-grid select').forEach(el => {
+        if (el.type === 'checkbox') {
+            params[el.id] = el.checked;
+        } else {
+            params[el.id] = el.value;
+        }
+    });
+    localStorage.setItem('backtestParams', JSON.stringify(params));
+}
 
+function loadParams() {
+    const saved = localStorage.getItem('backtestParams');
+    if (!saved) return;
+    try {
+        const params = JSON.parse(saved);
+        document.querySelectorAll('.params-grid input, .params-grid select').forEach(el => {
+            if (el.id && params[el.id] !== undefined) {
+                if (el.type === 'checkbox') {
+                    el.checked = params[el.id];
+                } else {
+                    el.value = params[el.id];
+                }
+            }
+        });
+    } catch(e) { /* ignore */ }
+}
+
+// Salva automaticamente a cada alteração
+document.addEventListener('DOMContentLoaded', () => {
+    loadParams();
+    document.querySelectorAll('.params-grid input, .params-grid select').forEach(el => {
+        el.addEventListener('change', saveParams);
+        el.addEventListener('input', saveParams);
+    });
+});
+
+// Também salva ao executar o backtest (garantia extra)
+const originalRun = document.getElementById('runBtn')?.click;
+if (originalRun) {
+    document.getElementById('runBtn').addEventListener('click', saveParams);
+}
 console.log('✅ Módulo backtest_engine.js carregado com sucesso.');
