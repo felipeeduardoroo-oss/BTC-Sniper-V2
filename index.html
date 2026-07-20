@@ -239,7 +239,26 @@
             <div class="chart-container" id="chartSOL"></div>
         </div>
     </div>
-
+<!-- ===== HISTÓRICO DE SINAIS (ARMazenados em NUVEM) ===== -->
+<div class="section-title">📜 Histórico de Sinais (Últimos 20)</div>
+<div style="background:#0f1117; border:1px solid #2a2a44; border-radius:12px; padding:12px; margin:15px 0; max-height:300px; overflow-y:auto;">
+    <table style="width:100%; font-size:0.8rem;">
+        <thead>
+            <tr>
+                <th style="color:#6b7280; text-align:left;">Data</th>
+                <th style="color:#6b7280; text-align:left;">Ativo</th>
+                <th style="color:#6b7280; text-align:left;">Dir</th>
+                <th style="color:#6b7280; text-align:left;">Preço</th>
+                <th style="color:#6b7280; text-align:left;">Score</th>
+                <th style="color:#6b7280; text-align:left;">R:R</th>
+                <th style="color:#6b7280; text-align:left;">Fonte</th>
+            </tr>
+        </thead>
+        <tbody id="signalHistoryBody">
+            <tr><td colspan="7" style="text-align:center;color:#6b7280;">Carregando histórico...</td></tr>
+        </tbody>
+    </table>
+</div>
     <!-- ===== ANÁLISE ON-CHAIN & DERIVADOS ===== -->
     <div class="section-title">🔍 Análise On-Chain & Derivados</div>
     <div class="onchain-grid" id="onchainGrid">
