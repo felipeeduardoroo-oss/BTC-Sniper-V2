@@ -2372,4 +2372,105 @@ async function testTelegram() {
 
 document.getElementById('telegramTestBtn').addEventListener('click', testTelegram);
 
+// ============================================================
+// ARMAZENAMENTO EM NUVEM (JSONBin)
+// ============================================================
+const JSONBIN_MASTER_KEY = '$2a$10$mbH27dVmnT4JyX.5MAbxM.KknNujEyPzfTW1Z2LnkK7Ga6rXqUE4C';
+const JSONBIN_BIN_ID = '6a4c4be6da38895dfe3841c9';
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+
+export async function storeSignalToCloud(signalData) {
+    try {
+        // Busca dados atuais
+        const getResp = await fetch(JSONBIN_URL, {
+            headers: { 'X-Master-Key': JSONBIN_MASTER_KEY }
+        });
+        if (!getResp.ok) throw new Error(`HTTP ${getResp.status}`);
+        const current = await getResp.json();
+        let signals = current?.record?.signals || [];
+        
+        // Adiciona novo sinal
+        signals.push({
+            ...signalData,
+            storedAt: new Date().toISOString()
+        });
+        
+        // Mantém apenas os últimos 100 sinais
+        if (signals.length > 100) signals = signals.slice(-100);
+        
+        // Atualiza no JSONBin
+        const putResp = await fetch(JSONBIN_URL, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Master-Key': JSONBIN_MASTER_KEY
+            },
+            body: JSON.stringify({ signals })
+        });
+        if (!putResp.ok) throw new Error(`HTTP ${putResp.status}`);
+        console.log('✅ Sinal armazenado no JSONBin');
+        return true;
+    } catch (e) {
+        console.warn('❌ Falha ao armazenar no JSONBin:', e.message);
+        // Fallback: salva no localStorage também
+        try {
+            const localSignals = JSON.parse(localStorage.getItem('cloudSignals') || '[]');
+            localSignals.push(signalData);
+            localStorage.setItem('cloudSignals', JSON.stringify(localSignals.slice(-100)));
+        } catch(e2) { /* ignore */ }
+        return false;
+    }
+}
+
+export async function fetchSignalsFromCloud() {
+    try {
+        const resp = await fetch(JSONBIN_URL, {
+            headers: { 'X-Master-Key': JSONBIN_MASTER_KEY }
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        return data?.record?.signals || [];
+    } catch (e) {
+        console.warn('❌ Falha ao buscar sinais do JSONBin:', e.message);
+        // Fallback: localStorage
+        return JSON.parse(localStorage.getItem('cloudSignals') || '[]');
+    }
+}
+
+// ============================================================
+// WAKE LOCK (tenta manter a aba ativa)
+// ============================================================
+let wakeLock = null;
+export async function requestWakeLock() {
+    try {
+        if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log('✅ Wake Lock ativado');
+        }
+    } catch (e) {
+        console.warn('Wake Lock não suportado:', e.message);
+    }
+}
+
+// ============================================================
+// MODIFICAÇÃO NO ENVIO DE SINAL (integrando com JSONBin)
+// ============================================================
+// Substitua a função sendSignalAlert existente por esta versão
+// (ou apenas adicione a chamada para storeSignalToCloud dentro dela)
+//
+// Na função sendSignalAlert existente, adicione estas linhas no final:
+//   // Armazena no JSONBin
+//   await storeSignalToCloud({
+//       symbol,
+//       direction: dir,
+//       entryPrice: signal.entryPrice,
+//       stop: signal.stop,
+//       tp1: signal.tp1,
+//       tp2: signal.tp2,
+//       rr: signal.rr,
+//       score: signal.score,
+//       rationale: signal.rationale,
+//       timestamp: Date.now()
+//   });
+
 console.log('✅ Módulo backtest_engine.js carregado com sucesso.');
