@@ -1807,6 +1807,20 @@ async function sendSignalAlert(symbol, signal) {
         if (alertLog.length > 50) alertLog.shift();
         localStorage.setItem('alertLog', JSON.stringify(alertLog));
         updateRobotLog(`✅ Sinal ${dir} enviado para ${symbol} (Score: ${signal.score})`);
+        
+        // ===== ARMAZENA NO JSONBin (nuvem) =====
+        await storeSignalToCloud({
+            symbol,
+            direction: dir,
+            entryPrice: signal.entryPrice,
+            stop: signal.stop,
+            tp1: signal.tp1,
+            tp2: signal.tp2,
+            rr: signal.rr,
+            score: signal.score,
+            rationale: signal.rationale,
+            timestamp: Date.now()
+        });
     } else {
         updateRobotLog(`❌ Falha ao enviar sinal ${dir} para ${symbol}`);
     }
@@ -2381,24 +2395,17 @@ const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
 export async function storeSignalToCloud(signalData) {
     try {
-        // Busca dados atuais
         const getResp = await fetch(JSONBIN_URL, {
             headers: { 'X-Master-Key': JSONBIN_MASTER_KEY }
         });
         if (!getResp.ok) throw new Error(`HTTP ${getResp.status}`);
         const current = await getResp.json();
         let signals = current?.record?.signals || [];
-        
-        // Adiciona novo sinal
         signals.push({
             ...signalData,
             storedAt: new Date().toISOString()
         });
-        
-        // Mantém apenas os últimos 100 sinais
         if (signals.length > 100) signals = signals.slice(-100);
-        
-        // Atualiza no JSONBin
         const putResp = await fetch(JSONBIN_URL, {
             method: 'PUT',
             headers: {
@@ -2412,7 +2419,6 @@ export async function storeSignalToCloud(signalData) {
         return true;
     } catch (e) {
         console.warn('❌ Falha ao armazenar no JSONBin:', e.message);
-        // Fallback: salva no localStorage também
         try {
             const localSignals = JSON.parse(localStorage.getItem('cloudSignals') || '[]');
             localSignals.push(signalData);
@@ -2432,50 +2438,14 @@ export async function fetchSignalsFromCloud() {
         return data?.record?.signals || [];
     } catch (e) {
         console.warn('❌ Falha ao buscar sinais do JSONBin:', e.message);
-        // Fallback: localStorage
         return JSON.parse(localStorage.getItem('cloudSignals') || '[]');
     }
 }
 
 // ============================================================
-// WAKE LOCK (tenta manter a aba ativa)
+// PERSISTÊNCIA DOS PARÂMETROS (localStorage + JSONBin)
 // ============================================================
-let wakeLock = null;
-export async function requestWakeLock() {
-    try {
-        if ('wakeLock' in navigator) {
-            wakeLock = await navigator.wakeLock.request('screen');
-            console.log('✅ Wake Lock ativado');
-        }
-    } catch (e) {
-        console.warn('Wake Lock não suportado:', e.message);
-    }
-}
-
-// ============================================================
-// MODIFICAÇÃO NO ENVIO DE SINAL (integrando com JSONBin)
-// ============================================================
-// Substitua a função sendSignalAlert existente por esta versão
-// (ou apenas adicione a chamada para storeSignalToCloud dentro dela)
-//
-// Na função sendSignalAlert existente, adicione estas linhas no final:
-//   // Armazena no JSONBin
-//   await storeSignalToCloud({
-//       symbol,
-//       direction: dir,
-//       entryPrice: signal.entryPrice,
-//       stop: signal.stop,
-//       tp1: signal.tp1,
-//       tp2: signal.tp2,
-//       rr: signal.rr,
-//       score: signal.score,
-//       rationale: signal.rationale,
-//       timestamp: Date.now()
-//   });
-// ============================================================
-// PERSISTÊNCIA DOS PARÂMETROS (localStorage)
-// ============================================================
-function saveParams() {
+function saveParamsLocal() {
     const params = {};
     document.querySelectorAll('.params-grid input, .params-grid select').forEach(el => {
         if (el.type === 'checkbox') {
@@ -2487,7 +2457,7 @@ function saveParams() {
     localStorage.setItem('backtestParams', JSON.stringify(params));
 }
 
-function loadParams() {
+function loadParamsLocal() {
     const saved = localStorage.getItem('backtestParams');
     if (!saved) return;
     try {
@@ -2504,18 +2474,68 @@ function loadParams() {
     } catch(e) { /* ignore */ }
 }
 
-// Salva automaticamente a cada alteração
-document.addEventListener('DOMContentLoaded', () => {
-    loadParams();
+async function syncParamsToCloud() {
+    const params = {};
     document.querySelectorAll('.params-grid input, .params-grid select').forEach(el => {
-        el.addEventListener('change', saveParams);
-        el.addEventListener('input', saveParams);
+        if (el.id) {
+            if (el.type === 'checkbox') params[el.id] = el.checked;
+            else params[el.id] = el.value;
+        }
     });
+    try {
+        const getResp = await fetch(JSONBIN_URL, {
+            headers: { 'X-Master-Key': JSONBIN_MASTER_KEY }
+        });
+        if (!getResp.ok) throw new Error(`HTTP ${getResp.status}`);
+        const current = await getResp.json();
+        const record = current.record || {};
+        record.params = params;
+        const putResp = await fetch(JSONBIN_URL, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Master-Key': JSONBIN_MASTER_KEY
+            },
+            body: JSON.stringify(record)
+        });
+        if (!putResp.ok) throw new Error(`HTTP ${putResp.status}`);
+        console.log('✅ Parâmetros sincronizados com a nuvem');
+    } catch (e) {
+        console.warn('❌ Falha ao sincronizar parâmetros:', e.message);
+    }
+}
+
+async function loadParamsFromCloud() {
+    try {
+        const resp = await fetch(JSONBIN_URL, {
+            headers: { 'X-Master-Key': JSONBIN_MASTER_KEY }
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const params = data?.record?.params || {};
+        document.querySelectorAll('.params-grid input, .params-grid select').forEach(el => {
+            if (el.id && params[el.id] !== undefined) {
+                if (el.type === 'checkbox') el.checked = params[el.id];
+                else el.value = params[el.id];
+            }
+        });
+        console.log('✅ Parâmetros carregados da nuvem');
+    } catch (e) {
+        console.warn('⚠️ Usando parâmetros locais');
+        loadParamsLocal();
+    }
+}
+
+// Inicialização: carrega parâmetros da nuvem e configura eventos de salvamento
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadParamsFromCloud();
+    document.querySelectorAll('.params-grid input, .params-grid select').forEach(el => {
+        el.addEventListener('change', syncParamsToCloud);
+        el.addEventListener('input', syncParamsToCloud);
+        el.addEventListener('change', saveParamsLocal);
+        el.addEventListener('input', saveParamsLocal);
+    });
+    document.getElementById('runBtn').addEventListener('click', syncParamsToCloud);
 });
 
-// Também salva ao executar o backtest (garantia extra)
-const originalRun = document.getElementById('runBtn')?.click;
-if (originalRun) {
-    document.getElementById('runBtn').addEventListener('click', saveParams);
-}
 console.log('✅ Módulo backtest_engine.js carregado com sucesso.');
