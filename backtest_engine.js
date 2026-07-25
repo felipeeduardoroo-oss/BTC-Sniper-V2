@@ -780,7 +780,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             if (state.bandwidthHistory.length > 50) state.bandwidthHistory.shift();
             if (state.bandwidthHistory.length >= 20) {
                 const avgBW = state.bandwidthHistory.slice(-20).reduce((a,b) => a+b, 0) / 20;
-                if (bandwidth < avgBW * 0.8) {
+                if (bandwidth < avgBW * 0.4) {
                     blockStats['baixa_volatilidade_bb'] = (blockStats['baixa_volatilidade_bb'] || 0) + 1;
                     continue;
                 }
