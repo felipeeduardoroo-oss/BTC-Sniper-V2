@@ -1105,7 +1105,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
 
             const body = Math.abs(candle.close - candle.open);
             const range = candle.high - candle.low;
-            if (range > 0 && body / range < 0.5) {
+            if (range > 0 && body / range < 0.3) {
                 blockReason = 'corpo_fraco_doji';
             }
 
