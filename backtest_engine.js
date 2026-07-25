@@ -480,17 +480,17 @@ function importData(files) {
 // ============================================================
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
     const {
-        scoreMin = 68,
-        scoreMaxShort = 32,
-        adxMin = 22,
-        rrMin = 1.8,
-        retestDistPct = 2.0,
+        scoreMin = 50,
+        scoreMaxShort = 49,
+        adxMin = 17,
+        rrMin = 1.5,
+        retestDistPct = 4.0,
         emaRetest = false,
         mtfRequired = true,
         ignoreBOS = false,
         ignoreRetest = false,
         requireSweep = false,
-        zFundingMax = 7.0,
+        zFundingMax = 1.5,
         zOiMax = 1.5,
         maxHoldHours = 72,
         htfBullishVelas = 3,
@@ -498,16 +498,16 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         mvrvDropPercent = 0.15,
         htfBearishVelas = 6,
         diDiffMinShort = 5,
-        stopLong = 1.5,
+        stopLong = 2.0,
         stopShort = 2.0,
-        tp1Long = 2.0,
-        tp1Short = 1.5,
+        tp1Long = 0,
+        tp1Short = 0,
         tp2Dist = 4.0,
-        trailLong = 1.2,
-        trailShort = 1.5,
-        tp1Pct = 0.4,
-        tp2Pct = 0.4,
-        runnerPct = 0.2
+        trailLong = 0,
+        trailShort = 0,
+        tp1Pct = 0,
+        tp2Pct = 0,
+        runnerPct = 1
     } = options;
 
     days = Math.min(days, 1000);
