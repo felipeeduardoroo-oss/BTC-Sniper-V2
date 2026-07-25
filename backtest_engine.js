@@ -490,7 +490,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         ignoreBOS = false,
         ignoreRetest = false,
         requireSweep = false,
-        zFundingMax = 1.5,
+        zFundingMax = 7.0,
         zOiMax = 1.5,
         maxHoldHours = 72,
         htfBullishVelas = 3,
