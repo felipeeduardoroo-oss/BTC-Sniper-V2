@@ -780,7 +780,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             if (state.bandwidthHistory.length > 50) state.bandwidthHistory.shift();
             if (state.bandwidthHistory.length >= 20) {
                 const avgBW = state.bandwidthHistory.slice(-20).reduce((a,b) => a+b, 0) / 20;
-                if (bandwidth < avgBW * 0.6) {
+                if (bandwidth < avgBW * 0.4) {    //// filtro ajustar 0.6 antes
                     blockStats['baixa_volatilidade_bb'] = (blockStats['baixa_volatilidade_bb'] || 0) + 1;
                     continue;
                 }
@@ -882,10 +882,10 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         const adxValNow = typeof state.adx === 'object' ? state.adx.adx : state.adx;
         state.adxRolling.push(adxValNow);
         if (state.adxRolling.length > 50) state.adxRolling.shift();
-
+/// filtro adx 
         if (state.adxRolling.length >= 20) {
             const avgAdx = state.adxRolling.reduce((a,b) => a+b, 0) / state.adxRolling.length;
-            const dynamicAdxThreshold = Math.max(avgAdx * 0.8 + 5, 18);
+            const dynamicAdxThreshold = Math.max(avgAdx * 0.7 + 3, 18);    /// filtro adx 
             if (adxValNow < dynamicAdxThreshold) {
                 blockReason = `ADX ${adxValNow.toFixed(1)} < dinâmico ${dynamicAdxThreshold.toFixed(1)}`;
             }
