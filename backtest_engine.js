@@ -480,8 +480,8 @@ function importData(files) {
 // ============================================================
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
     const {
-        scoreMin = 55,
-        scoreMaxShort = 45,
+        scoreMin = 50,
+        scoreMaxShort = 49,
         adxMin = 17,
         rrMin = 1.2,
         retestDistPct = 2.0,
@@ -490,10 +490,10 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         ignoreBOS = false,
         ignoreRetest = false,
         requireSweep = false,
-        zFundingMax = 2.5,
-        zOiMax = 2.5,
+        zFundingMax = 2.0,
+        zOiMax = 2.0,
         maxHoldHours = 72,
-        htfBullishVelas = 3,
+        htfBullishVelas = 6,
         diDiffMinLong = 0,
         mvrvDropPercent = 0.15,
         htfBearishVelas = 6,
@@ -1096,7 +1096,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             const structureOk = (bosPassed && retestPassed) || (sweepSetup && retestPassed);
 
             const volumeAvg = state.candles1H.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
-            const volumeOk = smcSetup ? state.candles1H[state.candles1H.length - 1].volume >= volumeAvg * 0.5 : true;
+            const volumeOk = smcSetup ? state.candles1H[state.candles1H.length - 1].volume >= volumeAvg * 0.3 : true;
             const closeBreakOk = (primaryDirection === 'LONG' && candle.close > brokenLevel) ||
                                  (primaryDirection === 'SHORT' && candle.close < brokenLevel);
             if ((smcSetup && !volumeOk) || (smcSetup && !closeBreakOk)) {
