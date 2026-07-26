@@ -480,11 +480,11 @@ function importData(files) {
 // ============================================================
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
     const {
-        scoreMin = 50,
-        scoreMaxShort = 49,
+        scoreMin = 55,
+        scoreMaxShort = 45,
         adxMin = 17,
-        rrMin = 1.5,
-        retestDistPct = 4.0,
+        rrMin = 1.2,
+        retestDistPct = 2.0,
         emaRetest = false,
         mtfRequired = true,
         ignoreBOS = false,
