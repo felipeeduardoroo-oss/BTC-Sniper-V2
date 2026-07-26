@@ -2197,7 +2197,7 @@ async function checkSignal(symbol) {
 
         const body = Math.abs(lastCandle.close - lastCandle.open);
         const range = lastCandle.high - lastCandle.low;
-        if (range > 0 && body / range < 0.5 && !blockReason) {
+        if (range > 0 && body / range < 0.1 && !blockReason) {
             blockReason = 'Corpo fraco (doji)';
         }
 
