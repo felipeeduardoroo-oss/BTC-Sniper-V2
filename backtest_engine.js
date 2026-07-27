@@ -780,7 +780,9 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             if (state.bandwidthHistory.length > 50) state.bandwidthHistory.shift();
             if (state.bandwidthHistory.length >= 20) {
                 const avgBW = state.bandwidthHistory.slice(-20).reduce((a,b) => a+b, 0) / 20;
-                if (bandwidth < avgBW * 0.2) {    //// filtro ajustar 0.6 antes
+                const adxValNow = typeof state.adx === 'object' ? state.adx.adx : state.adx;
+                // Filtro de mercado lateral reforçado: bloqueia se bandwidth muito baixo ou se comprimido com ADX baixo
+                if (bandwidth < avgBW * 0.2 || (bandwidth < avgBW * 0.5 && adxValNow < 20)) {
                     blockStats['baixa_volatilidade_bb'] = (blockStats['baixa_volatilidade_bb'] || 0) + 1;
                     continue;
                 }
@@ -840,7 +842,14 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         let score = scoreData.score;
         let direction = scoreData.direction;
         let blockReason = scoreData.blockReason;
-        const primaryDirection = (score >= scoreMin) ? 'LONG' : (score <= scoreMaxShort ? 'SHORT' : null);
+        let primaryDirection = (score >= scoreMin) ? 'LONG' : (score <= scoreMaxShort ? 'SHORT' : null);
+
+        // Ajuste de score flexível com divergência (permite LONG 55-60 com divergência bullish e volume)
+        if (!primaryDirection && score >= 55 && score < 60 && state.divergence?.type === 'BULLISH_REGULAR' && state.volumeAnomaly?.type !== 'LOW') {
+            primaryDirection = 'LONG';
+        } else if (!primaryDirection && score > 40 && score <= 45 && state.divergence?.type === 'BEARISH_REGULAR' && state.volumeAnomaly?.type !== 'LOW') {
+            primaryDirection = 'SHORT';
+        }
 
         if (state.mvrvHistory.length > 0 && primaryDirection === 'SHORT' && !blockReason) {
             const mvrvPeak90d = Math.max(...state.mvrvHistory);
@@ -882,10 +891,10 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         const adxValNow = typeof state.adx === 'object' ? state.adx.adx : state.adx;
         state.adxRolling.push(adxValNow);
         if (state.adxRolling.length > 50) state.adxRolling.shift();
-/// filtro adx 
+        // filtro adx dinâmico
         if (state.adxRolling.length >= 20) {
             const avgAdx = state.adxRolling.reduce((a,b) => a+b, 0) / state.adxRolling.length;
-            const dynamicAdxThreshold = Math.max(avgAdx * 0.6 + 2, 18);    /// filtro adx 
+            const dynamicAdxThreshold = Math.max(avgAdx * 0.6 + 2, 18);
             if (adxValNow < dynamicAdxThreshold) {
                 blockReason = `ADX ${adxValNow.toFixed(1)} < dinâmico ${dynamicAdxThreshold.toFixed(1)}`;
             }
@@ -1093,10 +1102,36 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             const retestRequired = !ignoreRetest;
             const bosPassed = bosRequired ? smcSetup : true;
             const retestPassed = retestRequired ? retestConfirmed : true;
-            const structureOk = (bosPassed && retestPassed) || (sweepSetup && retestPassed);
+            let structureOk = (bosPassed && retestPassed) || (sweepSetup && retestPassed);
 
-            const volumeAvg = state.candles1H.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
-            const volumeOk = smcSetup ? state.candles1H[state.candles1H.length - 1].volume >= volumeAvg * 0.3 : true;
+            // NOVO FILTRO: Força da vela de entrada (confirmação de microestrutura)
+            if (structureOk && !blockReason) {
+                const lastCandle = state.candles1H[state.candles1H.length - 1];
+                const body = Math.abs(lastCandle.close - lastCandle.open);
+                const range = lastCandle.high - lastCandle.low;
+                const bodyRatio = range > 0 ? body / range : 0;
+                const upperWick = lastCandle.high - Math.max(lastCandle.open, lastCandle.close);
+                const lowerWick = Math.min(lastCandle.open, lastCandle.close) - lastCandle.low;
+                
+                if (primaryDirection === 'LONG') {
+                    if (lastCandle.close <= lastCandle.open || bodyRatio < 0.5 || lowerWick > 0.3 * range) {
+                        structureOk = false;
+                        blockReason = 'Vela de entrada fraca para LONG';
+                    }
+                } else if (primaryDirection === 'SHORT') {
+                    if (lastCandle.close >= lastCandle.open || bodyRatio < 0.5 || upperWick > 0.3 * range) {
+                        structureOk = false;
+                        blockReason = 'Vela de entrada fraca para SHORT';
+                    }
+                }
+            }
+
+            // Volume threshold dinâmico (percentil 25) + exigência extra para reteste
+            const volumes = state.candles1H.slice(-20).map(c => c.volume).sort((a,b) => a - b);
+            const volumeThreshold = volumes[Math.floor(0.25 * volumes.length)] || 0;
+            const lastVolume = state.candles1H[state.candles1H.length - 1].volume;
+            const avgVol = volumes.reduce((a,b)=>a+b,0)/volumes.length;
+            const volumeOk = smcSetup ? (lastVolume >= volumeThreshold && lastVolume >= avgVol * 1.2) : true;
             const closeBreakOk = (primaryDirection === 'LONG' && candle.close > brokenLevel) ||
                                  (primaryDirection === 'SHORT' && candle.close < brokenLevel);
             if ((smcSetup && !volumeOk) || (smcSetup && !closeBreakOk)) {
@@ -1163,7 +1198,13 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     rrPonderado = (stop - state.price) > 0 ? ganhoPonderado / (stop - state.price) : 0;
                 }
 
-                if (rrPonderado < rrMin) continue;
+                // R:R mínimo adaptativo: permite RR menor se stop muito apertado (< 1 ATR)
+                let rrMinEffective = rrMin;
+                const stopDistAtr = primaryDirection === 'LONG' ? (state.price - stop) / atr : (stop - state.price) / atr;
+                if (stopDistAtr < 1.0) {
+                    rrMinEffective = Math.min(rrMin, 0.8);
+                }
+                if (rrPonderado < rrMinEffective) continue;
 
                 const totalTrades = winCount + lossCount;
                 const winRate = totalTrades > 0 ? winCount / totalTrades : 0.5;
@@ -1549,6 +1590,7 @@ function generateReport(trades, summary, symbol, days, params) {
     alert(`Relatório HTML e CSV baixados com sucesso!\nTrades: ${closed.length}`);
 }
 
+// ================= FIM DA PARTE 1 =================
 // ============================================================
 // UI – EVENT LISTENERS
 // ============================================================
@@ -2098,6 +2140,13 @@ async function checkSignal(symbol) {
         let score = scoreData.score;
         blockReason = scoreData.blockReason;
 
+        // Ajuste flexível de score
+        if (direction === 'NEUTRAL' && score >= 55 && score < 60 && state.divergence?.type === 'BULLISH_REGULAR' && state.volumeAnomaly?.type !== 'LOW') {
+            direction = 'LONG';
+        } else if (direction === 'NEUTRAL' && score > 40 && score <= 45 && state.divergence?.type === 'BEARISH_REGULAR' && state.volumeAnomaly?.type !== 'LOW') {
+            direction = 'SHORT';
+        }
+
         if (direction === 'LONG' && score < params.scoreMin) blockReason = `Score ${score} < ${params.scoreMin}`;
         else if (direction === 'SHORT' && score > params.scoreMaxShort) blockReason = `Score ${score} > ${params.scoreMaxShort}`;
 
@@ -2180,15 +2229,40 @@ async function checkSignal(symbol) {
 
         const bosPassed = params.requireBOS ? smcSetup : true;
         const retestPassed = params.requireRetest ? retestConfirmed : true;
-        const structureOk = (bosPassed && retestPassed) || (sweepSetup && retestPassed);
+        let structureOk = (bosPassed && retestPassed) || (sweepSetup && retestPassed);
+
+        // Filtro de força da vela (confirmação de microestrutura)
+        if (structureOk && !blockReason) {
+            const lastCandleForCheck = state.candles1H[state.candles1H.length - 1];
+            const body = Math.abs(lastCandleForCheck.close - lastCandleForCheck.open);
+            const range = lastCandleForCheck.high - lastCandleForCheck.low;
+            const bodyRatio = range > 0 ? body / range : 0;
+            const upperWick = lastCandleForCheck.high - Math.max(lastCandleForCheck.open, lastCandleForCheck.close);
+            const lowerWick = Math.min(lastCandleForCheck.open, lastCandleForCheck.close) - lastCandleForCheck.low;
+            
+            if (direction === 'LONG') {
+                if (lastCandleForCheck.close <= lastCandleForCheck.open || bodyRatio < 0.5 || lowerWick > 0.3 * range) {
+                    structureOk = false;
+                    blockReason = 'Vela de entrada fraca para LONG';
+                }
+            } else if (direction === 'SHORT') {
+                if (lastCandleForCheck.close >= lastCandleForCheck.open || bodyRatio < 0.5 || upperWick > 0.3 * range) {
+                    structureOk = false;
+                    blockReason = 'Vela de entrada fraca para SHORT';
+                }
+            }
+        }
 
         if (!structureOk && !blockReason) {
             blockReason = 'Estrutura SMC não confirmada (BOS/Retest)';
         }
 
         if (!blockReason && smcSetup) {
-            const volumeAvg = state.candles1H.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
-            const volumeOk = state.candles1H[state.candles1H.length - 1].volume >= volumeAvg * 1.3;
+            const volumesArr = state.candles1H.slice(-20).map(c => c.volume).sort((a,b)=>a-b);
+            const volumeThreshold = volumesArr[Math.floor(0.25 * volumesArr.length)] || 0;
+            const lastVol = state.candles1H[state.candles1H.length - 1].volume;
+            const avgVol = volumesArr.reduce((a,b)=>a+b,0)/volumesArr.length;
+            const volumeOk = lastVol >= volumeThreshold && lastVol >= avgVol * 1.2;
             const closeBreakOk = (direction === 'LONG' && lastCandle.close > brokenLevel) ||
                                  (direction === 'SHORT' && lastCandle.close < brokenLevel);
             if (!volumeOk) blockReason = 'Volume insuficiente';
@@ -2231,8 +2305,11 @@ async function checkSignal(symbol) {
         } else {
             rr = (state.price - tp1) / (stop - state.price);
         }
-        if (rr < params.rrMin) {
-            console.log(`[Robot] ${symbol} R:R ${rr.toFixed(2)} < ${params.rrMin}`);
+        // R:R adaptativo
+        const stopDistAtr = direction === 'LONG' ? (state.price - stop) / atr : (stop - state.price) / atr;
+        const rrMinEffective = stopDistAtr < 1.0 ? Math.min(params.rrMin, 0.8) : params.rrMin;
+        if (rr < rrMinEffective) {
+            console.log(`[Robot] ${symbol} R:R ${rr.toFixed(2)} < ${rrMinEffective}`);
             return null;
         }
 
