@@ -480,7 +480,7 @@ function importData(files) {
 // ============================================================
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
     const {
-        scoreMin = 50,
+        scoreMin = 51,
         scoreMaxShort = 49,
         adxMin = 17,
         rrMin = 1.2,
@@ -493,10 +493,10 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         zFundingMax = 2.0,
         zOiMax = 2.0,
         maxHoldHours = 72,
-        htfBullishVelas = 6,
+        htfBullishVelas = 3,
         diDiffMinLong = 0,
-        mvrvDropPercent = 0.15,
-        htfBearishVelas = 6,
+        mvrvDropPercent = 0.25,
+        htfBearishVelas = 3,
         diDiffMinShort = 5,
         stopLong = 2.0,
         stopShort = 2.0,
@@ -782,9 +782,11 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 const avgBW = state.bandwidthHistory.slice(-20).reduce((a,b) => a+b, 0) / 20;
                 const adxValNow = typeof state.adx === 'object' ? state.adx.adx : state.adx;
                 // Filtro de mercado lateral reforçado: bloqueia se bandwidth muito baixo ou se comprimido com ADX baixo
-                if (bandwidth < avgBW * 0.2 || (bandwidth < avgBW * 0.5 && adxValNow < 20)) {
-                    blockStats['baixa_volatilidade_bb'] = (blockStats['baixa_volatilidade_bb'] || 0) + 1;
-                    continue;
+                // Mercado lateral: ADX < 18 e bandwidth < 0.4 da média
+if (bandwidth < avgBW * 0.3 || (bandwidth < avgBW * 0.4 && adxValNow < 18)) {
+    blockStats['baixa_volatilidade_bb'] = (blockStats['baixa_volatilidade_bb'] || 0) + 1;
+    continue;
+}
                 }
             }
         }
@@ -892,13 +894,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         state.adxRolling.push(adxValNow);
         if (state.adxRolling.length > 50) state.adxRolling.shift();
         // filtro adx dinâmico
-        if (state.adxRolling.length >= 20) {
-            const avgAdx = state.adxRolling.reduce((a,b) => a+b, 0) / state.adxRolling.length;
-            const dynamicAdxThreshold = Math.max(avgAdx * 0.6 + 2, 18);
-            if (adxValNow < dynamicAdxThreshold) {
-                blockReason = `ADX ${adxValNow.toFixed(1)} < dinâmico ${dynamicAdxThreshold.toFixed(1)}`;
-            }
-        }
+    
 
         if (adxValNow < adxMin && !blockReason) blockReason = `ADX < ${adxMin}`;
         if (state.macroBlackout && !blockReason) blockReason = 'Macro blackout';
@@ -1131,7 +1127,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             const volumeThreshold = volumes[Math.floor(0.25 * volumes.length)] || 0;
             const lastVolume = state.candles1H[state.candles1H.length - 1].volume;
             const avgVol = volumes.reduce((a,b)=>a+b,0)/volumes.length;
-            const volumeOk = smcSetup ? (lastVolume >= volumeThreshold && lastVolume >= avgVol * 1.2) : true;
+            const volumeOk = smcSetup ? (lastVolume >= volumeThreshold && lastVolume >= avgVol * 1.3) : true;
             const closeBreakOk = (primaryDirection === 'LONG' && candle.close > brokenLevel) ||
                                  (primaryDirection === 'SHORT' && candle.close < brokenLevel);
             if ((smcSetup && !volumeOk) || (smcSetup && !closeBreakOk)) {
@@ -2232,26 +2228,27 @@ async function checkSignal(symbol) {
         let structureOk = (bosPassed && retestPassed) || (sweepSetup && retestPassed);
 
         // Filtro de força da vela (confirmação de microestrutura)
-        if (structureOk && !blockReason) {
-            const lastCandleForCheck = state.candles1H[state.candles1H.length - 1];
-            const body = Math.abs(lastCandleForCheck.close - lastCandleForCheck.open);
-            const range = lastCandleForCheck.high - lastCandleForCheck.low;
-            const bodyRatio = range > 0 ? body / range : 0;
-            const upperWick = lastCandleForCheck.high - Math.max(lastCandleForCheck.open, lastCandleForCheck.close);
-            const lowerWick = Math.min(lastCandleForCheck.open, lastCandleForCheck.close) - lastCandleForCheck.low;
-            
-            if (direction === 'LONG') {
-                if (lastCandleForCheck.close <= lastCandleForCheck.open || bodyRatio < 0.5 || lowerWick > 0.3 * range) {
-                    structureOk = false;
-                    blockReason = 'Vela de entrada fraca para LONG';
-                }
-            } else if (direction === 'SHORT') {
-                if (lastCandleForCheck.close >= lastCandleForCheck.open || bodyRatio < 0.5 || upperWick > 0.3 * range) {
-                    structureOk = false;
-                    blockReason = 'Vela de entrada fraca para SHORT';
-                }
-            }
+        // NOVO FILTRO: Força da vela de entrada (confirmação de microestrutura)
+if (structureOk && !blockReason) {
+    const lastCandle = state.candles1H[state.candles1H.length - 1];
+    const body = Math.abs(lastCandle.close - lastCandle.open);
+    const range = lastCandle.high - lastCandle.low;
+    const bodyRatio = range > 0 ? body / range : 0;
+    const upperWick = lastCandle.high - Math.max(lastCandle.open, lastCandle.close);
+    const lowerWick = Math.min(lastCandle.open, lastCandle.close) - lastCandle.low;
+    
+    if (primaryDirection === 'LONG') {
+        if (lastCandle.close <= lastCandle.open || bodyRatio < 0.5 || lowerWick > 0.3 * range) {
+            structureOk = false;
+            blockReason = 'Vela de entrada fraca para LONG';
         }
+    } else if (primaryDirection === 'SHORT') {
+        if (lastCandle.close >= lastCandle.open || bodyRatio < 0.5 || upperWick > 0.3 * range) {
+            structureOk = false;
+            blockReason = 'Vela de entrada fraca para SHORT';
+        }
+    }
+}
 
         if (!structureOk && !blockReason) {
             blockReason = 'Estrutura SMC não confirmada (BOS/Retest)';
