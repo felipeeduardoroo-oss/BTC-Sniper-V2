@@ -1127,7 +1127,7 @@ if (bandwidth < avgBW * 0.3 || (bandwidth < avgBW * 0.4 && adxValNow < 18)) {
             const volumeThreshold = volumes[Math.floor(0.25 * volumes.length)] || 0;
             const lastVolume = state.candles1H[state.candles1H.length - 1].volume;
             const avgVol = volumes.reduce((a,b)=>a+b,0)/volumes.length;
-            const volumeOk = smcSetup ? (lastVolume >= volumeThreshold && lastVolume >= avgVol * 1.3) : true;
+            const volumeOk = smcSetup ? (lastVolume >= volumeThreshold && lastVolume >= avgVol * 1.2) : true;
             const closeBreakOk = (primaryDirection === 'LONG' && candle.close > brokenLevel) ||
                                  (primaryDirection === 'SHORT' && candle.close < brokenLevel);
             if ((smcSetup && !volumeOk) || (smcSetup && !closeBreakOk)) {
