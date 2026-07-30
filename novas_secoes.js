@@ -115,8 +115,12 @@ const fetchFearGreed = async () => {
 
 const fetchETFData = async () => {
     try {
-        const url = 'https://farside.co.uk/bitcoin-etf-flow-all-data/';
-        const html = await (await fetch(url)).text();
+        const proxy = 'https://corsproxy.io/?url=';
+        const url = proxy + encodeURIComponent('https://farside.co.uk/bitcoin-etf-flow-all-data/');
+        const html = await (await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        })).text();
+        
         const tableMatch = html.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
         if (!tableMatch) return null;
         const rows = tableMatch[1].match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
@@ -132,7 +136,6 @@ const fetchETFData = async () => {
         return null;
     } catch { return null; }
 };
-
 // ============================================================
 // 3 GRÁFICOS DE CANDLESTICK
 // ============================================================
