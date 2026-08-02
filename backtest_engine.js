@@ -1,5 +1,6 @@
 // ============================================================
 // backtest_engine.js – Motor completo de backtest, UI e robô
+// VERSÃO ALINHADA COM WORKER v12.1
 // ============================================================
 
 // ===== VARIÁVEIS GLOBAIS =====
@@ -174,7 +175,7 @@ const updateSwingPoints = (state) => {
     }
 };
 
-const detectHTFStructure = (candles4H, bullishVelas = 3, bearishVelas = 6) => {
+const detectHTFStructure = (candles4H, bullishVelas = 3, bearishVelas = 3) => {
     if (!candles4H || candles4H.length < 55) return { bias: 'NEUTRAL', lastSwingHigh: 0, lastSwingLow: Infinity };
     const closes = candles4H.map(c => c.close);
     const ema200Arr = calcEMA(closes, 200);
@@ -189,8 +190,6 @@ const detectHTFStructure = (candles4H, bullishVelas = 3, bearishVelas = 6) => {
     else if (allAbove) bias = 'BULLISH';
     return { bias, lastSwingHigh: Math.max(...candles4H.map(c => c.high)), lastSwingLow: Math.min(...candles4H.map(c => c.low)) };
 };
-
-const checkLateralMarket = (adxValue, threshold = 20) => adxValue < threshold;
 
 const checkDerivativesFilter = (fundingRate, oiDelta) => {
     if (fundingRate > 0.0020) return { allow: false, reason: 'Funding extremamente positivo (>0.2%)' };
@@ -234,17 +233,14 @@ const computeScore = (symbol, assetsData, liqMap, adxThreshold) => {
     if (rsi > 75) score -= 15;
     if (rsi < 25) score += 15;
     let clamped = Math.max(0, Math.min(100, score));
-    const isLateral = checkLateralMarket(adxValue, adxThreshold);
-    let blockReason = null;
-    if (isLateral) {
+    if (adxValue < adxThreshold) {
         clamped = Math.max(40, Math.min(60, clamped));
-        blockReason = 'Lateralização detectada';
     }
     return {
         score: clamped,
         direction: clamped >= 60 ? 'LONG' : clamped <= 40 ? 'SHORT' : 'NEUTRAL',
         components: { mtf: mtfScore > 0 ? 'ALINHADO' : 'NEUTRO', smc: 'NEUTRO', mom: adxValue > adxThreshold ? 'FORTE' : 'FRACO', of: 'NEUTRO', macro: 'NEUTRO', oi: data.oiDelta > 0 ? 'CRESCENDO' : 'DIMINUINDO' },
-        blockReason
+        blockReason: adxValue < adxThreshold ? 'ADX baixo' : null
     };
 };
 
@@ -476,38 +472,38 @@ function importData(files) {
 }
 
 // ============================================================
-// BACKTEST COMPLETO
+// BACKTEST COMPLETO (ALINHADO COM WORKER v12.1)
 // ============================================================
 export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
     const {
-        scoreMin = 50,
+        scoreMin = 51,
         scoreMaxShort = 49,
         adxMin = 15,
         rrMin = 1.0,
         retestDistPct = 6.0,
-        emaRetest = false,
+        emaRetest = true,
         mtfRequired = true,
         ignoreBOS = false,
         ignoreRetest = false,
-        requireSweep = false,
+        requireSweep = true,
         zFundingMax = 2.5,
         zOiMax = 2.5,
         maxHoldHours = 72,
-        htfBullishVelas = 6,
+        htfBullishVelas = 3,
         diDiffMinLong = 0,
         mvrvDropPercent = 0.25,
-        htfBearishVelas = 6,
-        diDiffMinShort = 5,
+        htfBearishVelas = 3,
+        diDiffMinShort = 10,
         stopLong = 2.0,
         stopShort = 2.0,
-        tp1Long = 0,
-        tp1Short = 0,
+        tp1Long = 2.5,
+        tp1Short = 2.5,
         tp2Dist = 4.0,
         trailLong = 0,
         trailShort = 0,
-        tp1Pct = 0,
-        tp2Pct = 0,
-        runnerPct = 1
+        tp1Pct = 0.5,
+        tp2Pct = 0.0,
+        runnerPct = 0.5
     } = options;
 
     days = Math.min(days, 1000);
@@ -517,7 +513,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
     const startDateStr = new Date(startTime).toISOString().slice(0, 10);
     const endDateStr = new Date(endTime).toISOString().slice(0, 10);
 
-    console.log(`[Backtest] ${symbol} - ${days} dias`);
+    console.log(`[Backtest] ${symbol} - ${days} dias (alinhado Worker v12.1)`);
 
     let candles1h = cachedData.candles1h;
     let candles4h = cachedData.candles4h;
@@ -770,6 +766,8 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         }
 
         // ----- FILTROS -----
+
+        // 1. Bandwidth + Mercado Lateral (alinhado com Worker: avgBW * 0.3, ADX < 18, BW < 0.4 * avg)
         const closes = state.candles1H.slice(-20).map(c => c.close);
         if (closes.length >= 20) {
             const sma = closes.reduce((a,b) => a+b, 0) / 20;
@@ -781,14 +779,17 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             if (state.bandwidthHistory.length >= 20) {
                 const avgBW = state.bandwidthHistory.slice(-20).reduce((a,b) => a+b, 0) / 20;
                 const adxValNow = typeof state.adx === 'object' ? state.adx.adx : state.adx;
-                // Filtro de mercado lateral reforçado: bloqueia se bandwidth muito baixo ou se comprimido com ADX baixo
-                if (bandwidth < avgBW * 0.2 || (bandwidth < avgBW * 0.5 && adxValNow < 20)) {
+                // Worker: bwPass = currentBW >= avgBW * 0.3; mercado lateral: adx < 18 && currentBW < avgBW * 0.4
+                const bwPass = bandwidth >= avgBW * 0.3;
+                const rangePass = !(adxValNow < 18 && bandwidth < avgBW * 0.4);
+                if (!bwPass || !rangePass) {
                     blockStats['baixa_volatilidade_bb'] = (blockStats['baixa_volatilidade_bb'] || 0) + 1;
                     continue;
                 }
             }
         }
 
+        // 2. Funding Z-score
         if (state.fundingHistory.length >= 20) {
             const mean = state.fundingHistory.reduce((a,b) => a+b, 0) / state.fundingHistory.length;
             const variance = state.fundingHistory.reduce((s, v) => s + (v-mean)**2, 0) / state.fundingHistory.length;
@@ -800,6 +801,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             }
         }
 
+        // 3. OI Z-score
         if (state.oiDeltaHistory.length >= 20) {
             const meanO = state.oiDeltaHistory.reduce((a,b) => a+b, 0) / state.oiDeltaHistory.length;
             const varO = state.oiDeltaHistory.reduce((s, v) => s + (v-meanO)**2, 0) / state.oiDeltaHistory.length;
@@ -811,6 +813,17 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             }
         }
 
+        // 4. MVRV (SHORT)
+        if (state.mvrvHistory.length > 0) {
+            const mvrvPeak90d = Math.max(...state.mvrvHistory);
+            const mvrvDrop = mvrvPeak90d > 0 ? (mvrvPeak90d - state.mvrv) / mvrvPeak90d : 0;
+            if (mvrvDrop > mvrvDropPercent) {
+                blockStats['MVRV_caiu'] = (blockStats['MVRV_caiu'] || 0) + 1;
+                continue;
+            }
+        }
+
+        // 5. Score e direção
         const simAssets = {
             [symbol]: {
                 price: state.price,
@@ -844,18 +857,25 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         let blockReason = scoreData.blockReason;
         let primaryDirection = (score >= scoreMin) ? 'LONG' : (score <= scoreMaxShort ? 'SHORT' : null);
 
-        // Ajuste de score flexível com divergência (permite LONG 55-60 com divergência bullish e volume)
+        // Ajuste flexível de score (igual ao Worker)
         if (!primaryDirection && score >= 55 && score < 60 && state.divergence?.type === 'BULLISH_REGULAR' && state.volumeAnomaly?.type !== 'LOW') {
             primaryDirection = 'LONG';
         } else if (!primaryDirection && score > 40 && score <= 45 && state.divergence?.type === 'BEARISH_REGULAR' && state.volumeAnomaly?.type !== 'LOW') {
             primaryDirection = 'SHORT';
         }
 
-        if (state.mvrvHistory.length > 0 && primaryDirection === 'SHORT' && !blockReason) {
+        // Filtros de direção (alinhados com Worker)
+        if (primaryDirection === 'LONG' && score < scoreMin) {
+            blockReason = `Score ${score} < ${scoreMin}`;
+        } else if (primaryDirection === 'SHORT' && score > scoreMaxShort) {
+            blockReason = `Score ${score} > ${scoreMaxShort}`;
+        }
+
+        if (primaryDirection === 'SHORT' && state.mvrvHistory.length > 0 && !blockReason) {
             const mvrvPeak90d = Math.max(...state.mvrvHistory);
             const mvrvDrop = mvrvPeak90d > 0 ? (mvrvPeak90d - state.mvrv) / mvrvPeak90d : 0;
             if (mvrvDrop > mvrvDropPercent) {
-                blockReason = `MVRV caiu ${(mvrvDrop*100).toFixed(1)}% do pico de 90d (limite ${(mvrvDropPercent*100).toFixed(0)}%)`;
+                blockReason = `MVRV caiu ${(mvrvDrop*100).toFixed(1)}% do pico de 90d`;
             }
         }
 
@@ -871,57 +891,30 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                 blockReason = `Momentum bullish insuficiente (DI+ - DI- < ${diDiffMinLong})`;
             }
         }
-
         if (primaryDirection === 'SHORT' && !blockReason) {
             if ((state.adx.minusDI - state.adx.plusDI) < diDiffMinShort) {
                 blockReason = `Momentum bearish insuficiente (DI- - DI+ < ${diDiffMinShort})`;
             }
         }
 
-        const prevCandle = state.candles1H.length > 1 ? state.candles1H[state.candles1H.length - 2] : null;
-        const lastSwingHigh = state.swingHighs.length > 0 ? state.swingHighs[state.swingHighs.length - 1] : null;
-        const lastSwingLow = state.swingLows.length > 0 ? state.swingLows[state.swingLows.length - 1] : null;
-        const refHigh = lastSwingHigh || (prevCandle ? prevCandle.high : null);
-        const refLow = lastSwingLow || (prevCandle ? prevCandle.low : null);
-        
-        const bosBull = primaryDirection === 'LONG' && refHigh !== null && candle.close > refHigh;
-        const bosBear = primaryDirection === 'SHORT' && refLow !== null && candle.close < refLow;
-        state.currentBOS = (bosBull || bosBear) ? 'BOS' : 'NEUTRAL';
-
-        const adxValNow = typeof state.adx === 'object' ? state.adx.adx : state.adx;
-        state.adxRolling.push(adxValNow);
-        if (state.adxRolling.length > 50) state.adxRolling.shift();
-        // filtro adx dinâmico
-        if (state.adxRolling.length >= 20) {
-            const avgAdx = state.adxRolling.reduce((a,b) => a+b, 0) / state.adxRolling.length;
-            const dynamicAdxThreshold = Math.max(avgAdx * 0.6 + 2, 18);
-            if (adxValNow < dynamicAdxThreshold) {
-                blockReason = `ADX ${adxValNow.toFixed(1)} < dinâmico ${dynamicAdxThreshold.toFixed(1)}`;
-            }
-        }
-
-        if (adxValNow < adxMin && !blockReason) blockReason = `ADX < ${adxMin}`;
-        if (state.macroBlackout && !blockReason) blockReason = 'Macro blackout';
-
-        if (primaryDirection === 'LONG' && (state.adx.plusDI - state.adx.minusDI) < 0 && !blockReason) {
-            blockReason = 'DI- > DI+ (Força Bearish)';
-        }
-
+        // VWAP
         if (primaryDirection === 'LONG' && state.price < state.vwap && !blockReason)
             blockReason = 'Preço abaixo do VWAP';
         else if (primaryDirection === 'SHORT' && state.price > state.vwap && !blockReason)
             blockReason = 'Preço acima do VWAP';
 
+        // Derivativos
         if (!blockReason) {
             const derivCheck = checkDerivativesFilter(state.fundingRate, state.oiDelta);
             if (!derivCheck.allow) blockReason = derivCheck.reason;
         }
 
-        // ----- GESTÃO DE POSIÇÃO -----
+        // ----- GESTÃO DE POSIÇÃO (idêntico ao original, mantido) -----
         if (position) {
             const high = candle.high, low = candle.low;
             let closed = false, exitPrice = 0, reason = '';
             const volatilityFactor = state.volatilityFactor || 1.0;
+            const adxValNow = typeof state.adx === 'object' ? state.adx.adx : state.adx;
 
             const dynamicMaxHold = (adxValNow > 30) ? maxHoldHours * 1.5 : maxHoldHours;
             const holdHours = (candle.time - position.entryTime) / 3600000;
@@ -1039,7 +1032,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             }
         }
 
-        // ----- ENTRADA -----
+        // ----- ENTRADA (alinhada com Worker) -----
         if (!position && !blockReason && primaryDirection) {
             const atr = state.atr_1H || (state.price * 0.02);
             let smcSetup = false, sweepSetup = false, retestConfirmed = false, brokenLevel = null;
@@ -1102,45 +1095,26 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
             const retestRequired = !ignoreRetest;
             const bosPassed = bosRequired ? smcSetup : true;
             const retestPassed = retestRequired ? retestConfirmed : true;
-            let structureOk = (bosPassed && retestPassed) || (sweepSetup && retestPassed);
+            const structureOk = (bosPassed && retestPassed) || (sweepSetup && retestPassed);
 
-            // NOVO FILTRO: Força da vela de entrada (confirmação de microestrutura)
-            if (structureOk && !blockReason) {
-                const lastCandle = state.candles1H[state.candles1H.length - 1];
-                const body = Math.abs(lastCandle.close - lastCandle.open);
-                const range = lastCandle.high - lastCandle.low;
-                const bodyRatio = range > 0 ? body / range : 0;
-                const upperWick = lastCandle.high - Math.max(lastCandle.open, lastCandle.close);
-                const lowerWick = Math.min(lastCandle.open, lastCandle.close) - lastCandle.low;
-                
-                if (primaryDirection === 'LONG') {
-                    if (lastCandle.close <= lastCandle.open || bodyRatio < 0.5 || lowerWick > 0.3 * range) {
-                        structureOk = false;
-                        blockReason = 'Vela de entrada fraca para LONG';
-                    }
-                } else if (primaryDirection === 'SHORT') {
-                    if (lastCandle.close >= lastCandle.open || bodyRatio < 0.5 || upperWick > 0.3 * range) {
-                        structureOk = false;
-                        blockReason = 'Vela de entrada fraca para SHORT';
-                    }
-                }
+            if (!structureOk && !blockReason) {
+                blockReason = 'Estrutura SMC não confirmada (BOS/Retest)';
             }
 
-            // Volume threshold dinâmico (percentil 25) + exigência extra para reteste
-            const volumes = state.candles1H.slice(-20).map(c => c.volume).sort((a,b) => a - b);
-            const volumeThreshold = volumes[Math.floor(0.25 * volumes.length)] || 0;
-            const lastVolume = state.candles1H[state.candles1H.length - 1].volume;
-            const avgVol = volumes.reduce((a,b)=>a+b,0)/volumes.length;
-            const volumeOk = smcSetup ? (lastVolume >= volumeThreshold && lastVolume >= avgVol * 1.2) : true;
-            const closeBreakOk = (primaryDirection === 'LONG' && candle.close > brokenLevel) ||
-                                 (primaryDirection === 'SHORT' && candle.close < brokenLevel);
-            if ((smcSetup && !volumeOk) || (smcSetup && !closeBreakOk)) {
-                blockReason = 'volume_insuficiente_ou_fechamento_fraco';
+            if (!blockReason && smcSetup) {
+                // Volume: apenas percentil 25 (sem multiplicador 1.2, igual ao Worker)
+                const volumes = state.candles1H.slice(-20).map(c => c.volume).sort((a,b) => a - b);
+                const p25 = volumes[Math.floor(0.25 * volumes.length)] || 0;
+                const lastVol = state.candles1H[state.candles1H.length - 1].volume;
+                const volumeOk = lastVol >= p25;
+                // closeOk removido (igual ao Worker)
+                if (!volumeOk) blockReason = 'volume_insuficiente';
             }
 
+            // Doji (threshold 0.1, igual ao Worker)
             const body = Math.abs(candle.close - candle.open);
             const range = candle.high - candle.low;
-            if (range > 0 && body / range < 0.1) {
+            if (range > 0 && body / range < 0.1 && !blockReason) {
                 blockReason = 'corpo_fraco_doji';
             }
 
@@ -1198,12 +1172,9 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
                     rrPonderado = (stop - state.price) > 0 ? ganhoPonderado / (stop - state.price) : 0;
                 }
 
-                // R:R mínimo adaptativo: permite RR menor se stop muito apertado (< 1 ATR)
-                let rrMinEffective = rrMin;
+                // R:R adaptativo (igual ao Worker: se stopDistAtr < 1.0, rrMinEffective = 0.8)
                 const stopDistAtr = primaryDirection === 'LONG' ? (state.price - stop) / atr : (stop - state.price) / atr;
-                if (stopDistAtr < 1.0) {
-                    rrMinEffective = Math.min(rrMin, 0.8);
-                }
+                const rrMinEffective = stopDistAtr < 1.0 ? 0.8 : rrMin;
                 if (rrPonderado < rrMinEffective) continue;
 
                 const totalTrades = winCount + lossCount;
@@ -1233,7 +1204,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         }
     }
 
-    // Fechamento forçado
+    // Fechamento forçado (mantido)
     if (position) {
         const lastCandle = filteredCandles[filteredCandles.length - 1];
         const exitPrice = lastCandle.close;
@@ -1262,7 +1233,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
         position = null;
     }
 
-    // Estatísticas
+    // Estatísticas (mantido)
     const closedTrades = trades.filter(t => t.exitTime !== null && t.pnlPct !== null);
     const totalTrades = closedTrades.length;
     const wins = closedTrades.filter(t => parseFloat(t.pnlPct) > 0).length;
@@ -1311,6 +1282,7 @@ export async function runBacktest(symbol = 'BTCUSDT', days = 30, options = {}) {
 
     return { trades, summary };
 }
+
 
 // ============================================================
 // GERAR RELATÓRIO
